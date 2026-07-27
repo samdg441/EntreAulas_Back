@@ -1,0 +1,219 @@
+---
+title: ConCiencia Académica - Esquema PostgreSQL normalizado (3FN) propuesto
+config:
+  theme: default
+  themeVariables:
+    fontSize: 15px
+---
+erDiagram
+    %% ===== Identidad y autorización =====
+    usuarios ||--o{ usuario_roles : "asume"
+    roles ||--o{ usuario_roles : "define"
+    usuarios ||--o| profesores : "perfil"
+    usuarios ||--o| estudiantes : "perfil"
+    usuarios ||--o| coordinadores : "perfil"
+    usuarios ||--o| decanos : "perfil"
+    usuarios ||--o{ password_reset_tokens : "solicita"
+
+    %% ===== Estructura organizacional =====
+    facultades ||--o{ departamentos : "contiene"
+    facultades ||--o{ carreras : "agrupa"
+    facultades ||--o| decanos : "dirigida por"
+    departamentos ||--o{ carreras : "administra"
+    departamentos ||--o{ profesores : "adscribe"
+    carreras ||--o{ coordinadores : "coordinada por"
+    carreras ||--o{ estudiantes : "matricula"
+    carreras ||--o{ cursos : "ofrece"
+
+    %% ===== Oferta académica (asignación unificada) =====
+    cursos ||--o{ grupos : "se dicta en"
+    periodos_academicos ||--o{ grupos : "ubica"
+    profesores ||--o{ asignaciones_docentes : "dicta"
+    grupos ||--o{ asignaciones_docentes : "asignado a"
+    estudiantes ||--o{ inscripciones : "se inscribe"
+    grupos ||--o{ inscripciones : "recibe"
+
+    %% ===== Instrumento de evaluación (catálogos atómicos) =====
+    categorias_pregunta ||--o{ preguntas : "clasifica"
+    tipos_pregunta ||--o{ preguntas : "tipa"
+    escalas ||--o{ preguntas : "mide con"
+    escalas ||--o{ opciones_escala : "compone"
+    preguntas ||--o{ preguntas_carreras : "aplica en"
+    carreras ||--o{ preguntas_carreras : "usa"
+
+    %% ===== Proceso de evaluación (cabecera; detalle va a MongoDB) =====
+    asignaciones_docentes ||--o{ evaluaciones : "es evaluada"
+    estudiantes ||--o{ evaluaciones : "responde"
+    periodos_academicos ||--o{ evaluaciones : "ubica"
+    asignaciones_docentes ||--o{ qr_evaluaciones : "habilita"
+    periodos_academicos ||--o{ qr_evaluaciones : "ubica"
+
+    roles {
+        serial id PK
+        varchar nombre UK "estudiante|profesor|coordinador|admin|decano"
+        text descripcion
+    }
+    usuarios {
+        uuid id PK
+        varchar email UK
+        varchar password "hash bcrypt"
+        varchar nombre
+        varchar apellido
+        boolean activo
+        timestamp created_at
+    }
+    usuario_roles {
+        serial id PK
+        uuid usuario_id FK
+        int rol_id FK
+        boolean activo
+        timestamp fecha_asignacion
+    }
+    password_reset_tokens {
+        uuid id PK
+        uuid usuario_id FK
+        varchar token UK
+        timestamptz expires_at
+        boolean used
+    }
+    facultades {
+        serial id PK
+        varchar nombre
+        varchar codigo UK
+        boolean activo
+    }
+    departamentos {
+        serial id PK
+        int facultad_id FK
+        varchar nombre
+        varchar codigo UK
+        boolean activo
+    }
+    carreras {
+        serial id PK
+        int facultad_id FK
+        int departamento_id FK
+        varchar nombre
+        varchar codigo UK
+        boolean activa
+    }
+    decanos {
+        serial id PK
+        uuid usuario_id FK "UK"
+        int facultad_id FK "UK"
+        date fecha_nombramiento
+        boolean activo
+    }
+    coordinadores {
+        serial id PK
+        uuid usuario_id FK
+        int carrera_id FK
+        date fecha_nombramiento
+        boolean activo
+    }
+    profesores {
+        serial id PK
+        uuid usuario_id FK "UK"
+        int departamento_id FK
+        varchar codigo UK
+        boolean activo
+    }
+    estudiantes {
+        serial id PK
+        uuid usuario_id FK "UK"
+        int carrera_id FK
+        varchar codigo UK
+        int semestre_actual
+        boolean activo
+    }
+    cursos {
+        serial id PK
+        int carrera_id FK
+        varchar nombre
+        varchar codigo UK
+        int creditos
+        boolean activo
+    }
+    periodos_academicos {
+        serial id PK
+        int ano "UK(ano,semestre)"
+        int semestre "UK(ano,semestre)"
+        boolean activo
+    }
+    grupos {
+        serial id PK
+        int curso_id FK
+        int periodo_id FK
+        varchar numero_grupo
+        varchar horario
+        varchar aula
+        int cupo
+        boolean activo
+    }
+    asignaciones_docentes {
+        serial id PK
+        uuid profesor_id FK
+        int grupo_id FK
+        boolean activa
+    }
+    inscripciones {
+        serial id PK
+        int estudiante_id FK
+        int grupo_id FK
+        boolean activa
+        timestamp fecha_inscripcion
+    }
+    categorias_pregunta {
+        serial id PK
+        varchar nombre UK
+        int orden
+    }
+    tipos_pregunta {
+        serial id PK
+        varchar nombre UK "rating|texto|opcion"
+    }
+    escalas {
+        serial id PK
+        varchar nombre UK
+        int valor_min
+        int valor_max
+    }
+    opciones_escala {
+        serial id PK
+        int escala_id FK
+        int valor
+        varchar etiqueta
+        int orden
+    }
+    preguntas {
+        serial id PK
+        int categoria_id FK
+        int tipo_pregunta_id FK
+        int escala_id FK
+        text texto
+        boolean obligatoria
+        int orden
+        boolean activa
+    }
+    preguntas_carreras {
+        serial id PK
+        int pregunta_id FK
+        int carrera_id FK
+    }
+    evaluaciones {
+        serial id PK
+        int asignacion_id FK
+        int estudiante_id FK
+        int periodo_id FK
+        varchar estado "pendiente|completada"
+        timestamp fecha_inicio
+        timestamp fecha_completada
+    }
+    qr_evaluaciones {
+        serial id PK
+        varchar token UK
+        int asignacion_id FK
+        int periodo_id FK
+        boolean activo
+        timestamptz expira_en
+    }

@@ -1,0 +1,87 @@
+---
+title: ConCiencia Académica - Arquitectura híbrida PostgreSQL + MongoDB
+config:
+  theme: default
+  flowchart:
+    curve: basis
+    nodeSpacing: 55
+    rankSpacing: 70
+---
+flowchart TB
+    Cliente["Frontend / App de evaluación QR"]
+
+    subgraph API["Backend  (Node + Express)"]
+        direction TB
+        Svc["Servicios de evaluación / IA"]
+        SQLc["Cliente PostgreSQL (Supabase)"]
+        Mc["Driver MongoDB"]
+        Svc --> SQLc
+        Svc --> Mc
+    end
+
+    subgraph PG["PostgreSQL (Supabase) - Fuente de verdad relacional"]
+        direction TB
+        PGid["Identidad y organización:
+        usuarios, roles, usuario_roles,
+        facultades, departamentos, carreras,
+        profesores, estudiantes, coordinadores, decanos"]
+        PGof["Oferta académica:
+        cursos, periodos_academicos, grupos,
+        asignaciones_docentes, inscripciones"]
+        PGev["Cabecera de evaluación + catálogo:
+        evaluaciones (id, asignacion_id, estudiante_id,
+        periodo_id, estado, fechas),
+        preguntas, categorias_pregunta, escalas,
+        qr_evaluaciones"]
+    end
+
+    subgraph MG["MongoDB - Contenido flexible (documental)"]
+        direction TB
+        MGr["Colección: evaluacion_respuestas
+        { _id,
+          evaluacion_id  (ref → PG.evaluaciones.id),
+          profesor_id, grupo_id, curso_id,
+          periodo_id, carrera_id  (denormalizados),
+          fecha,
+          respuestas: [ { pregunta_id, categoria_id,
+                          tipo, valor_rating, valor_texto } ],
+          comentario_general,
+          metadata: { dispositivo, ip_hash } }"]
+        MGc["Colección: comentarios_abiertos
+        { _id, evaluacion_id (ref), pregunta_id,
+          texto, sentimiento, temas: [] }"]
+        MGa["Colección: analisis_ia
+        { _id, profesor_id, periodo_id,
+          resumen, sentimiento_global,
+          fortalezas: [], mejoras: [],
+          generado_en }"]
+    end
+
+    Cliente -->|"HTTPS / JWT"| Svc
+
+    SQLc -->|"valida identidad,
+    asignación, período;
+    crea cabecera evaluaciones
+    y marca estado"| PGev
+    SQLc --> PGid
+    SQLc --> PGof
+
+    Mc -->|"guarda respuestas,
+    comentarios y análisis
+    con evaluacion_id"| MGr
+    Mc --> MGc
+    Mc --> MGa
+
+    PGev <-.->|"clave de enlace:
+    evaluaciones.id  ==  evaluacion_id"| MGr
+    PGev <-.->|"profesor_id / periodo_id
+    para reportes IA"| MGa
+
+    classDef pg fill:#dbeafe,stroke:#1e40af,color:#111827;
+    classDef mg fill:#dcfce7,stroke:#166534,color:#111827;
+    classDef api fill:#fef9c3,stroke:#a16207,color:#111827;
+    classDef cli fill:#f3e8ff,stroke:#6b21a8,color:#111827;
+    class PGid,PGof,PGev pg;
+    class MGr,MGc,MGa mg;
+    class Svc,SQLc,Mc api;
+    class Cliente cli;

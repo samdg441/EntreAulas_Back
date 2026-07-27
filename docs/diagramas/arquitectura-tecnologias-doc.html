@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>EntreAulas (ConCiencia Académica) — Arquitectura y tecnologías</title>
+<style>
+  :root {
+    --azul: #1e40af;
+    --azul-claro: #dbeafe;
+    --gris: #374151;
+    --gris-claro: #f3f4f6;
+    --borde: #d1d5db;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--gris);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0 36px 36px;
+  }
+  h1 {
+    color: var(--azul);
+    font-size: 22px;
+    border-bottom: 3px solid var(--azul);
+    padding-bottom: 8px;
+    margin-top: 28px;
+  }
+  h2 {
+    color: var(--azul);
+    font-size: 16px;
+    margin-top: 26px;
+    border-left: 5px solid var(--azul);
+    padding-left: 10px;
+  }
+  h3 {
+    color: #1f2937;
+    font-size: 13.5px;
+    margin-top: 18px;
+  }
+  p { margin: 8px 0; }
+  .intro {
+    background: var(--gris-claro);
+    border-left: 4px solid var(--azul);
+    padding: 12px 16px;
+    border-radius: 6px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 11px;
+  }
+  th, td {
+    border: 1px solid var(--borde);
+    padding: 7px 9px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--azul);
+    color: #fff;
+    font-weight: 600;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  code, pre {
+    font-family: "Cascadia Code", "Consolas", monospace;
+  }
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .nota {
+    background: #fef9c3;
+    border: 1px solid #a16207;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+  figure { margin: 16px 0; text-align: center; }
+  figure img {
+    max-width: 100%;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  figcaption {
+    font-size: 10.5px;
+    color: #6b7280;
+    margin-top: 6px;
+    font-style: italic;
+  }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .avoid-break { page-break-inside: avoid; }
+  footer {
+    margin-top: 36px;
+    border-top: 1px solid var(--borde);
+    padding-top: 10px;
+    font-size: 10px;
+    color: #6b7280;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>EntreAulas (ConCiencia Académica) — Arquitectura y tecnologías</h1>
+
+<p class="intro">Plataforma web para evaluación temprana docente en la Facultad de Ingenierías (UDEM).
+Los estudiantes responden encuestas; profesores, coordinadores, decanos y administradores
+consultan resultados, reportes y resúmenes asistidos por IA.</p>
+
+<h2>Diagrama de arquitectura</h2>
+<p>El sistema sigue un modelo <strong>cliente-servidor</strong>: un cliente (navegador con la SPA)
+que consume una API REST en el servidor, la cual concentra la lógica de negocio, la autenticación
+y el acceso a datos y servicios externos.</p>
+<figure class="avoid-break">
+  <img src="arquitectura-tecnologias.png" alt="Diagrama de arquitectura cliente-servidor de ConCiencia Académica" />
+  <figcaption>Arquitectura cliente-servidor: cliente (SPA React) → API REST (Node/Express) → Supabase, Gemini y SMTP.</figcaption>
+</figure>
+
+<h2>Flujo de una petición típica</h2>
+<pre>
+sequenceDiagram
+    participant U as Usuario
+    participant F as Frontend React
+    participant B as Backend Express
+    participant S as Supabase PostgreSQL
+    participant G as Google Gemini
+    U->>F: Login (email + contraseña)
+    F->>B: POST /api/auth/login
+    B->>S: Validar usuario y contraseña (bcrypt)
+    B-->>F: JWT + datos de usuario/roles
+    F->>F: Guardar token en localStorage
+    U->>F: Enviar evaluación / ver reportes
+    F->>B: Request con Authorization Bearer
+    B->>B: authenticateToken + requireRole
+    B->>S: INSERT / SELECT evaluaciones, resultados
+    B-->>F: JSON respuesta
+    U->>F: Ver resumen IA (dashboard)
+    F->>B: GET /api/ai/summarize/...
+    B->>S: Obtener comentarios abiertos
+    B->>G: Generar resumen (o fallback local)
+    B-->>F: summary + topics
+</pre>
+
+<h2>Vista por capas</h2>
+<table>
+  <thead><tr><th>Capa</th><th>Tecnología</th><th>Responsabilidad</th></tr></thead>
+  <tbody>
+    <tr><td>Presentación</td><td>React 18, TypeScript, Vite, Tailwind</td><td>UI, rutas, dashboards por rol, formularios Likert, QR</td></tr>
+    <tr><td>Cliente HTTP</td><td>Axios</td><td>Llamadas al API, interceptores JWT y manejo 401/403</td></tr>
+    <tr><td>API</td><td>Node.js, Express, TypeScript</td><td>Lógica de negocio, auth, validación, CORS</td></tr>
+    <tr><td>Datos</td><td>Supabase (PostgreSQL)</td><td>Usuarios, cursos, evaluaciones, preguntas, respuestas</td></tr>
+    <tr><td>IA</td><td>Google Gemini 2.5 Flash</td><td>Resúmenes de respuestas abiertas y detección de temas</td></tr>
+    <tr><td>Correo</td><td>Nodemailer + SMTP</td><td>Enlaces de recuperación de contraseña</td></tr>
+    <tr><td>Despliegue</td><td>Render (+ opcional Vercel front)</td><td>Build, variables de entorno, HTTPS</td></tr>
+  </tbody>
+</table>
+
+<h2>Tecnologías y para qué se usan</h2>
+
+<h3>Frontend (front/)</h3>
+<table>
+  <thead><tr><th>Tecnología</th><th>Uso en el proyecto</th></tr></thead>
+  <tbody>
+    <tr><td>React 18</td><td>Interfaz por componentes: login, evaluaciones, dashboards (estudiante, profesor, coordinador, decano, admin).</td></tr>
+    <tr><td>TypeScript</td><td>Tipado de usuarios, evaluaciones, API y props de componentes.</td></tr>
+    <tr><td>Vite 7</td><td>Servidor de desarrollo rápido y build de producción (dist/).</td></tr>
+    <tr><td>React Router DOM 6</td><td>Rutas públicas (/login, /qr-evaluacion) y protegidas (/dashboard, reportes, admin).</td></tr>
+    <tr><td>Tailwind CSS 3</td><td>Estilos utilitarios, identidad visual institucional.</td></tr>
+    <tr><td>Axios</td><td>Cliente HTTP centralizado (api/client.ts) con token JWT automático.</td></tr>
+    <tr><td>Context API (AuthContext)</td><td>Sesión global: login, roles múltiples, redirección al dashboard correcto.</td></tr>
+    <tr><td>Recharts</td><td>Gráficos en reportes y resultados (radar, barras, etc.).</td></tr>
+    <tr><td>Framer Motion</td><td>Animaciones en transiciones de UI.</td></tr>
+    <tr><td>react-qr-code</td><td>Códigos QR para acceso rápido a evaluaciones por curso.</td></tr>
+    <tr><td>ExcelJS / xlsx / file-saver</td><td>Exportar resultados y reportes a Excel desde el navegador.</td></tr>
+    <tr><td>jsPDF + jspdf-autotable + html2canvas</td><td>Generación de PDFs (reportes, pósters QR).</td></tr>
+    <tr><td>Lucide React / React Icons</td><td>Iconografía en menús y dashboards.</td></tr>
+  </tbody>
+</table>
+
+<h3>Backend (back/)</h3>
+<table>
+  <thead><tr><th>Tecnología</th><th>Uso en el proyecto</th></tr></thead>
+  <tbody>
+    <tr><td>Node.js</td><td>Runtime del servidor API.</td></tr>
+    <tr><td>Express 4</td><td>Servidor HTTP, montaje de rutas bajo /api/*, middleware CORS y JSON.</td></tr>
+    <tr><td>TypeScript</td><td>Código tipado compilado a dist/ para producción.</td></tr>
+    <tr><td>Supabase JS (@supabase/supabase-js)</td><td>Acceso a PostgreSQL con Service Role Key (consultas desde el servidor, sin exponer la BD al front).</td></tr>
+    <tr><td>JWT (jsonwebtoken)</td><td>Tokens de sesión tras login; el front los envía en cada petición protegida.</td></tr>
+    <tr><td>bcrypt</td><td>Hash seguro de contraseñas al registrar o cambiar clave.</td></tr>
+    <tr><td>Zod</td><td>Validación de cuerpos de petición (registro, login, DTOs).</td></tr>
+    <tr><td>CORS</td><td>Restringir origen del frontend en producción (CORS_ORIGIN).</td></tr>
+    <tr><td>Nodemailer</td><td>Envío de correos (reset de contraseña vía SMTP).</td></tr>
+    <tr><td>Google Generative AI (@google/generative-ai)</td><td>Resúmenes de comentarios abiertos en evaluaciones (aiService.ts).</td></tr>
+    <tr><td>@huggingface/inference</td><td>Dependencia opcional/reserva; el flujo principal de IA usa Gemini.</td></tr>
+  </tbody>
+</table>
+
+<h3>Base de datos</h3>
+<table>
+  <thead><tr><th>Tecnología</th><th>Uso en el proyecto</th></tr></thead>
+  <tbody>
+    <tr><td>Supabase</td><td>Hosting de PostgreSQL gestionado: tablas de usuarios, roles, profesores, estudiantes, cursos, periodos, preguntas por carrera, evaluaciones y respuestas.</td></tr>
+    <tr><td>SQL scripts (back/scripts/*.sql)</td><td>Seeds, inserción de preguntas por carrera, triggers (supabase-triggers.sql).</td></tr>
+  </tbody>
+</table>
+<p class="nota"><strong>Nota:</strong> La documentación antigua en back/docs/setup.md menciona Prisma; el código actual no usa Prisma y accede a Supabase directamente vía SupabaseDB / supabaseClient.</p>
+
+<h2>Autenticación y autorización</h2>
+<table>
+  <thead><tr><th>Mecanismo</th><th>Descripción</th></tr></thead>
+  <tbody>
+    <tr><td>Login email/contraseña</td><td>POST /api/auth/login — validación contra tabla de usuarios en Supabase.</td></tr>
+    <tr><td>JWT</td><td>Firmado con JWT_SECRET; incluye userId; expiración configurada en emisión del token.</td></tr>
+    <tr><td>authenticateToken</td><td>Middleware que verifica JWT y carga roles/permisos del usuario.</td></tr>
+    <tr><td>requireRole</td><td>Restringe endpoints por rol (estudiante, profesor, coordinador, decano, admin).</td></tr>
+    <tr><td>Rutas protegidas en front</td><td>Componente ProtectedRoute + allowedRoles en rutas sensibles.</td></tr>
+  </tbody>
+</table>
+
+<h2>Inteligencia artificial</h2>
+<table>
+  <thead><tr><th>Componente</th><th>Función</th></tr></thead>
+  <tbody>
+    <tr><td>Gemini 2.5 Flash</td><td>Genera resúmenes narrativos de comentarios de estudiantes.</td></tr>
+    <tr><td>Fallback local</td><td>Si no hay API key o falla Gemini: resumen por reglas + extracción de temas (stopwords, léxico académico).</td></tr>
+    <tr><td>Endpoints</td><td>/api/ai/summarize, por profesor, carrera o facultad (requieren JWT y rol autorizado).</td></tr>
+    <tr><td>Detección de riesgo</td><td>Lógica en aiService para señalar posibles menciones de acoso en texto abierto.</td></tr>
+  </tbody>
+</table>
+
+<h2>Despliegue e infraestructura</h2>
+<table>
+  <thead><tr><th>Tecnología</th><th>Uso</th></tr></thead>
+  <tbody>
+    <tr><td>Render (render.yaml)</td><td>Backend: Web Service Node (npm run build + npm start). Frontend: Static Site desde front/dist.</td></tr>
+    <tr><td>Vercel (front/vercel.json)</td><td>Alternativa recomendada solo para el frontend (SPA + rewrites a index.html).</td></tr>
+    <tr><td>Variables de entorno</td><td>VITE_API_URL, SUPABASE_*, JWT_SECRET, CORS_ORIGIN, GOOGLE_GEMINI_API_KEY, SMTP_*.</td></tr>
+    <tr><td>concurrently + cross-env (raíz)</td><td>Desarrollo local: levantar back (puerto 3000) y front (Vite) con npm run dev.</td></tr>
+  </tbody>
+</table>
+
+<h2>Módulos funcionales del sistema</h2>
+<pre>
+mindmap
+  root((EntreAulas))
+    Autenticación
+      Login
+      Registro
+      Recuperar contraseña
+      Roles múltiples
+    Evaluación
+      Selección profesor/curso
+      Formulario Likert
+      Acceso por QR
+      Preguntas por carrera
+    Resultados
+      Dashboard profesor
+      Vista coordinador/decano
+      Estadísticas agregadas
+    Administración
+      Usuarios
+      Profesores
+      Programación encuestas
+    Reportes
+      Gráficos Recharts
+      Export Excel/PDF
+    IA
+      Resumen por profesor
+      Resumen por carrera/facultad
+</pre>
+
+<h2>Estructura de carpetas (resumen)</h2>
+<pre>
+ConCiencia-Academica/
+├── front/                 # SPA React + Vite
+│   ├── src/
+│   │   ├── api/           # Cliente Axios por dominio
+│   │   ├── components/    # UI reutilizable
+│   │   ├── context/       # AuthContext
+│   │   ├── pages/         # Vistas y dashboards
+│   │   └── utils/         # Export PDF/Excel
+│   └── vercel.json
+├── back/                  # API Express + TypeScript
+│   ├── src/
+│   │   ├── routes/        # Endpoints REST
+│   │   ├── middleware/    # JWT y roles
+│   │   ├── services/      # Evaluaciones, IA, roles
+│   │   └── config/        # Cliente Supabase
+│   ├── scripts/           # SQL y utilidades
+│   └── render.yaml (raíz)
+├── docs/                  # Esta documentación
+├── DEPLOY.md
+└── README.md
+</pre>
+
+<h2>API principal (prefijo /api)</h2>
+<table>
+  <thead><tr><th>Área</th><th>Rutas (ejemplos)</th><th>Propósito</th></tr></thead>
+  <tbody>
+    <tr><td>Auth</td><td>/api/auth/login, /register, forgot-password</td><td>Sesión y usuarios</td></tr>
+    <tr><td>Evaluaciones</td><td>/api/evaluaciones, /api/evaluations</td><td>Crear y consultar encuestas</td></tr>
+    <tr><td>Resultados</td><td>/api/resultados</td><td>Agregados y estadísticas</td></tr>
+    <tr><td>Cursos / QR</td><td>/api/courses, /api/qr-evaluaciones</td><td>Cursos y acceso por QR</td></tr>
+    <tr><td>Profesores</td><td>/api/teachers</td><td>Listados y gestión docente</td></tr>
+    <tr><td>Coordinador</td><td>/api/coordinador</td><td>Vistas departamentales</td></tr>
+    <tr><td>Usuarios</td><td>/api/users</td><td>Administración de cuentas</td></tr>
+    <tr><td>IA</td><td>/api/ai/*</td><td>Resúmenes con Gemini</td></tr>
+    <tr><td>Health</td><td>/health</td><td>Monitoreo del servicio</td></tr>
+  </tbody>
+</table>
+
+<h2>Seguridad (resumen)</h2>
+<ul>
+  <li>Contraseñas con bcrypt; no almacenar texto plano en producción.</li>
+  <li>JWT solo en rutas protegidas; el frontend no accede directamente a Supabase con service role.</li>
+  <li>CORS limitado al dominio del frontend en producción.</li>
+  <li>Validación de entrada con Zod.</li>
+  <li>Headers de seguridad en despliegue estático (X-Frame-Options, etc. en render.yaml).</li>
+</ul>
+
+<h2>Referencias en el repositorio</h2>
+<ul>
+  <li>Despliegue: DEPLOY.md, RENDER_DEPLOY.md, render.yaml</li>
+  <li>API: back/docs/api.md</li>
+  <li>Variables: back/env.example</li>
+</ul>
+
+<footer>Documento generado para entrega institucional y documentación del proyecto EntreAulas / ConCiencia Académica.</footer>
+
+</body>
+</html>

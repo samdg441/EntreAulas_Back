@@ -1,0 +1,244 @@
+---
+title: ConCiencia Académica - Modelo de datos completo (Supabase / PostgreSQL)
+config:
+  theme: default
+  themeVariables:
+    fontSize: 16px
+---
+erDiagram
+    usuarios ||--o{ usuario_roles : "tiene roles"
+    usuarios ||--o| profesores : "es"
+    usuarios ||--o| estudiantes : "es"
+    usuarios ||--o| coordinadores : "es"
+    usuarios ||--o| decanos : "es"
+
+    facultades ||--o{ carreras : "agrupa"
+    facultades ||--o| decanos : "dirigida por"
+
+    carreras ||--o{ coordinadores : "coordinada por"
+    carreras ||--o{ profesores : "adscribe"
+    carreras ||--o{ estudiantes : "matricula"
+    carreras ||--o{ cursos : "ofrece"
+    carreras ||--o{ preguntas_evaluacion : "personaliza"
+
+    cursos ||--o{ grupos : "se dicta en"
+    periodos_academicos ||--o{ grupos : "ubica"
+
+    profesores ||--o{ asignaciones_profesor : "asignado"
+    cursos ||--o{ asignaciones_profesor : "incluido"
+    grupos ||--o{ asignaciones_profesor : "vinculado"
+
+    profesores ||--o{ cursos_profesor : "dicta"
+    grupos ||--o{ cursos_profesor : "asocia"
+    cursos ||--o{ cursos_profesor : "asocia"
+
+    estudiantes ||--o{ inscripciones : "se inscribe"
+    grupos ||--o{ inscripciones : "recibe"
+
+    categorias_pregunta ||--o{ preguntas_evaluacion : "clasifica"
+
+    profesores ||--o{ evaluaciones : "evaluado"
+    estudiantes ||--o{ evaluaciones : "evalúa"
+    cursos ||--o{ evaluaciones : "contextualiza"
+    grupos ||--o{ evaluaciones : "contextualiza"
+    periodos_academicos ||--o{ evaluaciones : "ubica"
+
+    evaluaciones ||--o{ respuestas_evaluacion : "contiene"
+    preguntas_evaluacion ||--o{ respuestas_evaluacion : "responde"
+
+    profesores ||--o{ qr_evaluaciones : "genera"
+    cursos ||--o{ qr_evaluaciones : "para"
+    grupos ||--o{ qr_evaluaciones : "para"
+    periodos_academicos ||--o{ qr_evaluaciones : "ubica"
+
+    usuarios {
+        uuid id PK
+        varchar email UK
+        varchar password "hash bcrypt"
+        varchar nombre
+        varchar apellido
+        varchar tipo_usuario "estudiante|profesor|docente|coordinador|admin|decano"
+        boolean activo
+        timestamp created_at
+    }
+
+    usuario_roles {
+        serial id PK
+        uuid usuario_id FK
+        varchar rol
+        boolean activo
+        timestamp fecha_asignacion
+    }
+
+    facultades {
+        serial id PK
+        varchar nombre
+        varchar codigo UK
+        text descripcion
+        boolean activo
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    carreras {
+        serial id PK
+        varchar nombre
+        varchar codigo
+        text descripcion
+        int facultad_id FK
+        boolean activa
+    }
+
+    decanos {
+        serial id PK
+        int usuario_id FK "UK"
+        int facultad_id FK "UK"
+        timestamp fecha_nombramiento
+        boolean activo
+        text observaciones
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    coordinadores {
+        serial id PK
+        uuid usuario_id FK "UK"
+        int carrera_id FK
+        varchar departamento
+        date fecha_nombramiento
+        boolean activo
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    profesores {
+        serial id PK
+        uuid usuario_id FK
+        varchar codigo
+        varchar departamento
+        int carrera_id FK
+        boolean activo
+    }
+
+    estudiantes {
+        serial id PK
+        uuid usuario_id FK
+        varchar codigo
+        int carrera_id FK
+        varchar semestre
+        boolean activo
+    }
+
+    cursos {
+        serial id PK
+        varchar nombre
+        varchar codigo
+        int creditos
+        text descripcion
+        int carrera_id FK
+        boolean activo
+    }
+
+    periodos_academicos {
+        serial id PK
+        int ano
+        int semestre
+        boolean activo
+    }
+
+    grupos {
+        serial id PK
+        int curso_id FK
+        varchar numero_grupo
+        varchar horario
+        varchar aula
+        int periodo_id FK
+        int asignacion_profesor_id FK
+        boolean activo
+    }
+
+    asignaciones_profesor {
+        serial id PK
+        uuid profesor_id FK
+        int curso_id FK
+        int grupo_id FK
+        boolean activa
+    }
+
+    cursos_profesor {
+        serial id PK
+        int grupo_id FK
+        uuid profesor_id FK
+        int curso_id FK
+    }
+
+    inscripciones {
+        serial id PK
+        int estudiante_id FK
+        int grupo_id FK
+        boolean activa
+        timestamp fecha_inscripcion
+    }
+
+    categorias_pregunta {
+        serial id PK
+        varchar nombre
+        text descripcion
+    }
+
+    preguntas_evaluacion {
+        serial id PK
+        int categoria_id FK
+        text texto_pregunta
+        text descripcion
+        varchar tipo_pregunta "rating|texto|..."
+        jsonb opciones
+        boolean obligatoria
+        int orden
+        boolean activa
+        int id_carrera FK
+    }
+
+    evaluaciones {
+        serial id PK
+        uuid profesor_id FK
+        int estudiante_id FK
+        int curso_id FK
+        int grupo_id FK
+        int periodo_id FK
+        decimal calificacion_general
+        date fecha_evaluacion
+        text comentarios
+        boolean completada
+        date fecha_completada
+        timestamp fecha_creacion
+    }
+
+    respuestas_evaluacion {
+        serial id PK
+        int evaluacion_id FK
+        int pregunta_id FK
+        int respuesta_rating
+        varchar valor
+        text respuesta_texto
+    }
+
+    qr_evaluaciones {
+        serial id PK
+        varchar token UK
+        uuid profesor_id FK
+        int curso_id FK
+        int grupo_id FK
+        int periodo_id FK
+        boolean activo
+    }
+
+    password_reset_tokens {
+        uuid id PK
+        varchar email "ref usuarios.email"
+        varchar token UK
+        timestamptz expires_at
+        boolean used
+        timestamptz created_at
+        timestamptz updated_at
+    }

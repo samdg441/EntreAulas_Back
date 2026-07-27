@@ -1,0 +1,150 @@
+---
+title: ConCiencia Académica - Modelo Entidad-Relación (claves y relaciones)
+config:
+  theme: default
+  themeVariables:
+    fontSize: 18px
+---
+erDiagram
+    usuarios ||--o{ usuario_roles : "tiene roles"
+    usuarios ||--o| profesores : "es"
+    usuarios ||--o| estudiantes : "es"
+    usuarios ||--o| coordinadores : "es"
+    usuarios ||--o| decanos : "es"
+
+    facultades ||--o{ carreras : "agrupa"
+    facultades ||--o| decanos : "dirigida por"
+
+    carreras ||--o{ coordinadores : "coordinada por"
+    carreras ||--o{ profesores : "adscribe"
+    carreras ||--o{ estudiantes : "matricula"
+    carreras ||--o{ cursos : "ofrece"
+    carreras ||--o{ preguntas_evaluacion : "personaliza"
+
+    cursos ||--o{ grupos : "se dicta en"
+    periodos_academicos ||--o{ grupos : "ubica"
+
+    profesores ||--o{ asignaciones_profesor : "asignado"
+    cursos ||--o{ asignaciones_profesor : "incluido"
+    grupos ||--o{ asignaciones_profesor : "vinculado"
+
+    profesores ||--o{ cursos_profesor : "dicta"
+    grupos ||--o{ cursos_profesor : "asocia"
+    cursos ||--o{ cursos_profesor : "asocia"
+
+    estudiantes ||--o{ inscripciones : "se inscribe"
+    grupos ||--o{ inscripciones : "recibe"
+
+    categorias_pregunta ||--o{ preguntas_evaluacion : "clasifica"
+
+    profesores ||--o{ evaluaciones : "evaluado"
+    estudiantes ||--o{ evaluaciones : "evalúa"
+    cursos ||--o{ evaluaciones : "contextualiza"
+    grupos ||--o{ evaluaciones : "contextualiza"
+    periodos_academicos ||--o{ evaluaciones : "ubica"
+
+    evaluaciones ||--o{ respuestas_evaluacion : "contiene"
+    preguntas_evaluacion ||--o{ respuestas_evaluacion : "responde"
+
+    profesores ||--o{ qr_evaluaciones : "genera"
+    cursos ||--o{ qr_evaluaciones : "para"
+    grupos ||--o{ qr_evaluaciones : "para"
+    periodos_academicos ||--o{ qr_evaluaciones : "ubica"
+
+    usuarios {
+        uuid id PK
+        varchar email UK
+    }
+    usuario_roles {
+        serial id PK
+        uuid usuario_id FK
+    }
+    facultades {
+        serial id PK
+    }
+    carreras {
+        serial id PK
+        int facultad_id FK
+    }
+    decanos {
+        serial id PK
+        int usuario_id FK
+        int facultad_id FK
+    }
+    coordinadores {
+        serial id PK
+        uuid usuario_id FK
+        int carrera_id FK
+    }
+    profesores {
+        serial id PK
+        uuid usuario_id FK
+        int carrera_id FK
+    }
+    estudiantes {
+        serial id PK
+        uuid usuario_id FK
+        int carrera_id FK
+    }
+    cursos {
+        serial id PK
+        int carrera_id FK
+    }
+    periodos_academicos {
+        serial id PK
+    }
+    grupos {
+        serial id PK
+        int curso_id FK
+        int periodo_id FK
+        int asignacion_profesor_id FK
+    }
+    asignaciones_profesor {
+        serial id PK
+        uuid profesor_id FK
+        int curso_id FK
+        int grupo_id FK
+    }
+    cursos_profesor {
+        serial id PK
+        int grupo_id FK
+        uuid profesor_id FK
+        int curso_id FK
+    }
+    inscripciones {
+        serial id PK
+        int estudiante_id FK
+        int grupo_id FK
+    }
+    categorias_pregunta {
+        serial id PK
+    }
+    preguntas_evaluacion {
+        serial id PK
+        int categoria_id FK
+        int id_carrera FK
+    }
+    evaluaciones {
+        serial id PK
+        uuid profesor_id FK
+        int estudiante_id FK
+        int curso_id FK
+        int grupo_id FK
+        int periodo_id FK
+    }
+    respuestas_evaluacion {
+        serial id PK
+        int evaluacion_id FK
+        int pregunta_id FK
+    }
+    qr_evaluaciones {
+        serial id PK
+        uuid profesor_id FK
+        int curso_id FK
+        int grupo_id FK
+        int periodo_id FK
+    }
+    password_reset_tokens {
+        uuid id PK
+        varchar email
+    }

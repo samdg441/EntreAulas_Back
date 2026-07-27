@@ -1,0 +1,83 @@
+---
+title: ConCiencia Académica (EntreAulas) - Arquitectura cliente-servidor y tecnologías
+config:
+  theme: default
+  flowchart:
+    curve: basis
+    nodeSpacing: 55
+    rankSpacing: 70
+---
+flowchart TB
+    subgraph usuarios["Usuarios (roles)"]
+        direction LR
+        EST["Estudiante"]
+        DOC["Profesor / Docente"]
+        COO["Coordinador"]
+        DEC["Decano"]
+        ADM["Administrador"]
+    end
+
+    subgraph CLIENTE["CLIENTE — Navegador web"]
+        direction TB
+        SPA["SPA React 18 + Vite + TypeScript
+        Tailwind CSS · React Router
+        Recharts · jsPDF / ExcelJS · QR"]
+        HTTP["Cliente HTTP Axios
+        (api/client.ts)
+        Bearer JWT + manejo 401/403"]
+        SPA --> HTTP
+    end
+
+    subgraph FRONT_HOST["Hosting frontend (estático)"]
+        VERCEL["Vercel / Render Static
+        SPA build (front/dist)"]
+    end
+
+    subgraph SERVIDOR["SERVIDOR — API REST (Render Web Service)"]
+        direction TB
+        EXPRESS["Node.js + Express 4 + TypeScript"]
+        AUTH_MW["Middleware
+        authenticateToken (JWT)
+        requireRole · CORS · Zod"]
+        ROUTES["Rutas /api/*
+        auth · evaluaciones · resultados
+        cursos/QR · teachers · users · ai"]
+        EXPRESS --> AUTH_MW --> ROUTES
+    end
+
+    subgraph DATOS["Persistencia"]
+        SUPA["Supabase (PostgreSQL)
+        usuarios, roles, cursos,
+        evaluaciones, preguntas, respuestas"]
+    end
+
+    subgraph EXTERNOS["Servicios externos"]
+        direction TB
+        GEMINI["Google Gemini 2.5 Flash
+        Resúmenes de comentarios
+        (fallback local por reglas)"]
+        SMTP["SMTP / Nodemailer
+        Recuperación de contraseña"]
+    end
+
+    EST & DOC & COO & DEC & ADM --> SPA
+    VERCEL -. "sirve la SPA" .-> SPA
+    HTTP -->|"HTTPS · REST · JSON
+    Authorization: Bearer JWT"| EXPRESS
+    ROUTES -->|"@supabase/supabase-js
+    Service Role Key"| SUPA
+    ROUTES -->|"@google/generative-ai"| GEMINI
+    ROUTES --> SMTP
+
+    classDef user fill:#fae8ff,stroke:#86198f,color:#111827;
+    classDef cli fill:#f3e8ff,stroke:#6b21a8,color:#111827;
+    classDef host fill:#e0f2fe,stroke:#0369a1,color:#111827;
+    classDef api fill:#fef9c3,stroke:#a16207,color:#111827;
+    classDef pg fill:#dbeafe,stroke:#1e40af,color:#111827;
+    classDef ext fill:#dcfce7,stroke:#166534,color:#111827;
+    class EST,DOC,COO,DEC,ADM user;
+    class SPA,HTTP cli;
+    class VERCEL host;
+    class EXPRESS,AUTH_MW,ROUTES api;
+    class SUPA pg;
+    class GEMINI,SMTP ext;
