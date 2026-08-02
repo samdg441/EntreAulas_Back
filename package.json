@@ -8,7 +8,9 @@
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
-    "test": "ts-node src/test-supabase-auth.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:legacy-auth": "ts-node src/test-supabase-auth.ts",
     "test-connection": "ts-node src/test-backend-frontend-connection.ts",
     "debug-auth": "ts-node src/debug-auth.ts",
     "debug-student": "ts-node src/debug-student-login.ts",
@@ -40,6 +42,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^9.0.3",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -49,9 +52,13 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.14.9",
     "@types/nodemailer": "^7.0.11",
+    "@types/supertest": "^7.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
     "eslint": "^9.9.0",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
   }
 }
