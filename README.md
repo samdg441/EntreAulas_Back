@@ -299,4 +299,4 @@ El token se obtiene al hacer login y se usa para validar permisos por rol.
 - Si agregas nuevas rutas, es recomendable documentarlas aquí para mantener el backend claro.
 
 ## Notas
-Este proyecto está orientado a un entorno académico y de evaluación institucional. El backend está preparado para servir como capa de negocio y acceso a datos para un frontend que consuma estas rutas.
+ El backend está preparado para servir como capa de negocio y acceso a datos para un frontend que consuma estas rutas.

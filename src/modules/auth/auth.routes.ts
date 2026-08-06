@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
-import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
+import { authRepository } from './auth.repository'
 import {
   hashPassword,
   verifyStoredPassword
@@ -36,7 +36,7 @@ router.post('/register', async (req, res) => {
     const validatedData = registerSchema.parse(req.body)
     
     // Verificar si el usuario ya existe
-    const existingUser = await SupabaseDB.findUserByEmail(validatedData.email)
+    const existingUser = await authRepository.findUserByEmail(validatedData.email)
 
     if (existingUser) {
       return res.status(400).json({ error: 'El email ya está registrado' })
@@ -45,7 +45,7 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await hashPassword(validatedData.password)
 
     // Crear usuario con inserción automática en tabla específica
-    const user = await SupabaseDB.createUserWithType({
+    const user = await authRepository.createUserWithType({
       email: validatedData.email,
       password: hashedPassword,
       nombre: validatedData.nombre,
@@ -92,7 +92,7 @@ router.post('/login', async (req, res) => {
   try {
     const validatedData = loginSchema.parse(req.body)
 
-    const user = await SupabaseDB.findUserByEmail(validatedData.email)
+    const user = await authRepository.findUserByEmail(validatedData.email)
 
     if (!user) {
       return res.status(401).json({ error: 'Credenciales inválidas' })
@@ -114,7 +114,7 @@ router.post('/login', async (req, res) => {
     if (passwordCheck.migratePlaintextToHash) {
       try {
         const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-        await SupabaseDB.updateUser(user.id, { password: hashedPassword })
+        await authRepository.updateUser(user.id, { password: hashedPassword })
       } catch (updateError) {
         console.error('Error migrando contraseña a bcrypt:', updateError)
       }
@@ -257,7 +257,7 @@ router.post('/login-with-role', async (req, res) => {
   try {
     const { email, password, selectedRole } = req.body
 
-    const user = await SupabaseDB.findUserByEmail(email)
+    const user = await authRepository.findUserByEmail(email)
 
     if (!user) {
       return res.status(401).json({ error: 'Credenciales inválidas' })
@@ -276,7 +276,7 @@ router.post('/login-with-role', async (req, res) => {
     if (passwordCheck.migratePlaintextToHash) {
       try {
         const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-        await SupabaseDB.updateUser(user.id, { password: hashedPassword })
+        await authRepository.updateUser(user.id, { password: hashedPassword })
       } catch (updateError) {
         console.error('Error migrando contraseña a bcrypt:', updateError)
       }
@@ -348,7 +348,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
       return res.status(401).json({ error: 'No autenticado' })
     }
 
-    const u = await SupabaseDB.findUserById(req.user.id)
+    const u = await authRepository.findUserById(req.user.id)
     if (!u) {
       return res.status(404).json({ error: 'Usuario no encontrado' })
     }
@@ -385,7 +385,7 @@ router.get('/me', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
 
     // Buscar el usuario en la base de datos
-    const user = await SupabaseDB.findUserByEmail(decoded.email)
+    const user = await authRepository.findUserByEmail(decoded.email)
 
     if (!user || !user.activo) {
       return res.status(401).json({ error: 'Usuario no encontrado o inactivo' })
@@ -489,7 +489,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       })
     }
 
-    const existingUser = await SupabaseDB.findUserByEmail(email)
+    const existingUser = await authRepository.findUserByEmail(email)
     if (existingUser) {
       return res.status(400).json({ error: 'El email ya está registrado' })
     }
@@ -497,7 +497,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
     const hashedPassword = await hashPassword(password)
     
     // Crear usuario con inserción automática en tabla específica
-    const user = await SupabaseDB.createUserWithType({
+    const user = await authRepository.createUserWithType({
       email,
       password: hashedPassword,
       nombre,

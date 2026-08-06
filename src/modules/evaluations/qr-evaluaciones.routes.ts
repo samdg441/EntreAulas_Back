@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { SupabaseDB } from '../../config/supabase-only'
-import { authenticateToken } from '../../middleware/auth'
+import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
 
@@ -13,12 +13,9 @@ const router = Router()
  * Crea un registro en qr_evaluaciones por cada grupo (profesor y curso se resuelven desde asignaciones_profesor y grupos).
  * Solo coordinadores (o admin). Devuelve: { created: { grupoId, token }[] }
  */
-router.post('/batch', authenticateToken, async (req: any, res) => {
+router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), async (req: any, res) => {
   try {
     const user = req.user
-    if (!user?.roles?.includes('coordinador') && user?.tipo_usuario !== 'coordinador' && user?.tipo_usuario !== 'admin') {
-      return res.status(403).json({ error: 'Solo coordinadores o administradores pueden generar QRs en lote.' })
-    }
 
     const { grupoIds } = req.body || {}
     if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
@@ -228,14 +225,10 @@ router.post('/batch', authenticateToken, async (req: any, res) => {
  * Body: { to: string, subject: string, message?: string, grupoIds: number[] }
  * Envía por correo los links de QR de los grupos seleccionados.
  */
-router.post('/share-email', authenticateToken, async (req: any, res) => {
+router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admin']), async (req: any, res) => {
   try {
     const user = req.user
-    const isAdmin = user?.tipo_usuario === 'admin' || user?.roles?.includes('admin')
     const isCoordinador = user?.tipo_usuario === 'coordinador' || user?.roles?.includes('coordinador')
-    if (!isAdmin && !isCoordinador) {
-      return res.status(403).json({ error: 'Solo coordinadores o administradores pueden compartir QRs por correo.' })
-    }
 
     const { to, subject, message, grupoIds } = req.body || {}
     const email = String(to || '').trim()

@@ -1963,33 +1963,50 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
 router.get('/careers', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
+    const isCoordinador =
+      user.roles?.includes('coordinador') || user.tipo_usuario === 'coordinador'
+    const isAdmin = user.roles?.includes('admin') || user.tipo_usuario === 'admin'
 
-    // Verificar que el usuario sea coordinador
-    if (!user.roles?.includes('coordinador') && user.tipo_usuario !== 'coordinador') {
-      return res.status(403).json({ error: 'Acceso denegado. Solo coordinadores pueden ver esta información.' })
+    if (!isCoordinador && !isAdmin) {
+      return res.status(403).json({
+        error: 'Acceso denegado. Solo coordinadores o administradores pueden ver esta información.',
+      })
     }
 
-    // Obtener carreras
-    const { data: carreras, error } = await SupabaseDB.supabaseAdmin
+    // Schema seed usa `activa`; algunos entornos pueden tener `activo`
+    let carreras: any[] | null = null
+    let error: any = null
+
+    const primary = await SupabaseDB.supabaseAdmin
       .from('carreras')
-      .select('id, nombre, codigo, activo')
-      .eq('activo', true)
+      .select('id, nombre, codigo, facultad_id, activa')
+      .eq('activa', true)
       .order('nombre')
+
+    if (primary.error && (primary.error.code === '42703' || String(primary.error.message || '').includes('column'))) {
+      const fallback = await SupabaseDB.supabaseAdmin
+        .from('carreras')
+        .select('id, nombre, codigo, facultad_id, activo')
+        .eq('activo', true)
+        .order('nombre')
+      carreras = fallback.data
+      error = fallback.error
+    } else {
+      carreras = primary.data
+      error = primary.error
+    }
 
     if (error) {
       console.error('Error obteniendo carreras:', error)
       return res.status(500).json({ error: 'Error obteniendo carreras', details: error })
     }
 
-    console.log(`✅ Carreras obtenidas:`, carreras?.length)
     res.json(carreras || [])
-
   } catch (error) {
     console.error('Error en /teachers/careers:', error)
     res.status(500).json({ error: 'Error interno del servidor' })
   }
 })
-
 // GET /teachers/:teacherId/courses - Obtener cursos de un profesor específico
 
 router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
