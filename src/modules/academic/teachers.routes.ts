@@ -1979,22 +1979,12 @@ router.get('/careers', authenticateToken, async (req: any, res) => {
 
     const primary = await SupabaseDB.supabaseAdmin
       .from('carreras')
-      .select('id, nombre, codigo, facultad_id, activa')
+      .select('id, nombre, facultad_id, activa')
       .eq('activa', true)
       .order('nombre')
 
-    if (primary.error && (primary.error.code === '42703' || String(primary.error.message || '').includes('column'))) {
-      const fallback = await SupabaseDB.supabaseAdmin
-        .from('carreras')
-        .select('id, nombre, codigo, facultad_id, activo')
-        .eq('activo', true)
-        .order('nombre')
-      carreras = fallback.data
-      error = fallback.error
-    } else {
-      carreras = primary.data
-      error = primary.error
-    }
+    carreras = primary.data
+    error = primary.error
 
     if (error) {
       console.error('Error obteniendo carreras:', error)

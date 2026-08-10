@@ -52,14 +52,15 @@ export class AcademicRepository {
 
     if (facError) throw facError
 
+    // Schema real: carreras no tiene `codigo` (sí nombre, descripcion, facultad_id, activa)
     const { data: carreras, error: carError } = await supabaseAdmin
       .from('carreras')
-      .select('id, nombre, codigo, facultad_id, activa')
+      .select('id, nombre, descripcion, facultad_id, activa')
       .order('nombre')
 
     if (carError) throw carError
 
-    const byFacultad = new Map<number, typeof carreras>()
+    const byFacultad = new Map<number, NonNullable<typeof carreras>>()
     for (const c of carreras || []) {
       const fid = Number(c.facultad_id)
       if (!byFacultad.has(fid)) byFacultad.set(fid, [])
@@ -71,8 +72,32 @@ export class AcademicRepository {
       nombre: f.nombre,
       codigo: f.codigo,
       descripcion: f.descripcion,
-      carreras: byFacultad.get(Number(f.id)) || [],
+      carreras: (byFacultad.get(Number(f.id)) || []).map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        descripcion: c.descripcion,
+        facultad_id: c.facultad_id,
+        activa: c.activa,
+      })),
     }))
+  }
+
+  async getDashboardStats() {
+    const [usersRes, facultadesRes, carrerasRes] = await Promise.all([
+      supabaseAdmin.from('usuarios').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('facultades').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('carreras').select('id', { count: 'exact', head: true }).eq('activa', true),
+    ])
+
+    if (usersRes.error) throw usersRes.error
+    if (facultadesRes.error) throw facultadesRes.error
+    if (carrerasRes.error) throw carrerasRes.error
+
+    return {
+      totalUsers: usersRes.count ?? 0,
+      totalFacultades: facultadesRes.count ?? 0,
+      totalCarreras: carrerasRes.count ?? 0,
+    }
   }
 
   async getCareers() {

@@ -30,6 +30,10 @@ export class AcademicService {
     return this.repo.getAcademicStructure()
   }
 
+  getDashboardStats() {
+    return this.repo.getDashboardStats()
+  }
+
   getGruposConProfesorByCareer(carreraId: number) {
     return listGruposConProfesorByCareer(carreraId)
   }

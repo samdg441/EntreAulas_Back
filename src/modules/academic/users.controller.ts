@@ -130,6 +130,16 @@ export class UsersController {
     }
   }
 
+  static async getDashboardStats(_req: Request, res: Response) {
+    try {
+      const stats = await academicService.getDashboardStats()
+      res.json(stats)
+    } catch (e) {
+      console.error('GET /api/users/stats:', e)
+      res.status(500).json({ error: 'Error al obtener estadísticas' })
+    }
+  }
+
   static async getGruposByCareer(req: Request, res: Response) {
     try {
       const careerId = Number(req.params.careerId)
