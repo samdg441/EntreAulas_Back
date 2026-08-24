@@ -57,6 +57,11 @@ describe('RQ18 unit — Validar QR vencido o inválido', () => {
     expect(res.body).toEqual(qrFixture.errores.qrInvalidoOExpirado)
   })
 
+  // C3 agrupa "inexistente" y "desactivado": el código no los distingue.
+  // La rama "vencido por fecha" no es alcanzable porque el vencimiento no
+  // existe en el producto — ver DEF-14 en HALLAZGOS.md.
+  it.todo('C3b: QR fuera de su ventana de vigencia → 404 (DEF-14)')
+
   it('C4: QR activo → 200', async () => {
     fromMock.mockImplementation(
       queueFrom({ qr_evaluaciones: [{ data: qrFixture.tokenValido, error: null }] })

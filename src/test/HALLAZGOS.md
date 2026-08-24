@@ -24,6 +24,9 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-07 | Dos promedios distintos para el mismo profesor | RQ22/RQ24 | **Alta** | ABIERTO |
 | DEF-08 | Evaluaciones anónimas cuentan como 1 estudiante | RQ23 | Baja | ABIERTO |
 | DEF-13 | El endpoint de QR no exige autenticación | RQ18 | Media | ABIERTO |
+| DEF-14 | El QR nunca caduca: no existe vencimiento | RQ18 | **Alta** | ABIERTO |
+| DEF-15 | Fechas imposibles aceptadas al generar QR | RQ18 | Media | ABIERTO |
+| DEF-16 | login-with-role sin rol responde 401 de credenciales | RQ19 | Media | ABIERTO |
 
 Técnica de detección: análisis de valores límite y particiones de equivalencia
 sobre los parámetros de entrada, y pruebas de consistencia entre endpoints que
@@ -265,6 +268,134 @@ protección vive solo en el cliente, que es justamente donde no se puede confiar
 
 **Corrección propuesta.** Añadir `authenticateToken` a la ruta. Si el acceso anónimo
 fuera un requisito deliberado, debe documentarse y limitar los datos expuestos.
+
+---
+
+## DEF-14 — El QR nunca caduca: el vencimiento no existe en el producto
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18 — Validar QR **vencido** o inválido |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-14-qr-sin-caducidad.test.ts` |
+| Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts:406` |
+
+**Descripción.** El requisito se llama "Validar QR vencido o inválido", pero en el
+producto no existe el concepto de vencimiento. La consulta de validación solo aplica
+dos filtros, `.eq('token', token)` y `.eq('activo', true)`; no hay ninguna comparación
+de fechas en todo el módulo. Un QR solo deja de servir si alguien pone `activo = false`
+a mano en la base de datos.
+
+Lo que convierte esto en un defecto y no en una decisión de diseño es que **la ventana
+de vigencia sí se le pide al usuario y se descarta en silencio**, en tres puntos:
+
+1. `AdminQrPage.tsx:212` y `ScheduleSurveys.tsx:258` (frontend) bloquean el envío si el
+   coordinador no escribe fecha de inicio y fecha de cierre.
+2. `evaluations.api.ts:17` (frontend) envía al backend únicamente `{ grupoIds }`; las
+   fechas nunca salen del navegador.
+3. `qr-evaluaciones.routes.ts:194-203` (backend) inserta la fila con `token`,
+   `profesor_id`, `curso_id`, `grupo_id`, `activo` y opcionalmente `periodo_id`. Aunque
+   las fechas llegaran, no se guardarían. El comentario de la ruta (línea 12) sí las
+   documenta como parte del cuerpo esperado.
+
+**Pasos para reproducir.** Generar un QR para un grupo con fecha de cierre en el pasado.
+Escanearlo después de esa fecha.
+
+**Resultado esperado.** `404 QR inválido o expirado.`
+**Resultado obtenido.** `200` con los datos del docente; la encuesta se abre y admite la
+evaluación. Un QR impreso sigue vigente semestres después.
+
+**Impacto.** Se pueden registrar evaluaciones fuera del período habilitado, lo que
+contamina las métricas de RQ22, RQ23 y RQ24 con datos de períodos ya cerrados.
+
+**Corrección propuesta.** Persistir `fecha_inicio` y `fecha_fin` al crear el QR, enviarlas
+desde el cliente, y añadir el filtro temporal a la consulta de validación. Si se decide
+que la vigencia se controla solo con `activo`, deben retirarse los campos de fecha de las
+pantallas de generación para no prometer un comportamiento que no existe.
+
+**Nota sobre la cobertura de RQ18.** El caso C3 del grafo cubre "QR inválido o expirado"
+como un único camino porque el código no distingue ambas situaciones: token inexistente y
+token desactivado producen la misma consulta sin resultados. La rama "vencido por fecha"
+no es alcanzable por ninguna prueba mientras el mecanismo no exista.
+
+---
+
+## DEF-15 — La generación de QR acepta fechas imposibles y rangos invertidos
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18 — Validar QR vencido o inválido |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-15-fechas-qr-sin-validar.test.ts` |
+| Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts:16` |
+
+**Descripción.** `POST /qr-evaluaciones/batch` documenta `startDate` y `endDate` en su
+cabecera (línea 12), pero no ejecuta ninguna validación sobre ellas. La única comprobación
+del cuerpo es que `grupoIds` sea un arreglo no vacío de números.
+
+La única barrera que existe hoy contra una fecha mal formada es el widget
+`<input type="date">` del navegador, que descarta el valor y lo deja vacío. Se verificó
+empíricamente: asignar `2026-13-01` o `2026-01--1` al input deja el campo en `""`, y
+entonces sí lo atrapa la comprobación de campos vacíos del formulario
+(`AdminQrPage.tsx:212`, `ScheduleSurveys.tsx:258`).
+
+Esa protección es del navegador, no del producto, y no aplica a ningún cliente que no sea
+ese widget. Además **no cubre el rango invertido**: `2026-12-31` como inicio y `2026-01-01`
+como cierre son dos fechas válidas, el input las acepta, y ningún código las compara entre
+sí. Se verificó que el formulario habilita el envío con esa combinación.
+
+**Pasos para reproducir.**
+
+```
+POST /api/qr-evaluaciones/batch
+{ "grupoIds": [1], "period": "2026-1", "startDate": "2026-13-01", "endDate": "2026-01--1" }
+```
+
+**Resultado esperado.** `400` indicando que las fechas no son válidas.
+**Resultado obtenido.** `201 Created` con los QR generados. Idéntico resultado con la
+ventana invertida.
+
+**Impacto.** Hoy está enmascarado por DEF-14: como las fechas no se persisten ni se
+consultan, aceptarlas mal no cambia el comportamiento observable. Es un **defecto
+latente**: en cuanto se corrija DEF-14 y la vigencia empiece a aplicarse, una ventana
+invertida dejaría el QR inservible desde el momento de crearlo, o vigente para siempre,
+según cómo se escriba el filtro.
+
+**Corrección propuesta.** Validar en el servidor que ambas fechas existan, tengan formato
+`YYYY-MM-DD` y correspondan a una fecha real, y que `startDate <= endDate`. Añadir la misma
+comparación en el formulario para dar retroalimentación inmediata, sin que sustituya a la
+del servidor.
+
+---
+
+## DEF-16 — `login-with-role` sin rol responde como credenciales inválidas
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ19 — Redirigir al dashboard según el rol |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-16-login-sin-rol-seleccionado.test.ts` |
+| Archivo | `src/modules/auth/auth.routes.ts:258` y `:288` |
+
+**Descripción.** El flujo de roles múltiples pide un segundo paso: `POST /auth/login-with-role`
+con `selectedRole`. Si ese campo falta o va vacío, el handler no valida el cuerpo. Cae en
+`roles.includes(selectedRole)` (falso para `undefined` y `""`) y responde **401
+"Credenciales inválidas"**, el mismo mensaje que una contraseña incorrecta.
+
+El login principal (`POST /auth/login`) sí rechaza al usuario sin rol ni tipo válido con
+401 "Tipo de usuario no válido". Esta prueba cubre el hueco del segundo endpoint.
+
+**Pasos para reproducir.** Usuario con varios roles; `POST /api/auth/login-with-role` con
+email y contraseña correctos, sin `selectedRole`.
+
+**Resultado esperado.** `400` indicando que el rol es obligatorio.
+**Resultado obtenido.** `401 { "error": "Credenciales inválidas" }`.
+
+**Corrección propuesta.** Validar `selectedRole` antes de consultar roles. Distinguir
+"falta el rol" (400) de "el usuario no tiene ese rol" (403) y de "credenciales malas" (401).
 
 ---
 

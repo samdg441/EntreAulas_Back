@@ -66,11 +66,12 @@ describe('RQ19 unit — Redirigir al dashboard según el rol', () => {
     await expect(RoleService.obtenerDashboardUsuario('u1')).resolves.toBe('/dashboard-coordinador')
   })
 
-  it('C8: sin rol ni tipo válido → /dashboard', async () => {
+  it('C8: sin rol ni tipo válido → /dashboard (no lanza)', async () => {
     vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue([])
     fromMock.mockReturnValue(
       createQueryBuilder({ data: { tipo_usuario: 'desconocido' }, error: null })
     )
+    // El servicio traga el caso: no hay excepción. El 401 vive en el login (integración).
     await expect(RoleService.obtenerDashboardUsuario('u1')).resolves.toBe('/dashboard')
   })
 })

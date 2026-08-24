@@ -94,4 +94,31 @@ describe('RQ19 integration — Redirigir dashboard en login', () => {
     expect(roleRes.status).toBe(200)
     expect(roleRes.body.user.dashboard).toBe('/dashboard-coordinador')
   })
+
+  it('sin rol y tipo inválido → 401', async () => {
+    findUserByEmail.mockResolvedValue({ ...user, tipo_usuario: 'desconocido' })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue([])
+
+    const res = await request(app).post('/api/auth/login').send({
+      email: 'samuel@test.com',
+      password: 'secreto123',
+    })
+
+    expect(res.status).toBe(401)
+    expect(res.body).toEqual({ error: 'Tipo de usuario no válido' })
+  })
+
+  it('login-with-role con un rol que el usuario no tiene → 401', async () => {
+    findUserByEmail.mockResolvedValue(user)
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
+
+    const res = await request(app).post('/api/auth/login-with-role').send({
+      email: 'samuel@test.com',
+      password: 'secreto123',
+      selectedRole: 'admin',
+    })
+
+    expect(res.status).toBe(401)
+    expect(res.body).toEqual({ error: 'Credenciales inválidas' })
+  })
 })
