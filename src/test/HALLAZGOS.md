@@ -18,7 +18,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-01 | Rango de fechas inválido (`2026-06-31`) | RQ23 | Media | ABIERTO |
 | DEF-02 | Un profesor lee estadísticas de otro | RQ22 | **Alta** | ABIERTO |
 | DEF-03 | Paginación no numérica devuelve `null` | RQ24 | Media | ABIERTO |
-| DEF-04 | `period` no se valida | RQ23 | Media | ABIERTO |
+| DEF-04 | `period` no se valida (vacío, 2026, 2026-9, DROP-TABLE) | RQ23 | Media | ABIERTO |
 | DEF-05 | Roles sensibles a mayúsculas | RQ19 | Media | ABIERTO |
 | DEF-06 | Un `docente` no accede a sus métricas | RQ22 | Media | ABIERTO |
 | DEF-07 | Dos promedios distintos para el mismo profesor | RQ22/RQ24 | **Alta** | ABIERTO |
@@ -28,6 +28,9 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-15 | Fechas imposibles aceptadas al generar QR | RQ18 | Media | ABIERTO |
 | DEF-16 | login-with-role sin rol responde 401 de credenciales | RQ19 | Media | ABIERTO |
 | DEF-17 | Promedio fuera de escala (null, negativo, 99) | RQ22 | **Alta** | ABIERTO |
+| DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | ABIERTO |
+| DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | ABIERTO |
+| DEF-20 | Rol `Coordinador` recibe 403 en el resumen | RQ24 | Media | ABIERTO |
 
 Técnica de detección: análisis de valores límite y particiones de equivalencia
 sobre los parámetros de entrada, y pruebas de consistencia entre endpoints que
@@ -131,20 +134,26 @@ límites, y caer al valor por defecto si la entrada no es un número.
 | Evidencia | `defects/DEF-04-periodo-sin-validar.test.ts` |
 | Archivo | `src/modules/analytics/teachers-analytics.routes.ts:218` |
 
-**Descripción.** `period` se parte por `-` y se interpola directamente en el rango
-de fechas sin comprobar formato. Cualquier texto se acepta.
+**Descripción.** `period` se parte por `-` y se interpola en el rango de fechas
+sin comprobar formato ni obligatoriedad. Casos medidos:
 
-**Pasos para reproducir.**
-1. `?period=DROP-TABLE` → `dateRange: { start: "DROP-07-01", end: "DROP-12-31" }`, y el valor se refleja tal cual en la respuesta.
-2. `?period=2026-9` → se interpreta silenciosamente como segundo semestre.
+| Query | Resultado actual |
+|-------|------------------|
+| `?period=DROP-TABLE` | 200, rango `DROP-07-01` … `DROP-12-31` |
+| `?period=2026-9` | 200, se toma como segundo semestre |
+| sin `period` o `period=` | 200, `period: "all"`, busca 2020-01-01 … 2030-12-31 |
+| `?period=2026` | 200, se interpreta como 2026-2 (`07-01` … `12-31`) |
 
-**Resultado esperado.** `400` con un mensaje de formato inválido.
-**Resultado obtenido.** `200` con un rango de fechas sin sentido.
+Un período *sin filas* (p. ej. `2099-1`) sí responde 200 con ceros: no hay tabla
+de períodos, solo se fabrica un rango. Eso no es un error de formato; el vacío y
+el malformado sí.
 
-**Corrección propuesta.** Validar contra `/^\d{4}-[12]$/` y responder 400 si no coincide.
-Nota: el endpoint hermano `/coordinador/reports-overview` sí valida el semestre
-(`semester === 1 || semester === 2`), así que la lógica correcta ya existe en el
-proyecto y solo hace falta unificarla.
+**Resultado esperado.** `400` si falta o no cumple `/^\d{4}-[12]$/`.
+**Resultado obtenido.** `200` con un rango inventado o con el histórico de una
+década (`all`).
+
+**Corrección propuesta.** Validar contra `/^\d{4}-[12]$/` (el endpoint
+`/coordinador/reports-overview` ya distingue semestre 1 o 2) y exigir el query.
 
 ---
 
@@ -431,6 +440,77 @@ un `null` no entra en el promedio.
 **Corrección propuesta.** Filtrar `null`/`undefined` y valores fuera de 1–5 antes de
 promediar. Si tras el filtro no queda nada, devolver `0` y no inflar `totalEvaluaciones`
 con filas inválidas.
+
+---
+
+## DEF-18 — El promedio histórico no se acota a la escala 1–5
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ23 — Consultar estadísticas históricas |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-18-historico-fuera-de-escala.test.ts` |
+| Archivo | `src/modules/analytics/teachers-analytics.routes.ts:253` |
+| Relacionado | DEF-17 (mismo cálculo en `teacher-stats`) |
+
+**Descripción.** `GET /teachers/:id/stats/historical` usa
+`sum + (calificacion_promedio || 0)`. Lista vacía y ceros no revientan (200 y 0).
+Un `-2` se publica como `-2`; un `99` como `99`; un `null` junto a un `5` baja
+el promedio a `2.5`.
+
+**Resultado esperado.** Promedio en `[1, 5]` o `0` si no hay calificaciones válidas.
+**Resultado obtenido.** Se publican `-2`, `99` y `2.5`.
+
+**Corrección propuesta.** La misma que DEF-17: filtrar nulos y fuera de rango
+antes de promediar.
+
+---
+
+## DEF-19 — El resumen del coordinador publica un promedio de 99
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ24 — Ver resumen del coordinador |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-19-coordinador-promedio-99.test.ts` |
+| Archivo | `src/modules/analytics/coordinador.routes.ts:140` |
+| Relacionado | DEF-17 / DEF-18 |
+
+**Descripción.** Este endpoint **sí descarta** `null`, `0` y negativos (`cal <= 0`).
+Eso es más estricto que RQ22. Un `99` pasa y se publica como `promedioEvaluaciones`
+y como `teachers[].promedio`. Ese docente además no cuenta como “en riesgo”
+(`promedio < 4`).
+
+**Resultado esperado.** Promedio ≤ 5 (o 0 si no hay calificaciones válidas).
+**Resultado obtenido.** `99`.
+
+**Corrección propuesta.** Añadir `cal > 5` al `return` que ya ignora `cal <= 0`.
+
+---
+
+## DEF-20 — El rol `Coordinador` recibe 403 en el resumen
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ24 — Ver resumen del coordinador |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-20-coordinador-rol-mayusculas.test.ts` |
+| Archivo | `src/modules/analytics/coordinador.routes.ts:49` |
+| Relacionado | DEF-05 |
+
+**Descripción.** La guarda es
+`!roles.includes('coordinador') && tipo_usuario !== 'coordinador'`.
+Si el JWT trae `roles: ['Coordinador']` y `tipo_usuario: 'profesor'` (doble rol
+con capitalización irregular), responde 403. Profesor y admin bien escritos
+sí se rechazan (esperado).
+
+**Resultado esperado.** Acceso igual que con `coordinador` en minúsculas.
+**Resultado obtenido.** `403`.
+
+**Corrección propuesta.** Normalizar roles a minúsculas, igual que DEF-05.
 
 ---
 

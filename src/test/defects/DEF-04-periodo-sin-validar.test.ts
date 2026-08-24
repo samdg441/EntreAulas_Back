@@ -4,8 +4,9 @@
  * Severidad: Media | Estado: ABIERTO
  *
  * `period` se parte por '-' y se interpola sin validar. `?period=DROP-TABLE`
- * produce el rango `DROP-07-01` … `DROP-12-31`, y `?period=2026-9` se toma
- * silenciosamente como segundo semestre en vez de rechazarse.
+ * produce el rango `DROP-07-01` … `DROP-12-31`, `?period=2026-9` se toma
+ * como segundo semestre, `?period=` o ausente busca 2020–2030 como `all`,
+ * y `?period=2026` se interpreta como 2026-2.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
@@ -47,6 +48,18 @@ describe('DEF-04 — El período debe validarse antes de usarse', () => {
 
   it('un semestre inexistente (2026-9) debe rechazarse con 400', async () => {
     const res = await request(app).get('/api/teachers/7/stats/historical?period=2026-9')
+    expect(res.status).toBe(400)
+  })
+
+  it('sin period o period vacío debe rechazarse con 400', async () => {
+    const sin = await request(app).get('/api/teachers/7/stats/historical')
+    const vacio = await request(app).get('/api/teachers/7/stats/historical?period=')
+    expect(sin.status).toBe(400)
+    expect(vacio.status).toBe(400)
+  })
+
+  it('un año sin semestre (2026) debe rechazarse con 400', async () => {
+    const res = await request(app).get('/api/teachers/7/stats/historical?period=2026')
     expect(res.status).toBe(400)
   })
 })
