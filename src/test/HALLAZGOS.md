@@ -27,6 +27,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-14 | El QR nunca caduca: no existe vencimiento | RQ18 | **Alta** | ABIERTO |
 | DEF-15 | Fechas imposibles aceptadas al generar QR | RQ18 | Media | ABIERTO |
 | DEF-16 | login-with-role sin rol responde 401 de credenciales | RQ19 | Media | ABIERTO |
+| DEF-17 | Promedio fuera de escala (null, negativo, 99) | RQ22 | **Alta** | ABIERTO |
 
 Técnica de detección: análisis de valores límite y particiones de equivalencia
 sobre los parámetros de entrada, y pruebas de consistencia entre endpoints que
@@ -396,6 +397,40 @@ email y contraseña correctos, sin `selectedRole`.
 
 **Corrección propuesta.** Validar `selectedRole` antes de consultar roles. Distinguir
 "falta el rol" (400) de "el usuario no tiene ese rol" (403) y de "credenciales malas" (401).
+
+---
+
+## DEF-17 — El promedio de métricas no se acota a la escala 1–5
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ22 — Calcular métricas de evaluación |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-17-promedio-fuera-de-escala.test.ts` |
+| Archivo | `src/modules/analytics/teachers-analytics.routes.ts:895` |
+| Relacionado | DEF-07 (null como 0 vs descartado) y DEF-12 (frontend muestra 99/5.0) |
+
+**Descripción.** El GET de métricas hace `sum + (e.calificacion_promedio || 0)` y no
+comprueba el rango. El POST de evaluaciones sí declara `z.number().min(1).max(5)`,
+así que la escala existe en el producto y este endpoint no la aplica.
+
+Verificado empíricamente:
+
+| Entrada | Promedio publicado |
+|---------|-------------------|
+| `[]` (sin evaluaciones) | `0` — correcto, no lanza |
+| `null` + `5` | `2.5` (el null cuenta como 0) |
+| `-3` | `-3` |
+| `99` | `99` |
+
+**Resultado esperado.** Promedio en `[1, 5]` (o `0` si no hay calificaciones válidas);
+un `null` no entra en el promedio.
+**Resultado obtenido.** Se publican `-3`, `99` y `2.5`.
+
+**Corrección propuesta.** Filtrar `null`/`undefined` y valores fuera de 1–5 antes de
+promediar. Si tras el filtro no queda nada, devolver `0` y no inflar `totalEvaluaciones`
+con filas inválidas.
 
 ---
 
