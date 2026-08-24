@@ -10,7 +10,14 @@ export default defineConfig({
       'src/**/*.test.ts',
       'src/**/__tests__/**/*.test.ts',
     ],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/coverage/**'],
+    // `defects/` se ejecuta aparte (npm run test:defects): son pruebas que
+    // fallan a propósito para dejar registro de defectos abiertos.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/coverage/**',
+      'src/test/defects/**',
+    ],
     setupFiles: ['src/test/setup.ts'],
     globals: false,
     coverage: {

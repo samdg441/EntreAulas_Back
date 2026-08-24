@@ -20,8 +20,14 @@ describe('RQ19 unit — Redirigir al dashboard según el rol', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  it('C1: no obtiene roles (falla) → /dashboard', async () => {
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockRejectedValue(new Error('conexion'))
+  it('C1: excepción al resolver el usuario → /dashboard', async () => {
+    // obtenerRolesUsuario captura sus propios errores y devuelve [], así que el
+    // catch de obtenerDashboardUsuario solo es alcanzable si falla la consulta
+    // de fallback a `usuarios`.
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue([])
+    fromMock.mockImplementation(() => {
+      throw new Error('conexion')
+    })
     await expect(RoleService.obtenerDashboardUsuario('u1')).resolves.toBe('/dashboard')
   })
 
