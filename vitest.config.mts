@@ -4,12 +4,25 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
-      'src/**/*.test.ts',
-      'src/**/__tests__/**/*.test.ts',
       'src/test/unit/**/*.test.ts',
       'src/test/integration/**/*.test.ts',
+      // Legacy colocalizados (se mantienen hasta migrar)
+      'src/**/*.test.ts',
+      'src/**/__tests__/**/*.test.ts',
     ],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/coverage/**'],
     setupFiles: ['src/test/setup.ts'],
     globals: false,
+    coverage: {
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      exclude: [
+        'coverage/**',
+        'dist/**',
+        'node_modules/**',
+        'src/test/**',
+        '**/*.test.ts',
+      ],
+    },
   },
 })

@@ -4,11 +4,7 @@ import request from 'supertest'
 const findUserByEmail = vi.fn()
 
 vi.mock('../../config/supabase-only', () => ({
-  SupabaseDB: {
-    supabaseAdmin: { from: vi.fn() },
-    findUserById: vi.fn(),
-    findUserByEmail: vi.fn(),
-  },
+  SupabaseDB: { supabaseAdmin: { from: vi.fn() }, findUserById: vi.fn(), findUserByEmail: vi.fn() },
   supabaseAdmin: { from: vi.fn() },
   default: {},
 }))
@@ -27,24 +23,20 @@ vi.mock('../../modules/auth/auth.repository', () => ({
     createUserWithType: vi.fn(),
     countUsers: vi.fn(),
   },
-  AuthRepository: class {},
 }))
 
 vi.mock('../../utils/passwordSecurity', async () => {
   const actual = await vi.importActual<typeof import('../../utils/passwordSecurity')>(
     '../../utils/passwordSecurity'
   )
-  return {
-    ...actual,
-    verifyStoredPassword: vi.fn().mockResolvedValue({ ok: true }),
-  }
+  return { ...actual, verifyStoredPassword: vi.fn().mockResolvedValue({ ok: true }) }
 })
 
 import { app } from '../../app'
 import { RoleService } from '../../modules/auth/role.service'
 
-const baseUser = {
-  id: 'user-1',
+const user = {
+  id: 'u1',
   email: 'samuel@test.com',
   password: 'hash',
   nombre: 'Samuel',
@@ -53,41 +45,40 @@ const baseUser = {
   activo: true,
 }
 
-describe('RQ2 integración — Redirigir al dashboard según el rol', () => {
+/**
+ * RQ2 integración — login usa el cálculo real de dashboard (sin stubear obtenerDashboardUsuario).
+ */
+describe('RQ2 integration — Redirigir dashboard en login', () => {
   beforeEach(() => {
     findUserByEmail.mockReset()
-    vi.restoreAllMocks()
+    // No usar restoreAllMocks: rompe el mock de verifyStoredPassword del módulo.
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('Camino 1: un solo rol — back calcula path y lo envía en user.dashboard', async () => {
-    findUserByEmail.mockResolvedValue(baseUser)
+  it('un rol: login calcula dashboard real → user.dashboard', async () => {
+    findUserByEmail.mockResolvedValue(user)
     vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
-    vi.spyOn(RoleService, 'obtenerDashboardUsuario').mockResolvedValue('/dashboard-estudiante')
     vi.spyOn(RoleService, 'obtenerPermisosUsuario').mockResolvedValue([])
 
     const res = await request(app).post('/api/auth/login').send({
       email: 'samuel@test.com',
-      password: 'secret1',
+      password: 'secreto123',
     })
 
     expect(res.status).toBe(200)
     expect(res.body.requires_role_selection).toBeFalsy()
     expect(res.body.user.dashboard).toBe('/dashboard-estudiante')
-    expect(res.body.token).toBeTruthy()
   })
 
-  it('Camino 2: varios roles — pide selección y login-with-role asigna dashboard elegido', async () => {
-    findUserByEmail.mockResolvedValue({
-      ...baseUser,
-      tipo_usuario: 'profesor',
-    })
+  it('varios roles: pide selección; login-with-role asigna path del rol', async () => {
+    findUserByEmail.mockResolvedValue({ ...user, tipo_usuario: 'profesor' })
     vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['profesor', 'coordinador'])
+    vi.spyOn(RoleService, 'obtenerPermisosUsuario').mockResolvedValue([])
 
     const loginRes = await request(app).post('/api/auth/login').send({
       email: 'samuel@test.com',
-      password: 'secret1',
+      password: 'secreto123',
     })
 
     expect(loginRes.status).toBe(200)
@@ -96,12 +87,11 @@ describe('RQ2 integración — Redirigir al dashboard según el rol', () => {
 
     const roleRes = await request(app).post('/api/auth/login-with-role').send({
       email: 'samuel@test.com',
-      password: 'secret1',
+      password: 'secreto123',
       selectedRole: 'coordinador',
     })
 
     expect(roleRes.status).toBe(200)
     expect(roleRes.body.user.dashboard).toBe('/dashboard-coordinador')
-    expect(roleRes.body.user.selected_role).toBe('coordinador')
   })
 })

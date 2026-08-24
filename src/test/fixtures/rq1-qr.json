@@ -1,0 +1,16 @@
+{
+  "tokenValido": {
+    "profesor_id": 10,
+    "curso_id": 20,
+    "grupo_id": 30,
+    "periodo_id": 1,
+    "profesor": { "usuario": { "nombre": "Ana", "apellido": "Pérez" } },
+    "curso": { "nombre": "Cálculo", "codigo": "MAT101" },
+    "grupo": { "numero_grupo": 1, "horario": "7-9", "aula": "A1" }
+  },
+  "errores": {
+    "tokenRequerido": { "error": "Token requerido." },
+    "qrInvalidoOExpirado": { "error": "QR inválido o expirado." },
+    "errorResolver": { "error": "Error al resolver el token." }
+  }
+}
