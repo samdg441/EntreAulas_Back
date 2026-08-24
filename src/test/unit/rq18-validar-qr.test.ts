@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { queueFrom } from '../helpers/query-builder'
 import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
-import qrFixture from '../fixtures/rq1-qr.json'
+import qrFixture from '../fixtures/rq18-qr.json'
 
 vi.mock('../../config/supabase-only', () => supabaseModuleMock)
 vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
@@ -22,10 +22,10 @@ function getTokenHandler() {
 }
 
 /**
- * RQ1 Backend — Validar QR (grafo)
+ * RQ18 Backend — Validar QR (grafo)
  * C1 !token→400 | C2 error BD→500 | C3 !row→404 | C4 OK→200
  */
-describe('RQ1 unit — Validar QR vencido o inválido', () => {
+describe('RQ18 unit — Validar QR vencido o inválido', () => {
   beforeEach(() => {
     fromMock.mockReset()
     vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -18,10 +18,10 @@ vi.mock('../../middleware/auth', () => ({
 import { app } from '../../app'
 
 /**
- * RQ3 Backend — Calcular métricas
+ * RQ22 Backend — Calcular métricas
  * C1 no profesor→403 | C2 no existe→404 | C3 error evals→500 | C4 OK
  */
-describe('RQ3 unit — Calcular métricas de evaluación', () => {
+describe('RQ22 unit — Calcular métricas de evaluación', () => {
   beforeEach(() => {
     fromMock.mockReset()
     vi.spyOn(console, 'error').mockImplementation(() => {})

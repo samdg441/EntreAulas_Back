@@ -19,11 +19,11 @@ import { app } from '../../app'
 import { RoleService } from '../../modules/auth/role.service'
 
 /**
- * RQ5 Backend — Resumen coordinador
+ * RQ24 Backend — Resumen coordinador
  * C1 403 | C2 400 | C3 cursos 500 | C4 profes 500 | C5 vacío
  * C6a users 500 | C6b evals 500 | C7 OK
  */
-describe('RQ5 unit — Ver resumen del coordinador', () => {
+describe('RQ24 unit — Ver resumen del coordinador', () => {
   beforeEach(() => {
     fromMock.mockReset()
     vi.restoreAllMocks()

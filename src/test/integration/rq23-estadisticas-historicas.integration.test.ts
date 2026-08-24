@@ -1,3 +1,7 @@
+/**
+ * Integración RQ23: el grafo completo de caminos vive en `src/test/unit/rq23-*.test.ts`.
+ * Aquí solo se deja un smoke HTTP del camino feliz (contrato 200), sin datos de más.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { queueFrom } from '../helpers/query-builder'
@@ -17,49 +21,14 @@ vi.mock('../../middleware/auth', () => ({
 
 import { app } from '../../app'
 
-/**
- * RQ4 Backend — Stats históricas
- * C1 no profesor → mock 200 | C2 error evals → 500 | C3 OK
- */
-describe('RQ4 unit — Consultar estadísticas históricas', () => {
+describe('RQ23 integration — smoke histórico OK', () => {
   beforeEach(() => {
     fromMock.mockReset()
     ;(globalThis as { __testUser?: unknown }).__testUser = { ...profesorUser }
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
 
-  it('C1: profesor no existe → 200 mock', async () => {
-    // El handler consulta profesores dos veces (debug + real)
-    fromMock.mockImplementation(
-      queueFrom({
-        profesores: [
-          { data: null, error: { message: 'nf' } },
-          { data: null, error: { message: 'nf' } },
-        ],
-      })
-    )
-    const res = await request(app).get('/api/teachers/999/stats/historical?period=2026-1')
-    expect(res.status).toBe(200)
-    expect(res.body.isMockData).toBe(true)
-    expect(res.body.totalEvaluaciones).toBe(0)
-  })
-
-  it('C2: error consultando evaluaciones → 500', async () => {
-    fromMock.mockImplementation(
-      queueFrom({
-        profesores: [
-          { data: { id: 7 }, error: null },
-          { data: { id: 7 }, error: null },
-        ],
-        evaluaciones: [{ data: null, error: { message: 'db' } }],
-      })
-    )
-    const res = await request(app).get('/api/teachers/7/stats/historical?period=2026-1')
-    expect(res.status).toBe(500)
-  })
-
-  it('C3: OK → promedio del período', async () => {
+  it('C3 HTTP: 200 con stats del período', async () => {
     fromMock.mockImplementation(
       queueFrom({
         profesores: [
@@ -76,13 +45,6 @@ describe('RQ4 unit — Consultar estadísticas históricas', () => {
                 grupo_id: 10,
                 estudiante_id: 1,
               },
-              {
-                id: 2,
-                calificacion_promedio: 5,
-                fecha_creacion: '2026-03-02',
-                grupo_id: 10,
-                estudiante_id: 2,
-              },
             ],
             error: null,
           },
@@ -93,8 +55,7 @@ describe('RQ4 unit — Consultar estadísticas históricas', () => {
     )
     const res = await request(app).get('/api/teachers/7/stats/historical?period=2026-1')
     expect(res.status).toBe(200)
-    expect(res.body.period).toBe('2026-1')
-    expect(res.body.calificacionPromedio).toBe(4.5)
-    expect(res.body.totalEvaluaciones).toBe(2)
+    expect(res.body.totalEvaluaciones).toBe(1)
+    expect(res.body.calificacionPromedio).toBe(4)
   })
 })

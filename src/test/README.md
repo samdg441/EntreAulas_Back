@@ -1,6 +1,6 @@
 # Pruebas Backend (ISTQB / V&V)
 
-Estructura alineada a niveles de prueba y a la matriz RQ1–RQ5 (Grafos / caminos).
+Estructura alineada a niveles de prueba y a la matriz de requisitos (Grafos / caminos).
 
 ## Para qué es cada carpeta
 
@@ -38,11 +38,11 @@ No se añaden datos “de relleno” solo para poner verde. Si un camino falla, 
 
 | Requisito | Unit | Integration |
 |-----------|------|-------------|
-| RQ1 Validar QR | `unit/rq1-validar-qr.test.ts` | `integration/rq1-validar-qr.integration.test.ts` |
-| RQ2 Dashboard por rol | `unit/rq2-redirigir-dashboard.test.ts` | `integration/rq2-redirigir-dashboard.integration.test.ts` |
-| RQ3 Métricas evaluación | `unit/rq3-metricas-evaluacion.test.ts` | `integration/rq3-metricas-evaluacion.integration.test.ts` |
-| RQ4 Stats históricas | `unit/rq4-estadisticas-historicas.test.ts` | `integration/rq4-estadisticas-historicas.integration.test.ts` |
-| RQ5 Resumen coordinador | `unit/rq5-resumen-coordinador.test.ts` | `integration/rq5-resumen-coordinador.integration.test.ts` |
+| RQ18 Validar QR | `unit/rq18-validar-qr.test.ts` | `integration/rq18-validar-qr.integration.test.ts` |
+| RQ19 Dashboard por rol | `unit/rq19-redirigir-dashboard.test.ts` | `integration/rq19-redirigir-dashboard.integration.test.ts` |
+| RQ22 Métricas evaluación | `unit/rq22-metricas-evaluacion.test.ts` | `integration/rq22-metricas-evaluacion.integration.test.ts` |
+| RQ23 Stats históricas | `unit/rq23-estadisticas-historicas.test.ts` | `integration/rq23-estadisticas-historicas.integration.test.ts` |
+| RQ24 Resumen coordinador | `unit/rq24-resumen-coordinador.test.ts` | `integration/rq24-resumen-coordinador.integration.test.ts` |
 
 Framework: **Vitest** + **Supertest**.  
 Cobertura: `coverage/` (excluida de Git).
@@ -68,5 +68,5 @@ npm run test:watch
 npm run test:coverage
 
 # Un archivo concreto
-npx vitest run src/test/unit/rq1-validar-qr.test.ts
+npx vitest run src/test/unit/rq18-validar-qr.test.ts
 ```

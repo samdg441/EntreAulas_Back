@@ -1,4 +1,4 @@
-/** Fixtures de usuarios para trazabilidad RQ2–RQ5 (ISTQB: datos de prueba estáticos). */
+/** Fixtures de usuarios para trazabilidad RQ19–RQ24 (ISTQB: datos de prueba estáticos). */
 
 export const profesorUser = {
   id: 'user-profesor',

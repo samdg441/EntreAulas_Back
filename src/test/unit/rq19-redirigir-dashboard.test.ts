@@ -8,12 +8,12 @@ vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
 import { RoleService } from '../../modules/auth/role.service'
 
 /**
- * RQ2 Backend — grafo obtenerDashboardUsuario (nodos 1–18)
+ * RQ19 Backend — grafo obtenerDashboardUsuario (nodos 1–18)
  * C1 no obtiene rol → /dashboard
  * C2 admin | C3 decano | C4 coord | C5 profesor | C6 estudiante
  * C7 tipo_usuario | C8 default
  */
-describe('RQ2 unit — Redirigir al dashboard según el rol', () => {
+describe('RQ19 unit — Redirigir al dashboard según el rol', () => {
   beforeEach(() => {
     fromMock.mockReset()
     vi.restoreAllMocks()

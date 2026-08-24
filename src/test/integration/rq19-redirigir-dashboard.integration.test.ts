@@ -46,9 +46,9 @@ const user = {
 }
 
 /**
- * RQ2 integración — login usa el cálculo real de dashboard (sin stubear obtenerDashboardUsuario).
+ * RQ19 integración — login usa el cálculo real de dashboard (sin stubear obtenerDashboardUsuario).
  */
-describe('RQ2 integration — Redirigir dashboard en login', () => {
+describe('RQ19 integration — Redirigir dashboard en login', () => {
   beforeEach(() => {
     findUserByEmail.mockReset()
     // No usar restoreAllMocks: rompe el mock de verifyStoredPassword del módulo.

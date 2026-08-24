@@ -2,15 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { queueFrom } from '../helpers/query-builder'
 import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
-import qrFixture from '../fixtures/rq1-qr.json'
+import qrFixture from '../fixtures/rq18-qr.json'
 
 vi.mock('../../config/supabase-only', () => supabaseModuleMock)
 vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
 
 import { app } from '../../app'
 
-/** RQ1 integración: contrato HTTP de los caminos C2–C4 (C1 = unit, params vacíos). */
-describe('RQ1 integration — Validar QR', () => {
+/** RQ18 integración: contrato HTTP de los caminos C2–C4 (C1 = unit, params vacíos). */
+describe('RQ18 integration — Validar QR', () => {
   beforeEach(() => {
     fromMock.mockReset()
     vi.spyOn(console, 'error').mockImplementation(() => {})
