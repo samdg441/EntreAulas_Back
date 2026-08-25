@@ -14,6 +14,7 @@ export function createQueryBuilder(result: QueryResult = { data: null, error: nu
   builder.lte = vi.fn(passthrough)
   builder.order = vi.fn(passthrough)
   builder.is = vi.fn(passthrough)
+  builder.not = vi.fn(passthrough)
   builder.insert = vi.fn(passthrough)
   builder.update = vi.fn(passthrough)
   builder.upsert = vi.fn(passthrough)
