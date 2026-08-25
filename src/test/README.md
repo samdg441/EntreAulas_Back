@@ -38,6 +38,8 @@ No se añaden datos “de relleno” solo para poner verde. Si un camino falla, 
 
 | Requisito | Unit | Integration |
 |-----------|------|-------------|
+| RQ1 Crear usuario (admin) | `unit/rq1-crear-usuario-admin.test.ts` | — |
+| RQ2 Login | `unit/rq2-login.test.ts` | — |
 | RQ18 Validar QR | `unit/rq18-validar-qr.test.ts` | `integration/rq18-validar-qr.integration.test.ts` |
 | RQ19 Dashboard por rol | `unit/rq19-redirigir-dashboard.test.ts` | `integration/rq19-redirigir-dashboard.integration.test.ts` |
 | RQ22 Métricas evaluación | `unit/rq22-metricas-evaluacion.test.ts` | `integration/rq22-metricas-evaluacion.integration.test.ts` |
