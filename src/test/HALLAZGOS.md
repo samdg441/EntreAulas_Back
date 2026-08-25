@@ -1,6 +1,6 @@
 # Registro de defectos (V&V)
 
-Defectos detectados durante la validación de los requisitos RQ18–RQ24.
+Defectos detectados durante la validación de los requisitos RQ6, RQ14–RQ17 y RQ18–RQ24.
 Cada uno tiene una prueba ejecutable que **falla mientras el defecto siga abierto**.
 
 ```bash
@@ -31,12 +31,19 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | ABIERTO |
 | DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | ABIERTO |
 | DEF-20 | Rol `Coordinador` recibe 403 en el resumen | RQ24 | Media | ABIERTO |
+| DEF-22 | Rol `Admin` recibe 403 en POST `/batch` | RQ6 | Media | ABIERTO |
+| DEF-23 | `Estudiante` no puede auto-inscribirse | RQ14 | Media | ABIERTO |
+| DEF-24 | Grupo inexistente se omite en silencio | RQ15 | Media | ABIERTO |
+| DEF-25 | HTML del correo QR no escapa el mensaje | RQ16 | Media | ABIERTO |
+| DEF-26 | GET `/qr-evaluaciones/` vacío responde 404 | RQ17 | Baja | ABIERTO |
+
+Camino fallido por requisito asignado: RQ6 → DEF-22 · RQ14 → DEF-23 · RQ15 → DEF-24 · RQ16 → DEF-25 · RQ17 → DEF-26.
 
 Técnica de detección: análisis de valores límite y particiones de equivalencia
 sobre los parámetros de entrada, y pruebas de consistencia entre endpoints que
 calculan la misma métrica.
 
-Los defectos de la capa de presentación (DEF-09 a DEF-12) están en
+Los defectos de la capa de presentación (DEF-09 a DEF-12, DEF-16 a DEF-19, DEF-21, DEF-27 a DEF-30) están en
 `EntreAulas_Front/src/test/HALLAZGOS.md`.
 
 ---
@@ -511,6 +518,137 @@ sí se rechazan (esperado).
 **Resultado obtenido.** `403`.
 
 **Corrección propuesta.** Normalizar roles a minúsculas, igual que DEF-05.
+
+---
+
+## DEF-22 — El rol `Admin` recibe 403 en POST `/batch`
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ6 — Control de acceso por roles |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-22-rbac-mayusculas.test.ts` |
+| Archivo | `src/middleware/auth.ts` (`requireRole`) |
+| Relacionado | DEF-05, DEF-20 |
+
+**Descripción.** `requireRole(['coordinador', 'admin'])` compara con
+`roles.includes(rol)` y `roles.includes(tipo_usuario)` sin normalizar. Un JWT
+con `tipo_usuario: 'Admin'` y `roles: ['Admin']` es un administrador válido
+según el dominio, pero el middleware responde `403 FORBIDDEN_ROLE` en
+`POST /api/qr-evaluaciones/batch`.
+
+**Resultado esperado.** El usuario con rol Admin (cualquier capitalización)
+pasa la guarda y el handler se ejecuta.
+**Resultado obtenido.** `403` con `code: 'FORBIDDEN_ROLE'`.
+
+**Causa raíz.** Comparación de strings exacta. El mismo patrón aparece en DEF-05
+(dashboard) y DEF-20 (resumen coordinador).
+
+**Corrección propuesta.** Normalizar `tipo_usuario` y cada entrada de `roles` a
+minúsculas antes de `includes`.
+
+---
+
+## DEF-23 — `Estudiante` no puede auto-inscribirse
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ14 — Auto-inscripción por QR |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-23-auto-enroll-mayusculas.test.ts` |
+| Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts` (`POST /:token/auto-enroll`) |
+
+**Descripción.** El handler rechaza a quien no cumple
+`user.tipo_usuario !== 'estudiante'`. Si el JWT trae `tipo_usuario: 'Estudiante'`
+(y `roles: ['estudiante']`), responde 403 aunque el usuario sea estudiante.
+
+**Resultado esperado.** `201` con `created: true` (mismo camino que `estudiante`).
+**Resultado obtenido.** `403` «Solo los estudiantes pueden matricularse por QR.»
+
+**Causa raíz.** Comparación case-sensitive de `tipo_usuario`. No se consulta
+`roles` en este endpoint.
+
+**Corrección propuesta.** Comparar `tipo_usuario.toLowerCase() === 'estudiante'`
+(o reutilizar `requireRole` normalizado).
+
+---
+
+## DEF-24 — Un grupo inexistente se omite en silencio
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ15 — Generación masiva de QR |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-24-grupo-inexistente-silencioso.test.ts` |
+| Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts` (`POST /batch`, `if (!grupo) continue`) |
+
+**Descripción.** En el bucle de `grupoIds`, si el id no aparece en `grupos` el
+código hace `continue` sin empujar a `skipped` ni devolver 400. El cliente
+recibe `201 { created: [], skipped: [] }` y no puede distinguir «no existía»
+de «todo salió bien pero no había nada que crear».
+
+**Resultado esperado.** El id 999 va en `skipped` (p. ej. `reason: 'Grupo no encontrado'`)
+o la petición responde `400`.
+**Resultado obtenido.** `201` con `skipped: []`.
+
+**Causa raíz.** `if (!grupo) continue` no registra el fallo. Los otros `continue`
+del mismo bucle sí hacen `skipped.push`.
+
+**Corrección propuesta.** Antes del `continue`, `skipped.push({ grupoId, reason: 'Grupo no encontrado.' })`.
+
+---
+
+## DEF-25 — El HTML del correo QR no escapa el mensaje
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ16 — Distribución de QR por correo |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-25-correo-html-sin-escapar.test.ts` |
+| Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts` (`htmlBody`) |
+
+**Descripción.** `share-email` interpola `message` (y nombres de curso/docente)
+dentro de `htmlBody` sin escapar entidades HTML. Un texto
+`<img src=x onerror=alert(1)>` llega al destinatario como HTML activo.
+
+**Resultado esperado.** El HTML del correo no contiene el tag crudo; el mensaje
+se ve como texto (`&lt;img ...`).
+**Resultado obtenido.** `sendMail` recibe el `<img onerror>` literal en `html`.
+
+**Causa raíz.** Template string con `${message}` sobre contenido de usuario.
+
+**Corrección propuesta.** Escapar `message`, nombres y códigos antes de armar
+el HTML (o mandar solo `text` y un HTML generado con una librería que escape).
+
+---
+
+## DEF-26 — GET `/qr-evaluaciones/` vacío responde 404
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ17 — Resolución de token QR |
+| Severidad | Baja |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-26-token-vacio-404.test.ts` |
+| Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts` (`GET /:token`) |
+
+**Descripción.** El grafo de RQ17 (C1) pide `400 Token requerido` cuando no hay
+token. El handler sí lo hace si `params.token` es vacío, pero Express no monta
+`GET /api/qr-evaluaciones/` sobre `/:token`: la petición cae en el 404 genérico.
+
+**Resultado esperado.** `400` con `{ error: 'Token requerido.' }`.
+**Resultado obtenido.** `404` de Express (ruta no encontrada).
+
+**Causa raíz.** La guarda `if (!token)` nunca se ejecuta en la URL con barra
+final vacía; ese path no entra al router `/:token`.
+
+**Corrección propuesta.** Registrar explícitamente `GET /` (o `GET ''`) en el
+router de QR y devolver 400, o documentar que el contrato solo aplica a
+`params.token` vacío en el handler (no a la URL sin segmento).
 
 ---
 

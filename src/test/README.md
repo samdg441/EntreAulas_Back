@@ -43,15 +43,20 @@ No se añaden datos “de relleno” solo para poner verde. Si un camino falla, 
 
 ## Matriz requisito → archivo
 
-| Requisito | Unit | Integration |
-|-----------|------|-------------|
-| RQ1 Crear usuario (admin) | `unit/rq1-crear-usuario-admin.test.ts` | — |
-| RQ2 Login | `unit/rq2-login.test.ts` | — |
-| RQ18 Validar QR | `unit/rq18-validar-qr.test.ts` | `integration/rq18-validar-qr.integration.test.ts` |
-| RQ19 Dashboard por rol | `unit/rq19-redirigir-dashboard.test.ts` | `integration/rq19-redirigir-dashboard.integration.test.ts` |
-| RQ22 Métricas evaluación | `unit/rq22-metricas-evaluacion.test.ts` | `integration/rq22-metricas-evaluacion.integration.test.ts` |
-| RQ23 Stats históricas | `unit/rq23-estadisticas-historicas.test.ts` | `integration/rq23-estadisticas-historicas.integration.test.ts` |
-| RQ24 Resumen coordinador | `unit/rq24-resumen-coordinador.test.ts` | `integration/rq24-resumen-coordinador.integration.test.ts` |
+| Requisito | Unit | Integration | Defecto (rojo) |
+|-----------|------|-------------|----------------|
+| RQ1 Crear usuario (admin) | `unit/rq1-crear-usuario-admin.test.ts` | — | — |
+| RQ2 Login | `unit/rq2-login.test.ts` | — | — |
+| RQ6 RBAC | `unit/rq6-rbac.test.ts` | `integration/rq6-rbac.integration.test.ts` | `defects/DEF-22-rbac-mayusculas.test.ts` |
+| RQ14 Auto-inscripción QR | `unit/rq14-auto-inscripcion.test.ts` | `integration/rq14-auto-inscripcion.integration.test.ts` | `defects/DEF-23-auto-enroll-mayusculas.test.ts` |
+| RQ15 Generación masiva QR | `unit/rq15-generar-qr.test.ts` | `integration/rq15-generar-qr.integration.test.ts` | `defects/DEF-24-grupo-inexistente-silencioso.test.ts` |
+| RQ16 Correo QR | `unit/rq16-correo-qr.test.ts` | `integration/rq16-correo-qr.integration.test.ts` | `defects/DEF-25-correo-html-sin-escapar.test.ts` |
+| RQ17 Resolución token QR | `unit/rq17-resolucion-token.test.ts` | `integration/rq17-resolucion-token.integration.test.ts` | `defects/DEF-26-token-vacio-404.test.ts` |
+| RQ18 Validar QR | `unit/rq18-validar-qr.test.ts` | `integration/rq18-validar-qr.integration.test.ts` | — |
+| RQ19 Dashboard por rol | `unit/rq19-redirigir-dashboard.test.ts` | `integration/rq19-redirigir-dashboard.integration.test.ts` | — |
+| RQ22 Métricas evaluación | `unit/rq22-metricas-evaluacion.test.ts` | `integration/rq22-metricas-evaluacion.integration.test.ts` | — |
+| RQ23 Stats históricas | `unit/rq23-estadisticas-historicas.test.ts` | `integration/rq23-estadisticas-historicas.integration.test.ts` | — |
+| RQ24 Resumen coordinador | `unit/rq24-resumen-coordinador.test.ts` | `integration/rq24-resumen-coordinador.integration.test.ts` | — |
 
 Framework: **Vitest** + **Supertest**.  
 Cobertura: `coverage/` (excluida de Git).
