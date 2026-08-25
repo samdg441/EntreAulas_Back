@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { queueFrom } from '../helpers/query-builder'
 import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
-import { profesorUser, estudianteUser } from '../fixtures/users'
+import { profesorUser, estudianteUser, coordinadorUser, adminUser } from '../fixtures/users'
 
 vi.mock('../../config/supabase-only', () => supabaseModuleMock)
 vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
@@ -19,7 +19,8 @@ import { app } from '../../app'
 
 /**
  * RQ22 Backend — Calcular métricas
- * C1 no profesor→403 | C2 no existe→404 | C3 error evals→500 | C4 OK
+ * C1 no profesor→403 | C1b coord/admin→403 | C2 no existe→404
+ * C3 error evals→500 | C4 OK | C5 sin evaluaciones→0
  */
 describe('RQ22 unit — Calcular métricas de evaluación', () => {
   beforeEach(() => {
@@ -80,5 +81,32 @@ describe('RQ22 unit — Calcular métricas de evaluación', () => {
     expect(res.status).toBe(200)
     expect(res.body.calificacionPromedio).toBe(4.5)
     expect(res.body.totalEvaluaciones).toBe(2)
+  })
+
+  it('C5: sin evaluaciones → 200 y promedio 0 (no lanza)', async () => {
+    ;(globalThis as { __testUser?: unknown }).__testUser = { ...profesorUser }
+    fromMock.mockImplementation(
+      queueFrom({
+        profesores: [{ data: { id: 7 }, error: null }],
+        evaluaciones: [{ data: [], error: null }],
+        grupos: [{ data: [], error: null }],
+        asignaciones_profesor: [{ data: [], error: null }],
+        cursos: [{ data: [], error: null }],
+      })
+    )
+    const res = await request(app).get('/api/teachers/teacher-stats/7')
+    expect(res.status).toBe(200)
+    expect(res.body.calificacionPromedio).toBe(0)
+    expect(res.body.totalEvaluaciones).toBe(0)
+  })
+
+  it('C1b: coordinador y admin → 403', async () => {
+    for (const user of [coordinadorUser, adminUser]) {
+      fromMock.mockReset()
+      ;(globalThis as { __testUser?: unknown }).__testUser = { ...user }
+      const res = await request(app).get('/api/teachers/teacher-stats/7')
+      expect(res.status).toBe(403)
+      expect(fromMock).not.toHaveBeenCalled()
+    }
   })
 })

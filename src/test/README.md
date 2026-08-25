@@ -13,6 +13,12 @@ src/test/
 │                     dependencias externas mockeadas (Supabase). No es E2E real de BD.
 │                     Objetivo: validar el contrato API del requisito (status, body, flujo).
 │
+├── defects/        → Qué va: una prueba por defecto encontrado, escrita contra el
+│                     comportamiento CORRECTO esperado. Falla mientras el defecto
+│                     siga abierto; pasa a verde cuando se corrige el código.
+│                     Se ejecuta aparte y no afecta a la suite de requisitos.
+│                     Ver HALLAZGOS.md.
+│
 ├── fixtures/       → Qué va: datos estáticos reutilizables (JSON, usuarios de prueba).
 │                     No va: lógica de assert ni mocks de módulos.
 │
@@ -31,6 +37,7 @@ Si más adelante hay pruebas contra BD real, convienen en `integration/` con un 
 |-------|------------|----------------------|
 | **unit/** | Grafo completo del requisito (C1…Cn) | Completa |
 | **integration/** | Contrato HTTP / login sin stubear el SUT; smoke del camino feliz | Complementaria |
+| **defects/** | Defectos abiertos detectados durante la validación | Rojo esperado |
 
 No se añaden datos “de relleno” solo para poner verde. Si un camino falla, se investiga el código o el mock mínimo necesario para ejercitar ese camino.
 
@@ -68,6 +75,9 @@ npm run test:watch
 
 # Cobertura (genera ./coverage; no se versiona)
 npm run test:coverage
+
+# Registro de defectos abiertos (SE ESPERA QUE FALLE; ver HALLAZGOS.md)
+npm run test:defects
 
 # Un archivo concreto
 npx vitest run src/test/unit/rq18-validar-qr.test.ts
