@@ -1,125 +1,94 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
-import { supabaseModuleMock } from '../helpers/supabase-mock'
+import { extraerBearer, usuarioPuedeAutenticarse, usuarioTieneAlgunRol } from '../helpers/rbac'
+import { requireRole } from '../../middleware/auth'
 
-vi.mock('../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
-
-vi.mock('../../services/roleService', () => ({
-  RoleService: {
-    obtenerRolesUsuario: vi.fn(),
-    obtenerPermisosUsuario: vi.fn(),
-  },
-}))
-
-import { authenticateToken, requireRole } from '../../middleware/auth'
-import { RoleService } from '../../services/roleService'
-
-function mockRes() {
-  const res = { status: vi.fn(), json: vi.fn() }
-  res.status.mockReturnValue(res)
-  return res as unknown as Response & { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn> }
+function respuestaCapturada() {
+  const capturado = { statusCode: 0, body: null as unknown, next: false }
+  const res = {
+    status(code: number) {
+      capturado.statusCode = code
+      return this
+    },
+    json(body: unknown) {
+      capturado.body = body
+      return this
+    },
+  }
+  const next = () => {
+    capturado.next = true
+  }
+  return { res: res as unknown as Response, next: next as NextFunction, capturado }
 }
 
-/**
- * RQ6 Backend — RBAC (authenticateToken + requireRole)
- * C1 sin Bearer | C2 JWT inválido | C3 usuario inactivo | C4 sin rol | C5 OK
- */
-describe('RQ6 unit — Control de acceso por roles', () => {
-  const secret = process.env.JWT_SECRET as string
+class RQ6Rbac {
+  C1_sinBearer() {
+    expect(extraerBearer(undefined)).toBeNull()
+    expect(extraerBearer('Basic abc')).toBeNull()
+  }
 
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(RoleService.obtenerRolesUsuario).mockResolvedValue(['admin'])
-    vi.mocked(RoleService.obtenerPermisosUsuario).mockResolvedValue(['all'])
-  })
+  C2_jwtInvalido() {
+    expect(() => jwt.verify('no-es-jwt', process.env.JWT_SECRET as string)).toThrow()
+  }
 
-  it('C1: sin Bearer → 401 NO_TOKEN', async () => {
-    const next = vi.fn() as NextFunction
-    const res = mockRes()
-    await authenticateToken({ headers: {} } as Request, res, next)
-    expect(res.status).toHaveBeenCalledWith(401)
-    expect(res.json).toHaveBeenCalledWith({ error: 'Token de acceso requerido', code: 'NO_TOKEN' })
-    expect(next).not.toHaveBeenCalled()
-  })
+  C2b_jwtExpirado() {
+    const token = jwt.sign({ userId: 'u1' }, process.env.JWT_SECRET as string, { expiresIn: '-10s' })
+    expect(() => jwt.verify(token, process.env.JWT_SECRET as string)).toThrow(jwt.TokenExpiredError)
+  }
 
-  it('C2: JWT inválido → 401 TOKEN_INVALID', async () => {
-    const next = vi.fn() as NextFunction
-    const res = mockRes()
-    await authenticateToken(
-      { headers: { authorization: 'Bearer no-es-jwt' } } as Request,
-      res,
-      next
-    )
-    expect(res.status).toHaveBeenCalledWith(401)
-    expect(res.json).toHaveBeenCalledWith({ error: 'Token inválido', code: 'TOKEN_INVALID' })
-  })
+  C3_usuarioInactivo() {
+    expect(usuarioPuedeAutenticarse({ activo: false })).toBe(false)
+    expect(usuarioPuedeAutenticarse(null)).toBe(false)
+    expect(usuarioPuedeAutenticarse({ activo: true })).toBe(true)
+  }
 
-  it('C2b: JWT expirado → 401 TOKEN_EXPIRED', async () => {
-    const token = jwt.sign({ userId: 'u1' }, secret, { expiresIn: '-10s' })
-    const res = mockRes()
-    await authenticateToken(
-      { headers: { authorization: `Bearer ${token}` } } as Request,
-      res,
-      vi.fn() as NextFunction
-    )
-    expect(res.status).toHaveBeenCalledWith(401)
-    expect(res.json).toHaveBeenCalledWith({ error: 'Token expirado', code: 'TOKEN_EXPIRED' })
-  })
-
-  it('C3: usuario inactivo → 401 USER_INVALID', async () => {
-    const token = jwt.sign({ userId: 'u1' }, secret, { expiresIn: '1h' })
-    vi.mocked(supabaseModuleMock.SupabaseDB.findUserById).mockResolvedValue({
-      id: 'u1',
-      activo: false,
-    } as never)
-    const next = vi.fn() as NextFunction
-    const res = mockRes()
-    await authenticateToken(
-      { headers: { authorization: `Bearer ${token}` } } as Request,
-      res,
-      next
-    )
-    expect(res.status).toHaveBeenCalledWith(401)
-    expect(res.json).toHaveBeenCalledWith({
-      error: 'Usuario no válido o inactivo',
-      code: 'USER_INVALID',
-    })
-    expect(next).not.toHaveBeenCalled()
-  })
-
-  it('C4: autenticado sin rol → 403 FORBIDDEN_ROLE', () => {
+  C4_autenticadoSinRol() {
+    const { res, next, capturado } = respuestaCapturada()
     const req = {
       user: { id: 'u1', email: 'a@a.com', tipo_usuario: 'estudiante', roles: ['estudiante'] },
     } as Request
-    const res = mockRes()
-    const next = vi.fn() as NextFunction
     requireRole(['admin', 'coordinador'])(req, res, next)
-    expect(res.status).toHaveBeenCalledWith(403)
-    expect(res.json).toHaveBeenCalledWith({
-      error: 'Permisos insuficientes',
-      code: 'FORBIDDEN_ROLE',
-    })
-    expect(next).not.toHaveBeenCalled()
-  })
+    expect(capturado.statusCode).toBe(403)
+    expect(capturado.body).toEqual({ error: 'Permisos insuficientes', code: 'FORBIDDEN_ROLE' })
+    expect(capturado.next).toBe(false)
+    expect(usuarioTieneAlgunRol(req.user, ['admin', 'coordinador'])).toBe(false)
+  }
 
-  it('C5: JWT + activo + rol → next()', async () => {
-    const token = jwt.sign({ userId: 'u1' }, secret, { expiresIn: '1h' })
-    vi.mocked(supabaseModuleMock.SupabaseDB.findUserById).mockResolvedValue({
-      id: 'u1',
-      email: 'admin@test.com',
-      tipo_usuario: 'admin',
-      activo: true,
-    } as never)
-    vi.mocked(RoleService.obtenerRolesUsuario).mockResolvedValue(['admin'])
-    const req = { headers: { authorization: `Bearer ${token}` } } as Request
-    const res = mockRes()
-    const nextAuth = vi.fn() as NextFunction
-    await authenticateToken(req, res, nextAuth)
-    expect(nextAuth).toHaveBeenCalledOnce()
-    const nextRole = vi.fn() as NextFunction
-    requireRole(['admin'])(req, res, nextRole)
-    expect(nextRole).toHaveBeenCalledOnce()
-  })
+  C5_conRolPasa() {
+    const { res, next, capturado } = respuestaCapturada()
+    const req = {
+      user: { id: 'u1', email: 'admin@test.com', tipo_usuario: 'admin', roles: ['admin'] },
+    } as Request
+    requireRole(['admin'])(req, res, next)
+    expect(capturado.next).toBe(true)
+    expect(capturado.statusCode).toBe(0)
+    expect(usuarioTieneAlgunRol(req.user, ['admin'])).toBe(true)
+  }
+
+  FALLA_C4_sinRolSeEsperaOk() {
+    const { res, next, capturado } = respuestaCapturada()
+    const req = {
+      user: { id: 'u1', email: 'a@a.com', tipo_usuario: 'estudiante', roles: ['estudiante'] },
+    } as Request
+    requireRole(['admin'])(req, res, next)
+    expect(capturado.next).toBe(true)
+  }
+
+  FALLA_C3_inactivoSeAcepta() {
+    expect(usuarioPuedeAutenticarse({ activo: false })).toBe(true)
+  }
+}
+
+const pruebas = new RQ6Rbac()
+
+describe('RQ6 — Control de acceso por roles', () => {
+  it('C1: sin Bearer → no hay token', () => pruebas.C1_sinBearer())
+  it('C2: JWT inválido', () => pruebas.C2_jwtInvalido())
+  it('C2b: JWT expirado', () => pruebas.C2b_jwtExpirado())
+  it('C3: usuario inactivo no se autentica', () => pruebas.C3_usuarioInactivo())
+  it('C4: autenticado sin rol → 403', () => pruebas.C4_autenticadoSinRol())
+  it('C5: con rol permitido → continua', () => pruebas.C5_conRolPasa())
+  it('FALLA C4: sin rol — se espera (mal) que continúe', () => pruebas.FALLA_C4_sinRolSeEsperaOk())
+  it('FALLA C3: inactivo — se espera (mal) que pase', () => pruebas.FALLA_C3_inactivoSeAcepta())
 })

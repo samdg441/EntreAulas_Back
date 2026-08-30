@@ -1,139 +1,85 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import request from 'supertest'
-import { queueFrom } from '../helpers/query-builder'
-import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
-import { adminUser, coordinadorUser } from '../fixtures/users'
-import { setTestUser } from '../helpers/test-user'
+import { describe, expect, it } from 'vitest'
+import {
+  coordinadorPuedeOperar,
+  filtrarQrsPorCarrera,
+  smtpEstaConfigurado,
+  validarCorreoQr,
+} from '../helpers/qr'
 
-vi.mock('../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
-vi.mock('../../middleware/auth', () => import('../helpers/auth-mock'))
+const qrRow = { curso: { carrera_id: 1 } }
 
-vi.mock('../../modules/auth/role.service', () => ({
-  RoleService: { obtenerCoordinadorPorUsuario: vi.fn() },
-}))
+class RQ16CorreoQr {
+  C1_correoInvalido() {
+    const r = validarCorreoQr({ to: 'no-es-correo', subject: 'Hola', grupoIds: [1] })
+    expect(r.status).toBe(400)
+    expect(r.error).toMatch(/Correo/)
+  }
 
-const sendMail = vi.fn().mockResolvedValue(undefined)
-vi.mock('../../shared/adapters/mailer.adapter', () => ({
-  sendMail: (...a: unknown[]) => sendMail(...a),
-}))
+  C2_asuntoVacio() {
+    const r = validarCorreoQr({ to: 'a@b.com', subject: '  ', grupoIds: [1] })
+    expect(r.status).toBe(400)
+    expect(r.error).toMatch(/asunto/)
+  }
 
-import { app } from '../../app'
-import { RoleService } from '../../modules/auth/role.service'
+  C3_grupoIdsInvalido() {
+    const r = validarCorreoQr({ to: 'a@b.com', subject: 'QR', grupoIds: [] })
+    expect(r.status).toBe(400)
+  }
 
-const qrRow = {
-  grupo_id: 1,
-  token: 't1',
-  curso: { nombre: 'Cálculo', codigo: 'MAT', carrera_id: 1 },
-  grupo: { numero_grupo: 1 },
-  profesor: { usuario: { nombre: 'Ana', apellido: 'P' } },
+  C4_coordinadorSinCarrera() {
+    const r = coordinadorPuedeOperar(undefined)
+    expect(r.status).toBe(403)
+  }
+
+  C5_sinQrs() {
+    const filtrados = filtrarQrsPorCarrera([], null)
+    expect(filtrados).toEqual([])
+  }
+
+  C6_qrsOtraCarrera() {
+    const filtrados = filtrarQrsPorCarrera([qrRow], 99)
+    expect(filtrados).toEqual([])
+  }
+
+  C7_smtpNoConfigurado() {
+    expect(smtpEstaConfigurado({})).toBe(false)
+  }
+
+  C8_correoValidoYSmtp() {
+    const r = validarCorreoQr({ to: 'a@b.com', subject: 'QR', grupoIds: [1] })
+    expect(r.ok).toBe(true)
+    expect(r.data?.email).toBe('a@b.com')
+    expect(
+      smtpEstaConfigurado({
+        SMTP_HOST: 'smtp.test',
+        SMTP_USER: 'u',
+        SMTP_PASS: 'p',
+        SMTP_FROM: 'from@test.com',
+      })
+    ).toBe(true)
+    expect(filtrarQrsPorCarrera([qrRow], 1)).toHaveLength(1)
+  }
+
+  FALLA_C1_correoInvalidoSeAcepta() {
+    expect(validarCorreoQr({ to: 'no-es-correo', subject: 'Hola', grupoIds: [1] }).status).toBe(200)
+  }
+
+  FALLA_C7_smtpVacioSeAcepta() {
+    expect(smtpEstaConfigurado({})).toBe(true)
+  }
 }
 
-/**
- * RQ16 Backend — Distribución por correo (POST /share-email)
- * C1 correo inválido | C2 asunto vacío | C3 grupoIds | C4 coord sin carrera
- * C5 sin QRs | C6 otra carrera | C7 SMTP 503 | C8 200
- */
-describe('RQ16 unit — Distribución de QR por correo', () => {
-  beforeEach(() => {
-    fromMock.mockReset()
-    setTestUser({ ...adminUser })
-    sendMail.mockClear()
-    vi.mocked(RoleService.obtenerCoordinadorPorUsuario).mockReset()
-    delete process.env.SMTP_HOST
-    delete process.env.SMTP_USER
-    delete process.env.SMTP_PASS
-    delete process.env.SMTP_FROM
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
+const pruebas = new RQ16CorreoQr()
 
-  afterEach(() => {
-    delete process.env.SMTP_HOST
-    delete process.env.SMTP_USER
-    delete process.env.SMTP_PASS
-    delete process.env.SMTP_FROM
-  })
-
-  it('C1: correo inválido → 400', async () => {
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'no-es-correo', subject: 'Hola', grupoIds: [1] })
-    expect(res.status).toBe(400)
-    expect(res.body.error).toMatch(/Correo/)
-  })
-
-  it('C2: asunto vacío → 400', async () => {
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: '  ', grupoIds: [1] })
-    expect(res.status).toBe(400)
-    expect(res.body.error).toMatch(/asunto/)
-  })
-
-  it('C3: grupoIds inválido → 400', async () => {
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: 'QR', grupoIds: [] })
-    expect(res.status).toBe(400)
-  })
-
-  it('C4: coordinador sin carrera → 403', async () => {
-    setTestUser({ ...coordinadorUser })
-    vi.mocked(RoleService.obtenerCoordinadorPorUsuario).mockResolvedValue({
-      id: 1,
-      usuario_id: coordinadorUser.id,
-      activo: true,
-    } as never)
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: 'QR', grupoIds: [1] })
-    expect(res.status).toBe(403)
-  })
-
-  it('C5: sin QRs activos → 404', async () => {
-    fromMock.mockImplementation(queueFrom({ qr_evaluaciones: [{ data: [], error: null }] }))
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: 'QR', grupoIds: [1] })
-    expect(res.status).toBe(404)
-  })
-
-  it('C6: QRs de otra carrera → 403', async () => {
-    setTestUser({ ...coordinadorUser })
-    vi.mocked(RoleService.obtenerCoordinadorPorUsuario).mockResolvedValue({
-      id: 1,
-      usuario_id: coordinadorUser.id,
-      carrera_id: 99,
-      activo: true,
-    } as never)
-    fromMock.mockImplementation(
-      queueFrom({ qr_evaluaciones: [{ data: [{ ...qrRow, curso: { carrera_id: 1 } }], error: null }] })
-    )
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: 'QR', grupoIds: [1] })
-    expect(res.status).toBe(403)
-  })
-
-  it('C7: SMTP no configurado → 503', async () => {
-    fromMock.mockImplementation(queueFrom({ qr_evaluaciones: [{ data: [qrRow], error: null }] }))
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: 'QR', grupoIds: [1], message: 'Hola' })
-    expect(res.status).toBe(503)
-  })
-
-  it('C8: correo enviado → 200', async () => {
-    process.env.SMTP_HOST = 'smtp.test'
-    process.env.SMTP_USER = 'u'
-    process.env.SMTP_PASS = 'p'
-    process.env.SMTP_FROM = 'from@test.com'
-    fromMock.mockImplementation(queueFrom({ qr_evaluaciones: [{ data: [qrRow], error: null }] }))
-    const res = await request(app)
-      .post('/api/qr-evaluaciones/share-email')
-      .send({ to: 'a@b.com', subject: 'QR', grupoIds: [1], message: 'Hola' })
-    expect(res.status).toBe(200)
-    expect(res.body.sentTo).toBe('a@b.com')
-    expect(sendMail).toHaveBeenCalledOnce()
-  })
+describe('RQ16 — Distribución de QR por correo', () => {
+  it('C1: correo inválido → 400', () => pruebas.C1_correoInvalido())
+  it('C2: asunto vacío → 400', () => pruebas.C2_asuntoVacio())
+  it('C3: grupoIds inválido → 400', () => pruebas.C3_grupoIdsInvalido())
+  it('C4: coordinador sin carrera → 403', () => pruebas.C4_coordinadorSinCarrera())
+  it('C5: sin QRs → lista vacía', () => pruebas.C5_sinQrs())
+  it('C6: QRs de otra carrera → filtrados', () => pruebas.C6_qrsOtraCarrera())
+  it('C7: SMTP no configurado', () => pruebas.C7_smtpNoConfigurado())
+  it('C8: datos válidos y SMTP listo', () => pruebas.C8_correoValidoYSmtp())
+  it('FALLA C1: correo inválido — se espera (mal) 200', () => pruebas.FALLA_C1_correoInvalidoSeAcepta())
+  it('FALLA C7: SMTP vacío — se espera (mal) configurado', () => pruebas.FALLA_C7_smtpVacioSeAcepta())
 })

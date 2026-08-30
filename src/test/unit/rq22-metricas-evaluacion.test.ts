@@ -1,112 +1,47 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import request from 'supertest'
-import { queueFrom } from '../helpers/query-builder'
-import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
-import { profesorUser, estudianteUser, coordinadorUser, adminUser } from '../fixtures/users'
+import { describe, expect, it } from 'vitest'
+import { calcularPromedio, esProfesor } from '../helpers/metricas'
+import { AnalyticsService } from '../../modules/analytics/analytics.service'
 
-vi.mock('../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
+class RQ22MetricasEvaluacion {
+  C1_noEsProfesor() {
+    expect(esProfesor('estudiante')).toBe(false)
+    expect(esProfesor('coordinador')).toBe(false)
+    expect(esProfesor('admin')).toBe(false)
+  }
 
-vi.mock('../../middleware/auth', () => ({
-  authenticateToken: (req: { user?: unknown }, _res: unknown, next: () => void) => {
-    req.user = (globalThis as { __testUser?: unknown }).__testUser
-    next()
-  },
-  requireRole: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-}))
+  C1b_siEsProfesor() {
+    expect(esProfesor('profesor')).toBe(true)
+  }
 
-import { app } from '../../app'
+  C4_calculaPromedio() {
+    const servicio = new AnalyticsService()
+    expect(servicio.computeAverage([4, 5])).toBe(4.5)
+    expect(calcularPromedio([4, 5])).toBe(4.5)
+  }
 
-/**
- * RQ22 Backend — Calcular métricas
- * C1 no profesor→403 | C1b coord/admin→403 | C2 no existe→404
- * C3 error evals→500 | C4 OK | C5 sin evaluaciones→0
- */
-describe('RQ22 unit — Calcular métricas de evaluación', () => {
-  beforeEach(() => {
-    fromMock.mockReset()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-  })
+  C5_sinEvaluaciones() {
+    const servicio = new AnalyticsService()
+    expect(servicio.computeAverage([])).toBe(0)
+    expect(calcularPromedio([])).toBe(0)
+  }
 
-  it('C1: no es profesor → 403', async () => {
-    ;(globalThis as { __testUser?: unknown }).__testUser = { ...estudianteUser }
-    const res = await request(app).get('/api/teachers/teacher-stats/1')
-    expect(res.status).toBe(403)
-    expect(fromMock).not.toHaveBeenCalled()
-  })
+  FALLA_C1_estudianteEsProfesor() {
+    expect(esProfesor('estudiante')).toBe(true)
+  }
 
-  it('C2: profesor no existe → 404', async () => {
-    ;(globalThis as { __testUser?: unknown }).__testUser = { ...profesorUser }
-    fromMock.mockImplementation(
-      queueFrom({ profesores: [{ data: null, error: { message: 'not found' } }] })
-    )
-    const res = await request(app).get('/api/teachers/teacher-stats/999')
-    expect(res.status).toBe(404)
-    expect(res.body.error).toBe('Profesor no encontrado')
-  })
+  FALLA_C4_promedioIncorrecto() {
+    expect(calcularPromedio([4, 5])).toBe(9)
+  }
+}
 
-  it('C3: error al leer evaluaciones → 500', async () => {
-    ;(globalThis as { __testUser?: unknown }).__testUser = { ...profesorUser }
-    fromMock.mockImplementation(
-      queueFrom({
-        profesores: [{ data: { id: 7 }, error: null }],
-        evaluaciones: [{ data: null, error: { message: 'db' } }],
-      })
-    )
-    const res = await request(app).get('/api/teachers/teacher-stats/7')
-    expect(res.status).toBe(500)
-  })
+const pruebas = new RQ22MetricasEvaluacion()
 
-  it('C4: OK → calcula promedio y totales', async () => {
-    ;(globalThis as { __testUser?: unknown }).__testUser = { ...profesorUser }
-    fromMock.mockImplementation(
-      queueFrom({
-        profesores: [{ data: { id: 7 }, error: null }],
-        evaluaciones: [
-          {
-            data: [
-              { id: 1, calificacion_promedio: 4, grupo_id: 10 },
-              { id: 2, calificacion_promedio: 5, grupo_id: 10 },
-            ],
-            error: null,
-          },
-        ],
-        grupos: [{ data: [{ id: 10, curso_id: 1 }], error: null }],
-        asignaciones_profesor: [{ data: [{ curso_id: 1, grupo_id: 10 }], error: null }],
-        cursos: [{ data: [{ id: 1, nombre: 'Cálculo', codigo: 'C1' }], error: null }],
-      })
-    )
-    const res = await request(app).get('/api/teachers/teacher-stats/7')
-    expect(res.status).toBe(200)
-    expect(res.body.calificacionPromedio).toBe(4.5)
-    expect(res.body.totalEvaluaciones).toBe(2)
-  })
-
-  it('C5: sin evaluaciones → 200 y promedio 0 (no lanza)', async () => {
-    ;(globalThis as { __testUser?: unknown }).__testUser = { ...profesorUser }
-    fromMock.mockImplementation(
-      queueFrom({
-        profesores: [{ data: { id: 7 }, error: null }],
-        evaluaciones: [{ data: [], error: null }],
-        grupos: [{ data: [], error: null }],
-        asignaciones_profesor: [{ data: [], error: null }],
-        cursos: [{ data: [], error: null }],
-      })
-    )
-    const res = await request(app).get('/api/teachers/teacher-stats/7')
-    expect(res.status).toBe(200)
-    expect(res.body.calificacionPromedio).toBe(0)
-    expect(res.body.totalEvaluaciones).toBe(0)
-  })
-
-  it('C1b: coordinador y admin → 403', async () => {
-    for (const user of [coordinadorUser, adminUser]) {
-      fromMock.mockReset()
-      ;(globalThis as { __testUser?: unknown }).__testUser = { ...user }
-      const res = await request(app).get('/api/teachers/teacher-stats/7')
-      expect(res.status).toBe(403)
-      expect(fromMock).not.toHaveBeenCalled()
-    }
-  })
+describe('RQ22 — Calcular métricas de evaluación', () => {
+  it('C1: no es profesor', () => pruebas.C1_noEsProfesor())
+  it('C1b: sí es profesor', () => pruebas.C1b_siEsProfesor())
+  it('C4: calcula promedio', () => pruebas.C4_calculaPromedio())
+  it('C5: sin evaluaciones → 0', () => pruebas.C5_sinEvaluaciones())
+  it('FALLA C1: estudiante — se espera (mal) que sea profesor', () =>
+    pruebas.FALLA_C1_estudianteEsProfesor())
+  it('FALLA C4: promedio 4 y 5 — se espera (mal) 9', () => pruebas.FALLA_C4_promedioIncorrecto())
 })

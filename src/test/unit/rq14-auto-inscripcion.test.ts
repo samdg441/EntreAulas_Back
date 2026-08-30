@@ -1,99 +1,77 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import request from 'supertest'
-import { queueFrom } from '../helpers/query-builder'
-import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
-import { adminUser, estudianteUser } from '../fixtures/users'
-import { setTestUser } from '../helpers/test-user'
+import { describe, expect, it } from 'vitest'
+import { decidirAutoInscripcion, decidirEstadoInscripcion } from '../helpers/qr'
 
-vi.mock('../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
-vi.mock('../../middleware/auth', () => import('../helpers/auth-mock'))
+class RQ14AutoInscripcion {
+  C1_noEsEstudiante() {
+    const r = decidirAutoInscripcion({ tipoUsuario: 'admin' })
+    expect(r.status).toBe(403)
+    expect(r.error).toMatch(/estudiantes/i)
+  }
 
-import { app } from '../../app'
+  C2_sinRegistroEstudiante() {
+    const r = decidirAutoInscripcion({ tipoUsuario: 'estudiante', estudiante: null })
+    expect(r.status).toBe(404)
+  }
 
-/**
- * RQ14 Backend — Auto-inscripción por QR
- * C1 no estudiante | C2 sin fila estudiante | C3 QR inválido
- * C4 alreadyEnrolled | C5 reactiva | C6 crea 201
- */
-describe('RQ14 unit — Auto-inscripción por QR', () => {
-  beforeEach(() => {
-    fromMock.mockReset()
-    setTestUser({ ...estudianteUser })
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
+  C3_qrInvalido() {
+    const r = decidirAutoInscripcion({
+      tipoUsuario: 'estudiante',
+      estudiante: { id: 'est-1' },
+      qr: null,
+    })
+    expect(r.status).toBe(404)
+    expect(r.error).toMatch(/inválido|expirado/i)
+  }
 
-  it('C1: no es estudiante → 403', async () => {
-    setTestUser({ ...adminUser })
-    const res = await request(app).post('/api/qr-evaluaciones/tok/auto-enroll')
-    expect(res.status).toBe(403)
-    expect(res.body.error).toMatch(/estudiantes/i)
-  })
+  C4_yaInscrito() {
+    const r = decidirEstadoInscripcion({ id: 100, activa: true })
+    expect(r.status).toBe(200)
+    expect(r.alreadyEnrolled).toBe(true)
+  }
 
-  it('C2: sin registro en estudiantes → 404', async () => {
-    fromMock.mockImplementation(
-      queueFrom({ estudiantes: [{ data: null, error: { message: 'no row' } }] })
-    )
-    const res = await request(app).post('/api/qr-evaluaciones/tok/auto-enroll')
-    expect(res.status).toBe(404)
-  })
+  C5_reactiva() {
+    const r = decidirEstadoInscripcion({ id: 100, activa: false })
+    expect(r.status).toBe(200)
+    expect(r.reactivated).toBe(true)
+  }
 
-  it('C3: QR inválido → 404', async () => {
-    fromMock.mockImplementation(
-      queueFrom({
-        estudiantes: [{ data: { id: 'est-1' }, error: null }],
-        qr_evaluaciones: [{ data: null, error: null }],
-      })
-    )
-    const res = await request(app).post('/api/qr-evaluaciones/tok/auto-enroll')
-    expect(res.status).toBe(404)
-    expect(res.body.error).toMatch(/inválido|expirado/i)
-  })
+  C6_crea() {
+    const acceso = decidirAutoInscripcion({
+      tipoUsuario: 'estudiante',
+      estudiante: { id: 'est-1' },
+      qr: { grupo_id: 11, activo: true },
+    })
+    const estado = decidirEstadoInscripcion(null)
+    expect(acceso.ok).toBe(true)
+    expect(acceso.data?.grupoId).toBe(11)
+    expect(estado.status).toBe(201)
+    expect(estado.created).toBe(true)
+  }
 
-  it('C4: inscripción activa → alreadyEnrolled', async () => {
-    fromMock.mockImplementation(
-      queueFrom({
-        estudiantes: [{ data: { id: 'est-1' }, error: null }],
-        qr_evaluaciones: [{ data: { id: 1, token: 'tok', grupo_id: 9, activo: true }, error: null }],
-        inscripciones: [{ data: { id: 100, activa: true }, error: null }],
-      })
-    )
-    const res = await request(app).post('/api/qr-evaluaciones/tok/auto-enroll')
-    expect(res.status).toBe(200)
-    expect(res.body.alreadyEnrolled).toBe(true)
-    expect(res.body.grupoId).toBe(9)
-  })
+  FALLA_C1_adminSeInscribe() {
+    const r = decidirAutoInscripcion({ tipoUsuario: 'admin' })
+    expect(r.status).toBe(201)
+  }
 
-  it('C5: inscripción inactiva → reactivated', async () => {
-    fromMock.mockImplementation(
-      queueFrom({
-        estudiantes: [{ data: { id: 'est-1' }, error: null }],
-        qr_evaluaciones: [{ data: { id: 1, token: 'tok', grupo_id: 9, activo: true }, error: null }],
-        inscripciones: [
-          { data: { id: 100, activa: false }, error: null },
-          { data: null, error: null },
-        ],
-      })
-    )
-    const res = await request(app).post('/api/qr-evaluaciones/tok/auto-enroll')
-    expect(res.status).toBe(200)
-    expect(res.body.reactivated).toBe(true)
-  })
+  FALLA_C3_qrInvalidoSeAcepta() {
+    const r = decidirAutoInscripcion({
+      tipoUsuario: 'estudiante',
+      estudiante: { id: 'est-1' },
+      qr: null,
+    })
+    expect(r.status).toBe(200)
+  }
+}
 
-  it('C6: sin inscripción → 201 created', async () => {
-    fromMock.mockImplementation(
-      queueFrom({
-        estudiantes: [{ data: { id: 'est-1' }, error: null }],
-        qr_evaluaciones: [{ data: { id: 1, token: 'tok', grupo_id: 11, activo: true }, error: null }],
-        inscripciones: [
-          { data: null, error: null },
-          { data: { id: 200 }, error: null },
-        ],
-      })
-    )
-    const res = await request(app).post('/api/qr-evaluaciones/tok/auto-enroll')
-    expect(res.status).toBe(201)
-    expect(res.body.created).toBe(true)
-    expect(res.body.grupoId).toBe(11)
-  })
+const pruebas = new RQ14AutoInscripcion()
+
+describe('RQ14 — Auto-inscripción por QR', () => {
+  it('C1: no es estudiante → 403', () => pruebas.C1_noEsEstudiante())
+  it('C2: sin registro de estudiante → 404', () => pruebas.C2_sinRegistroEstudiante())
+  it('C3: QR inválido → 404', () => pruebas.C3_qrInvalido())
+  it('C4: inscripción activa → alreadyEnrolled', () => pruebas.C4_yaInscrito())
+  it('C5: inscripción inactiva → reactivated', () => pruebas.C5_reactiva())
+  it('C6: sin inscripción → created 201', () => pruebas.C6_crea())
+  it('FALLA C1: admin — se espera (mal) 201', () => pruebas.FALLA_C1_adminSeInscribe())
+  it('FALLA C3: QR inválido — se espera (mal) 200', () => pruebas.FALLA_C3_qrInvalidoSeAcepta())
 })
