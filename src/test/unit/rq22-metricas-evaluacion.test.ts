@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularPromedio, calificacionEnEscala, esProfesor } from '../helpers/metricas'
+import { calcularPromedio, calificacionEnEscala, esProfesor } from '../../modules/analytics/calificaciones'
 import { NOTAS_COMUNES, NOTAS_INVALIDAS } from '../fixtures/casos-datos'
 
 class RQ22MetricasEvaluacion {

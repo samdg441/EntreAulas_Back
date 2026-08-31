@@ -4,6 +4,7 @@ import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
+import { mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
 
 const router = Router()
 
@@ -372,7 +373,8 @@ router.get('/:token', async (req: any, res) => {
   try {
     const { token } = req.params
     if (!token) {
-      return res.status(400).json({ error: 'Token requerido.' })
+      const r = resolverEvaluacionQr({})
+      if (!r.ok) return res.status(r.status).json({ error: r.error })
     }
 
     const { data: row, error } = await SupabaseDB.supabaseAdmin
@@ -407,41 +409,23 @@ router.get('/:token', async (req: any, res) => {
       .eq('activo', true)
       .maybeSingle()
 
-    if (error) {
-      console.error('Error GET qr_evaluaciones por token:', error)
-      return res.status(500).json({ error: 'Error al resolver el token.' })
-    }
-
-    if (!row) {
-      return res.status(404).json({ error: 'QR inválido o expirado.' })
-    }
-
-    // Supabase puede tipar relaciones anidadas como objeto o arreglo de un elemento
-    const r = row as Record<string, unknown>
-    const prof = r.profesor as Record<string, unknown> | Record<string, unknown>[] | null | undefined
-    const profOne = Array.isArray(prof) ? prof[0] : prof
-    const usu = profOne?.usuario as Record<string, unknown> | Record<string, unknown>[] | undefined
-    const usuOne = Array.isArray(usu) ? usu[0] : usu
-    const curso = r.curso as Record<string, unknown> | Record<string, unknown>[] | undefined
-    const cursoOne = Array.isArray(curso) ? curso[0] : curso
-    const grupo = r.grupo as Record<string, unknown> | Record<string, unknown>[] | undefined
-    const grupoOne = Array.isArray(grupo) ? grupo[0] : grupo
-
-    const profesorNombre =
-      `${String(usuOne?.nombre ?? '')} ${String(usuOne?.apellido ?? '')}`.trim()
-    res.json({
-      profesorId: r.profesor_id,
-      cursoId: r.curso_id,
-      materiaId: r.curso_id,
-      grupoId: r.grupo_id,
-      periodoId: r.periodo_id ?? null,
-      profesorNombre: profesorNombre || null,
-      cursoNombre: (cursoOne?.nombre as string | undefined) ?? null,
-      cursoCodigo: (cursoOne?.codigo as string | undefined) ?? null,
-      grupoNumero: (grupoOne?.numero_grupo as string | number | undefined) ?? null,
-      grupoHorario: (grupoOne?.horario as string | undefined) ?? null,
-      grupoAula: (grupoOne?.aula as string | undefined) ?? null
+    const resultado = resolverEvaluacionQr({
+      token,
+      errorBd: Boolean(error),
+      qr: row
+        ? {
+            activo: true,
+            profesor_id: (row as { profesor_id?: unknown }).profesor_id,
+            curso_id: (row as { curso_id?: unknown }).curso_id,
+            grupo_id: (row as { grupo_id?: unknown }).grupo_id,
+          }
+        : null,
     })
+    if (!resultado.ok) {
+      return res.status(resultado.status).json({ error: resultado.error })
+    }
+
+    res.json(mapearRespuestaQr(row as Record<string, unknown>))
   } catch (error) {
     console.error('Error GET /qr-evaluaciones/:token:', error)
     res.status(500).json({ error: 'Error interno del servidor' })

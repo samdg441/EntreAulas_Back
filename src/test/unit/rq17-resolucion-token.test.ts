@@ -1,28 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { resolverTokenQr } from '../helpers/qr'
+import { resolverEvaluacionQr } from '../../modules/evaluations/qr-resolucion'
 import qrFixture from '../fixtures/rq18-qr.json'
 
 class RQ17ResolucionToken {
   C1_sinToken() {
-    const r = resolverTokenQr({ token: undefined })
+    const r = resolverEvaluacionQr({ token: undefined })
     expect(r.status).toBe(400)
     expect(r.error).toBe(qrFixture.errores.tokenRequerido.error)
   }
 
   C2_errorBd() {
-    const r = resolverTokenQr({ token: 't-err', errorBd: true })
+    const r = resolverEvaluacionQr({ token: 't-err', errorBd: true })
     expect(r.status).toBe(500)
     expect(r.error).toBe(qrFixture.errores.errorResolver.error)
   }
 
   C3_inexistente() {
-    const r = resolverTokenQr({ token: 't-invalido', qr: null })
+    const r = resolverEvaluacionQr({ token: 't-invalido', qr: null })
     expect(r.status).toBe(404)
     expect(r.error).toBe(qrFixture.errores.qrInvalidoOExpirado.error)
   }
 
   C4_activo() {
-    const r = resolverTokenQr({
+    const r = resolverEvaluacionQr({
       token: 't-ok',
       qr: {
         activo: true,
@@ -41,7 +41,7 @@ class RQ17ResolucionToken {
   }
 
   C5_tokenVacio() {
-    expect(resolverTokenQr({ token: '' }).status).toBe(400)
+    expect(resolverEvaluacionQr({ token: '' }).status).toBe(400)
   }
 }
 

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { hashPassword } from '../../utils/passwordSecurity';
+import { dashboardDesdeRoles, dashboardDesdeTipoUsuario } from './dashboard';
 
 export interface UserRole {
   id: number;
@@ -261,14 +262,9 @@ export class RoleService {
     try {
       const roles = await this.obtenerRolesUsuario(usuarioId);
 
-      // Prioridad de dashboards según tabla usuario_roles
-      if (roles.includes('admin')) return '/dashboard-admin';
-      if (roles.includes('decano')) return '/dashboard-decano';
-      if (roles.includes('coordinador')) return '/dashboard-coordinador';
-      if (roles.includes('profesor') || roles.includes('docente')) return '/dashboard-profesor';
-      if (roles.includes('estudiante')) return '/dashboard-estudiante';
+      const porRoles = dashboardDesdeRoles(roles)
+      if (porRoles) return porRoles
 
-      // Fallback: usuario sin filas en usuario_roles → usar tipo_usuario de la tabla usuarios
       const { data: usuario, error } = await supabaseAdmin
         .from('usuarios')
         .select('tipo_usuario')
@@ -276,15 +272,10 @@ export class RoleService {
         .single();
 
       if (!error && usuario?.tipo_usuario) {
-        const t = (usuario.tipo_usuario || '').toLowerCase();
-        if (t === 'admin') return '/dashboard-admin';
-        if (t === 'decano') return '/dashboard-decano';
-        if (t === 'coordinador') return '/dashboard-coordinador';
-        if (t === 'profesor' || t === 'docente') return '/dashboard-profesor';
-        if (t === 'estudiante') return '/dashboard-estudiante';
+        return dashboardDesdeTipoUsuario(usuario.tipo_usuario)
       }
 
-      return '/dashboard'; // Dashboard por defecto
+      return '/dashboard'
     } catch (error) {
       console.error('Error en obtenerDashboardUsuario:', error);
       return '/dashboard';

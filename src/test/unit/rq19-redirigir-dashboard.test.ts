@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dashboardDesdeRolSeleccionado, dashboardParaUsuario } from '../helpers/dashboard'
+import { dashboardDesdeRolSeleccionado, dashboardParaUsuario } from '../../modules/auth/dashboard'
 
 class RQ19RedirigirDashboard {
   C1_sinRolNiTipo() {
@@ -24,7 +24,7 @@ class RQ19RedirigirDashboard {
   }
 
   C6_estudiante() {
-    expect(dashboardParaUsuario(['estudiante'])).toBe('/dashboard-estudiante')
+    expect(dashboardParaUsuario(['Estudiante'])).toBe('/dashboard-estudiante')
   }
 
   C7_usaTipoUsuario() {

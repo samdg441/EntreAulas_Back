@@ -4,6 +4,7 @@ import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
 import { EvaluationRequest, EvaluationResponse } from '../../types/evaluationTypes'
+import { calcularPromedio, esPeriodoValido, rangoFechasPeriodo, resumenMetricas } from './calificaciones'
 
 const router = Router()
 
@@ -49,11 +50,9 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
       return res.status(500).json({ error: 'Error consultando evaluaciones', details: evaluacionesError })
     }
 
-    // Calcular estadísticas
-    const totalEvaluaciones = evaluaciones?.length || 0
-    const calificacionPromedio = totalEvaluaciones > 0 
-      ? evaluaciones.reduce((sum, evaluacion) => sum + (evaluacion.calificacion_promedio || 0), 0) / totalEvaluaciones
-      : 0
+    const metricas = resumenMetricas(evaluaciones || [])
+    const totalEvaluaciones = metricas.totalEvaluaciones
+    const calificacionPromedio = metricas.calificacionPromedio
 
     // Mapear grupo -> curso y obtener info de curso
     const evalsArrayStats: any[] = Array.isArray(evaluaciones) ? (evaluaciones as any[]) : []
@@ -105,8 +104,9 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
 
     // Calcular promedios por curso
     Object.values(evaluacionesPorCurso).forEach((curso: any) => {
-      const suma = curso.evaluaciones.reduce((sum: number, evaluacion: any) => sum + (evaluacion.calificacion_promedio || 0), 0)
-      curso.promedio = curso.total > 0 ? Number((suma / curso.total).toFixed(2)) : 0
+      curso.promedio = Number(
+        calcularPromedio(curso.evaluaciones.map((e: any) => e.calificacion_promedio)).toFixed(2)
+      )
     })
 
     // Obtener evaluaciones recientes (últimas 5)
@@ -177,13 +177,9 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
       // Construir filtro de fecha para los datos mock
       let mockDateFilter: { gte?: string; lte?: string } = {}
       if (period) {
-        const [year, semester] = period.split('-')
-        const startDate = `${year}-${semester === '1' ? '01' : '07'}-01`
-        const endDate = `${year}-${semester === '1' ? '06' : '12'}-31`
-        
-        mockDateFilter = {
-          gte: startDate,
-          lte: endDate
+        const rango = rangoFechasPeriodo(String(period))
+        if (rango) {
+          mockDateFilter = { gte: rango.start, lte: rango.end }
         }
       }
       
@@ -216,13 +212,12 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
     // Construir filtro de fecha basado en el período
     let dateFilter: { gte?: string; lte?: string } = {}
     if (period) {
-      const [year, semester] = period.split('-')
-      const startDate = `${year}-${semester === '1' ? '01' : '07'}-01`
-      const endDate = `${year}-${semester === '1' ? '06-30' : '12-31'}`
-      
-      dateFilter = {
-        gte: startDate,
-        lte: endDate
+      if (!esPeriodoValido(String(period))) {
+        return res.status(400).json({ error: 'Período inválido. Use YYYY-1 o YYYY-2.' })
+      }
+      const rango = rangoFechasPeriodo(String(period))
+      if (rango) {
+        dateFilter = { gte: rango.start, lte: rango.end }
       }
       console.log('🔍 Backend: Date filter:', dateFilter);
     }
@@ -249,10 +244,9 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
     }
 
     // Calcular estadísticas históricas
-    const totalEvaluaciones = evaluaciones?.length || 0
-    const calificacionPromedio = totalEvaluaciones > 0 
-      ? evaluaciones.reduce((sum, evaluacion) => sum + (evaluacion.calificacion_promedio || 0), 0) / totalEvaluaciones
-      : 0
+    const metricasHist = resumenMetricas(evaluaciones || [])
+    const totalEvaluaciones = metricasHist.totalEvaluaciones
+    const calificacionPromedio = metricasHist.calificacionPromedio
 
     // Obtener estudiantes únicos que han evaluado en este período
     const estudiantesUnicos = new Set(evaluaciones?.map(e => e.estudiante_id) || [])
@@ -305,8 +299,9 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
 
     // Calcular promedios por curso
     Object.values(evaluacionesPorCurso).forEach((curso: any) => {
-      const suma = curso.evaluaciones.reduce((sum: number, evaluacion: any) => sum + (evaluacion.calificacion_promedio || 0), 0)
-      curso.promedio = curso.total > 0 ? Number((suma / curso.total).toFixed(2)) : 0
+      curso.promedio = Number(
+        calcularPromedio(curso.evaluaciones.map((e: any) => e.calificacion_promedio)).toFixed(2)
+      )
     })
 
     const historicalStats = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarResumenCoordinador, esCoordinador } from '../helpers/coordinador'
+import { armarResumenCoordinador, esCoordinador } from '../../modules/analytics/coordinador-resumen'
 import { estudianteUser, profesorUser, adminUser, coordinadorUser } from '../fixtures/users'
 import { PAGINACION_INVALIDA } from '../fixtures/casos-datos'
 

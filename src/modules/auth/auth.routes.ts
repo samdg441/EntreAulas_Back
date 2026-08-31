@@ -7,6 +7,7 @@ import {
   hashPassword,
   verifyStoredPassword
 } from '../../utils/passwordSecurity'
+import { dashboardDesdeRolSeleccionado } from './dashboard'
 
 const router = Router()
 
@@ -300,26 +301,7 @@ router.post('/login-with-role', async (req, res) => {
       { expiresIn: '24h' }
     )
 
-    // Determinar dashboard basado en el rol seleccionado
-    let dashboard = '/dashboard'
-    switch (selectedRole) {
-      case 'estudiante':
-        dashboard = '/dashboard-estudiante'
-        break
-      case 'profesor':
-      case 'docente':
-        dashboard = '/dashboard-profesor'
-        break
-      case 'coordinador':
-        dashboard = '/dashboard-coordinador'
-        break
-      case 'decano':
-        dashboard = '/dashboard-decano'
-        break
-      case 'admin':
-        dashboard = '/dashboard-admin'
-        break
-    }
+    const dashboard = dashboardDesdeRolSeleccionado(selectedRole)
 
     res.json({
       token,

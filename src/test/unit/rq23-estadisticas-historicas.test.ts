@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { esPeriodoValido, rangoFechasPeriodo, resumenHistorico } from '../helpers/metricas'
+import { esPeriodoValido, rangoFechasPeriodo, resumenHistorico } from '../../modules/analytics/calificaciones'
 import { EVALUACIONES_MEZCLADAS, PERIODOS_INVALIDOS, PERIODOS_VALIDOS } from '../fixtures/casos-datos'
 
 class RQ23EstadisticasHistoricas {
@@ -44,7 +44,7 @@ class RQ23EstadisticasHistoricas {
 
   C8_notasFueraDeEscalaNoCuentan() {
     const r = resumenHistorico(
-      [...EVALUACIONES_MEZCLADAS, { profesor_id: 7, calificacion_promedio: 4.2, fecha_creacion: '2026-08-01' }],
+      [...EVALUACIONES_MEZCLADAS, { profesor_id: 7, calificacion_promedio: 8.2, fecha_creacion: '2026-08-01' }],
       '2026-1'
     )
     expect(r.calificacionPromedio).toBe(4)
