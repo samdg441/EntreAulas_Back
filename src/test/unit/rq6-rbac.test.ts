@@ -65,19 +65,6 @@ class RQ6Rbac {
     expect(capturado.statusCode).toBe(0)
     expect(usuarioTieneAlgunRol(req.user, ['admin'])).toBe(true)
   }
-
-  FALLA_C4_sinRolSeEsperaOk() {
-    const { res, next, capturado } = respuestaCapturada()
-    const req = {
-      user: { id: 'u1', email: 'a@a.com', tipo_usuario: 'estudiante', roles: ['estudiante'] },
-    } as Request
-    requireRole(['admin'])(req, res, next)
-    expect(capturado.next).toBe(true)
-  }
-
-  FALLA_C3_inactivoSeAcepta() {
-    expect(usuarioPuedeAutenticarse({ activo: false })).toBe(true)
-  }
 }
 
 const pruebas = new RQ6Rbac()
@@ -89,6 +76,4 @@ describe('RQ6 — Control de acceso por roles', () => {
   it('C3: usuario inactivo no se autentica', () => pruebas.C3_usuarioInactivo())
   it('C4: autenticado sin rol → 403', () => pruebas.C4_autenticadoSinRol())
   it('C5: con rol permitido → continua', () => pruebas.C5_conRolPasa())
-  it('FALLA C4: sin rol — se espera (mal) que continúe', () => pruebas.FALLA_C4_sinRolSeEsperaOk())
-  it('FALLA C3: inactivo — se espera (mal) que pase', () => pruebas.FALLA_C3_inactivoSeAcepta())
 })

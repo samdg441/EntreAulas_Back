@@ -40,14 +40,6 @@ class RQ18ValidarQr {
       grupoId: qrFixture.tokenValido.grupo_id,
     })
   }
-
-  FALLA_C1_sinTokenSeAcepta() {
-    expect(resolverTokenQr({}).status).toBe(200)
-  }
-
-  FALLA_C3_inactivoSeAcepta() {
-    expect(resolverTokenQr({ token: 't-off', qr: { activo: false, grupo_id: 1 } }).status).toBe(200)
-  }
 }
 
 const pruebas = new RQ18ValidarQr()
@@ -57,6 +49,4 @@ describe('RQ18 — Validar QR vencido o inválido', () => {
   it('C2: error de BD → 500', () => pruebas.C2_errorBd())
   it('C3: QR inexistente o inactivo → 404', () => pruebas.C3_inexistenteOInactivo())
   it('C4: QR activo → 200', () => pruebas.C4_activo())
-  it('FALLA C1: sin token — se espera (mal) 200', () => pruebas.FALLA_C1_sinTokenSeAcepta())
-  it('FALLA C3: inactivo — se espera (mal) 200', () => pruebas.FALLA_C3_inactivoSeAcepta())
 })

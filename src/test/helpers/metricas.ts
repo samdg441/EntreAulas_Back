@@ -2,10 +2,23 @@ export function esProfesor(tipoUsuario?: string): boolean {
   return tipoUsuario === 'profesor'
 }
 
+/** Escala de evaluación: 1 a 5 inclusive. Cero, negativo, 99 o no numérico → inválido. */
+export function calificacionEnEscala(calificacion: unknown): number | null {
+  const cal = Number(calificacion)
+  if (!Number.isFinite(cal) || cal < 1 || cal > 5) return null
+  return cal
+}
+
 export function calcularPromedio(calificaciones: Array<number | null | undefined>): number {
-  const lista = calificaciones.map((c) => c || 0)
+  const lista = calificaciones
+    .map(calificacionEnEscala)
+    .filter((n): n is number => n != null)
   if (lista.length === 0) return 0
   return lista.reduce((suma, n) => suma + n, 0) / lista.length
+}
+
+export function esPeriodoValido(period: string): boolean {
+  return /^\d{4}-[12]$/.test(String(period).trim())
 }
 
 export function rangoFechasPeriodo(period: string): { start: string; end: string } {
@@ -30,13 +43,11 @@ export function resumenHistorico(
 ) {
   const dateRange = rangoFechasPeriodo(period)
   const delPeriodo = filtrarEvaluacionesPorPeriodo(evaluaciones, period)
+  const validas = delPeriodo.filter((e) => calificacionEnEscala(e.calificacion_promedio) != null)
   return {
     period,
-    calificacionPromedio:
-      delPeriodo.length === 0
-        ? 0
-        : calcularPromedio(delPeriodo.map((e) => e.calificacion_promedio)),
-    totalEvaluaciones: delPeriodo.length,
+    calificacionPromedio: calcularPromedio(validas.map((e) => e.calificacion_promedio)),
+    totalEvaluaciones: validas.length,
     dateRange,
   }
 }

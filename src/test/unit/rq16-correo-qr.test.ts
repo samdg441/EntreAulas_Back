@@ -59,14 +59,6 @@ class RQ16CorreoQr {
     ).toBe(true)
     expect(filtrarQrsPorCarrera([qrRow], 1)).toHaveLength(1)
   }
-
-  FALLA_C1_correoInvalidoSeAcepta() {
-    expect(validarCorreoQr({ to: 'no-es-correo', subject: 'Hola', grupoIds: [1] }).status).toBe(200)
-  }
-
-  FALLA_C7_smtpVacioSeAcepta() {
-    expect(smtpEstaConfigurado({})).toBe(true)
-  }
 }
 
 const pruebas = new RQ16CorreoQr()
@@ -80,6 +72,4 @@ describe('RQ16 — Distribución de QR por correo', () => {
   it('C6: QRs de otra carrera → filtrados', () => pruebas.C6_qrsOtraCarrera())
   it('C7: SMTP no configurado', () => pruebas.C7_smtpNoConfigurado())
   it('C8: datos válidos y SMTP listo', () => pruebas.C8_correoValidoYSmtp())
-  it('FALLA C1: correo inválido — se espera (mal) 200', () => pruebas.FALLA_C1_correoInvalidoSeAcepta())
-  it('FALLA C7: SMTP vacío — se espera (mal) configurado', () => pruebas.FALLA_C7_smtpVacioSeAcepta())
 })

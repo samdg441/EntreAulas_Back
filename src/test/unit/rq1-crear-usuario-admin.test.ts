@@ -102,33 +102,11 @@ class RQ1CrearUsuarioAdmin {
     expect(r.code).toBe('NO_TOKEN')
   }
 
-  FALLA_C1_camposFaltantes() {
-    const { password: _p, ...sinPassword } = bodyValido
-    const r = validarCamposCreacionUsuario(sinPassword)
-    expect(r.status).toBe(201)
-  }
-
-  FALLA_C4_caminoIdeal() {
-    const r = decidirCreacionUsuario({
-      tieneToken: true,
-      tokenValido: true,
-      esAdmin: true,
-      emailYaExiste: false,
-      body: bodyValido,
-    })
+  C9_correoInvalido() {
+    const r = validarCamposCreacionUsuario({ ...bodyValido, email: 'no-es-correo' })
+    expect(r.ok).toBe(false)
     expect(r.status).toBe(400)
-  }
-
-  FALLA_C7_errorInterno() {
-    const r = decidirCreacionUsuario({
-      tieneToken: true,
-      tokenValido: true,
-      esAdmin: true,
-      emailYaExiste: false,
-      errorInterno: true,
-      body: bodyValido,
-    })
-    expect(r.error).toBe('Usuario creado exitosamente')
+    expect(r.error).toBe('Correo inválido')
   }
 }
 
@@ -143,8 +121,5 @@ describe('RQ1 — Crear usuario como administrador', () => {
   it('C6: token inválido → 401', () => pruebas.C6_tokenInvalido())
   it('C7: error interno → 500', () => pruebas.C7_errorInterno())
   it('C8: sin token → 401', () => pruebas.C8_sinToken())
-  it('FALLA C1: campos faltantes — se espera (mal) 201 en vez de 400', () =>
-    pruebas.FALLA_C1_camposFaltantes())
-  it('FALLA C4: camino ideal — se espera (mal) 400 en vez de 201', () => pruebas.FALLA_C4_caminoIdeal())
-  it('FALLA C7: error interno — se espera (mal) otro mensaje', () => pruebas.FALLA_C7_errorInterno())
+  it('C9: correo inválido → 400', () => pruebas.C9_correoInvalido())
 })

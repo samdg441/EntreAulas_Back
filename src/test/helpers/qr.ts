@@ -6,7 +6,9 @@ export function parsearGrupoIds(grupoIds: unknown): ResultadoRegla<{ ids: number
   if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
     return { ok: false, status: 400, error: 'Se requiere grupoIds (array de IDs de grupo).' }
   }
-  const ids = grupoIds.map((id) => Number(id)).filter((n) => Number.isFinite(n))
+  const ids = grupoIds
+    .map((id) => Number(id))
+    .filter((n) => Number.isInteger(n) && n > 0)
   if (ids.length === 0) {
     return { ok: false, status: 400, error: 'grupoIds debe contener números válidos.' }
   }

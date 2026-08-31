@@ -1,11 +1,11 @@
+import { calificacionEnEscala } from './metricas'
+
 export function esCoordinador(user: { roles?: string[]; tipo_usuario?: string } | undefined): boolean {
   return Boolean(user?.roles?.includes('coordinador') || user?.tipo_usuario === 'coordinador')
 }
 
 export function calificacionValida(calificacion: unknown): number | null {
-  const cal = Number(calificacion || 0)
-  if (!Number.isFinite(cal) || cal <= 0) return null
-  return cal
+  return calificacionEnEscala(calificacion)
 }
 
 export function armarResumenCoordinador(params: {
@@ -59,8 +59,10 @@ export function armarResumenCoordinador(params: {
     return String(a.nombre).localeCompare(String(b.nombre), 'es')
   })
 
-  const pageSize = params.pageSize ?? 8
-  const page = params.page ?? 1
+  const pageSizeRaw = Number(params.pageSize)
+  const pageRaw = Number(params.page)
+  const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(50, Math.floor(pageSizeRaw)) : 8
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1
   const total = filtered.length
   const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
   const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages)

@@ -48,18 +48,9 @@ class RQ14AutoInscripcion {
     expect(estado.created).toBe(true)
   }
 
-  FALLA_C1_adminSeInscribe() {
-    const r = decidirAutoInscripcion({ tipoUsuario: 'admin' })
-    expect(r.status).toBe(201)
-  }
-
-  FALLA_C3_qrInvalidoSeAcepta() {
-    const r = decidirAutoInscripcion({
-      tipoUsuario: 'estudiante',
-      estudiante: { id: 'est-1' },
-      qr: null,
-    })
-    expect(r.status).toBe(200)
+  C7_profesorNoSeInscribe() {
+    const r = decidirAutoInscripcion({ tipoUsuario: 'profesor' })
+    expect(r.status).toBe(403)
   }
 }
 
@@ -72,6 +63,5 @@ describe('RQ14 — Auto-inscripción por QR', () => {
   it('C4: inscripción activa → alreadyEnrolled', () => pruebas.C4_yaInscrito())
   it('C5: inscripción inactiva → reactivated', () => pruebas.C5_reactiva())
   it('C6: sin inscripción → created 201', () => pruebas.C6_crea())
-  it('FALLA C1: admin — se espera (mal) 201', () => pruebas.FALLA_C1_adminSeInscribe())
-  it('FALLA C3: QR inválido — se espera (mal) 200', () => pruebas.FALLA_C3_qrInvalidoSeAcepta())
+  it('C7: profesor no se inscribe → 403', () => pruebas.C7_profesorNoSeInscribe())
 })

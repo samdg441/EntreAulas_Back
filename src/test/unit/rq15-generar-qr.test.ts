@@ -50,13 +50,10 @@ class RQ15GenerarQr {
     expect(r).toEqual({ accion: 'crear', grupoId: 7 })
   }
 
-  FALLA_C1_vacioSeAcepta() {
-    expect(parsearGrupoIds([]).status).toBe(201)
-  }
-
-  FALLA_C6_sinProfesorCrea() {
-    const r = decidirDestinoGrupo({ grupo: { id: 5, profesor_id: null } })
-    expect(r.accion).toBe('crear')
+  C8_idsNegativosOCero() {
+    expect(parsearGrupoIds([-1, 0]).status).toBe(400)
+    expect(parsearGrupoIds([-3, 7]).ok).toBe(true)
+    expect(parsearGrupoIds([-3, 7]).data?.ids).toEqual([7])
   }
 }
 
@@ -70,6 +67,5 @@ describe('RQ15 — Generación masiva de QR', () => {
   it('C5: QR existente → reusa token', () => pruebas.C5_reusaToken())
   it('C6: sin profesor → skip', () => pruebas.C6_sinProfesor())
   it('C7: crea token nuevo', () => pruebas.C7_creaToken())
-  it('FALLA C1: grupoIds vacío — se espera (mal) 201', () => pruebas.FALLA_C1_vacioSeAcepta())
-  it('FALLA C6: sin profesor — se espera (mal) crear', () => pruebas.FALLA_C6_sinProfesorCrea())
+  it('C8: IDs negativos o cero no se aceptan', () => pruebas.C8_idsNegativosOCero())
 })

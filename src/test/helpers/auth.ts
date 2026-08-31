@@ -18,6 +18,8 @@ export type ResultadoRegla<T = unknown> =
   | { ok: true; status: number; data?: T }
   | { ok: false; status: number; error: string; code?: string; details?: unknown }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export function validarCamposCreacionUsuario(body: {
   email?: string
   password?: string
@@ -27,6 +29,9 @@ export function validarCamposCreacionUsuario(body: {
 }): ResultadoRegla {
   if (!body.email || !body.password || !body.nombre || !body.apellido || !body.tipo_usuario) {
     return { ok: false, status: 400, error: 'Todos los campos son requeridos' }
+  }
+  if (!EMAIL_REGEX.test(body.email)) {
+    return { ok: false, status: 400, error: 'Correo inválido' }
   }
   if (typeof body.password !== 'string' || body.password.length < 8) {
     return { ok: false, status: 400, error: 'La contraseña debe tener al menos 8 caracteres' }

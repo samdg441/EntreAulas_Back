@@ -40,12 +40,8 @@ class RQ17ResolucionToken {
     })
   }
 
-  FALLA_C1_sinTokenSeAcepta() {
-    expect(resolverTokenQr({ token: undefined }).status).toBe(200)
-  }
-
-  FALLA_C3_inexistenteSeAcepta() {
-    expect(resolverTokenQr({ token: 't-invalido', qr: null }).status).toBe(200)
+  C5_tokenVacio() {
+    expect(resolverTokenQr({ token: '' }).status).toBe(400)
   }
 }
 
@@ -56,6 +52,5 @@ describe('RQ17 — Resolución de token QR', () => {
   it('C2: error de BD → 500', () => pruebas.C2_errorBd())
   it('C3: QR inexistente → 404', () => pruebas.C3_inexistente())
   it('C4: QR activo → 200', () => pruebas.C4_activo())
-  it('FALLA C1: sin token — se espera (mal) 200', () => pruebas.FALLA_C1_sinTokenSeAcepta())
-  it('FALLA C3: inexistente — se espera (mal) 200', () => pruebas.FALLA_C3_inexistenteSeAcepta())
+  it('C5: token vacío → 400', () => pruebas.C5_tokenVacio())
 })

@@ -35,14 +35,6 @@ class RQ19RedirigirDashboard {
     expect(dashboardParaUsuario([], 'desconocido')).toBe('/dashboard')
     expect(dashboardDesdeRolSeleccionado('otro')).toBe('/dashboard')
   }
-
-  FALLA_C6_estudianteVaAAdmin() {
-    expect(dashboardParaUsuario(['estudiante'])).toBe('/dashboard-admin')
-  }
-
-  FALLA_C8_desconocidoVaAProfesor() {
-    expect(dashboardParaUsuario([], 'desconocido')).toBe('/dashboard-profesor')
-  }
 }
 
 const pruebas = new RQ19RedirigirDashboard()
@@ -56,8 +48,4 @@ describe('RQ19 — Redirigir al dashboard según el rol', () => {
   it('C6: estudiante → /dashboard-estudiante', () => pruebas.C6_estudiante())
   it('C7: sin roles usa tipo_usuario', () => pruebas.C7_usaTipoUsuario())
   it('C8: tipo desconocido → /dashboard', () => pruebas.C8_tipoDesconocido())
-  it('FALLA C6: estudiante — se espera (mal) /dashboard-admin', () =>
-    pruebas.FALLA_C6_estudianteVaAAdmin())
-  it('FALLA C8: desconocido — se espera (mal) /dashboard-profesor', () =>
-    pruebas.FALLA_C8_desconocidoVaAProfesor())
 })

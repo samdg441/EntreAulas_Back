@@ -91,25 +91,6 @@ class RQ2Login {
     expect(descripcionRol('docente')).toBe('Profesor/Docente del sistema')
     expect(dashboardParaUsuario(['docente'])).toBe('/dashboard-profesor')
   }
-
-  FALLA_C1_usuarioNoExiste() {
-    const r = decidirLogin({ usuario: null, passwordOk: false, roles: [] })
-    expect(r.status).toBe(200)
-  }
-
-  FALLA_C5_dashboardIncorrecto() {
-    expect(dashboardParaUsuario(['estudiante'])).toBe('/dashboard-admin')
-  }
-
-  FALLA_C9_errorInterno() {
-    const r = decidirLogin({
-      usuario: usuarioActivo,
-      passwordOk: true,
-      roles: ['estudiante'],
-      errorInterno: true,
-    })
-    expect(r.status).toBe(200)
-  }
 }
 
 const pruebas = new RQ2Login()
@@ -124,8 +105,4 @@ describe('RQ2 — Login', () => {
   it('C8: body inválido → 400', () => pruebas.C8_bodyInvalido())
   it('C9: error interno → 500', () => pruebas.C9_errorInterno())
   it('C10: docente se normaliza a profesor', () => pruebas.C10_docenteSeNormaliza())
-  it('FALLA C1: usuario no existe — se espera (mal) 200 en vez de 401', () =>
-    pruebas.FALLA_C1_usuarioNoExiste())
-  it('FALLA C5: dashboard incorrecto', () => pruebas.FALLA_C5_dashboardIncorrecto())
-  it('FALLA C9: error interno — se espera (mal) 200 en vez de 500', () => pruebas.FALLA_C9_errorInterno())
 })
