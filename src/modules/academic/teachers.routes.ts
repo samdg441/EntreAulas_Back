@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
-import { EvaluationRequest, EvaluationResponse } from '../../types/evaluationTypes'
+
 
 const router = Router()
 
