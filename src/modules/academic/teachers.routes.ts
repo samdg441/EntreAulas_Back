@@ -13,7 +13,7 @@ const teacherIdSchema = z.union([
   z
     .string()
     .regex(/^\d+$/, 'ID de profesor inválido')
-    .refine((s) => parseInt(s, 10) > 0, 'ID de profesor inválido'),
+    .refine((s) => Number.parseInt(s, 10) > 0, 'ID de profesor inválido'),
 ])
 
 const evaluationSchema = z.object({
@@ -22,7 +22,7 @@ const evaluationSchema = z.object({
     z.string().uuid('ID de curso inválido (UUID)'),
     z
       .string()
-      .transform((val) => parseInt(val, 10))
+      .transform((val) => Number.parseInt(val, 10))
       .pipe(z.number().int().positive('ID de curso inválido (número)')),
   ]),
   groupId: z.string().optional(),
@@ -509,7 +509,7 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
     } = validatedData
 
     // Asegurar que courseId sea un número para las consultas de BD
-    const numericCourseId = typeof courseId === 'string' ? parseInt(courseId, 10) : courseId
+    const numericCourseId = typeof courseId === 'string' ? Number.parseInt(courseId, 10) : courseId
 
     console.log('🔍 Backend: Saving evaluation:', {
       teacherId,
@@ -934,7 +934,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
       .order('orden', { ascending: true });
 
     if (careerId && careerId !== 'null') {
-      query = query.eq('id_carrera', parseInt(careerId));
+      query = query.eq('id_carrera', Number.parseInt(careerId));
     } else {
       query = query.is('id_carrera', null);
     }
@@ -1000,7 +1000,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
     console.log('✅ Backend: Survey questions found for career:', careerId, 'Count:', questionsFormatted.length);
 
     res.json({
-      careerId: careerId ? parseInt(careerId) : null,
+      careerId: careerId ? Number.parseInt(careerId) : null,
       career: carreraInfo,
       questions: questionsFormatted
     })
