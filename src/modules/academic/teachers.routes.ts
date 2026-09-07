@@ -425,7 +425,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
       .from('asignaciones_profesor')
       .select('id, profesor_id, curso_id, grupo_id, activa')
       .eq('profesor_id', profesorId)
-      .eq('curso_id', isNaN(numericCourseId) ? courseId : numericCourseId)
+      .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
       .eq('activa', true)
     if (asignsErr) {
       console.error('❌ Backend: Error consultando asignaciones_profesor:', asignsErr)
@@ -460,7 +460,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
         const { data: gruposPorUsuario, error: gruposUsuarioErr } = await SupabaseDB.supabaseAdmin
           .from('grupos')
           .select('id, numero_grupo, horario, aula, curso_id, profesor_id')
-          .eq('curso_id', isNaN(numericCourseId) ? courseId : numericCourseId)
+          .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
           .eq('profesor_id', profRow.usuario_id)
         if (!gruposUsuarioErr && gruposPorUsuario?.length) {
           console.log('✅ Encontrados grupos usando usuario_id del profesor')
@@ -474,7 +474,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
       const { data: gruposPorCurso, error: gruposCursoError } = await SupabaseDB.supabaseAdmin
         .from('grupos')
         .select('id, numero_grupo, horario, aula, curso_id')
-        .eq('curso_id', isNaN(numericCourseId) ? courseId : numericCourseId)
+        .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
       if (gruposCursoError) {
         console.error('❌ Backend: Error consultando grupos por curso:', gruposCursoError)
         return res.status(500).json({ error: 'Error consultando grupos del curso', details: gruposCursoError })
@@ -797,7 +797,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
     console.log('✅ Backend: Questions found for course:', curso.nombre, 'Career ID:', carreraId, 'Count:', questionsFormatted.length);
 
     res.json({
-      courseId: parseInt(courseId),
+      courseId: Number.parseInt(courseId),
       courseCode: curso.codigo,
       courseName: curso.nombre,
       carreraId: carreraId != null ? Number(carreraId) : null,
