@@ -292,15 +292,15 @@ export class TeachersAnalyticsService {
     respuestasRating.forEach((respuesta: any) => {
       const tipo = preguntaTipo[respuesta.pregunta_id]
       const valorRaw = respuesta.respuesta ?? respuesta.respuesta_rating ?? respuesta.respuesta_texto
-      if ((tipo === 'likert' || tipo == null) && !isNaN(parseInt(valorRaw))) {
-        sumaTotal += parseInt(valorRaw)
+      if ((tipo === 'likert' || tipo == null) && !Number.isNaN(Number.parseInt(valorRaw))) {
+        sumaTotal += Number.parseInt(valorRaw)
         cantidadRespuestas++
       }
     })
 
     const promedio = cantidadRespuestas > 0 ? (sumaTotal / cantidadRespuestas).toFixed(2) : null
     return {
-      promedio: promedio ? parseFloat(promedio) : null,
+      promedio: promedio ? Number.parseFloat(promedio) : null,
       total_respuestas: cantidadRespuestas,
       total_evaluaciones: evaluaciones.length,
     }
