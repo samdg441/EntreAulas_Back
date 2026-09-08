@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'crypto' 
 import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
@@ -41,6 +41,7 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
     }
 
     // Grupos con curso_id (+ posibles columnas de profesor/asignación según esquema)
+    let gruposList: any[] = []
     const { data: grupos, error: gruposError } = await SupabaseDB.supabaseAdmin
       .from('grupos')
       .select('id, curso_id, profesor_id, asignacion_profesor_id')
@@ -56,25 +57,13 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
         console.error('Error grupos en batch (fallback):', respFallback.error)
         return res.status(500).json({ error: 'Error obteniendo grupos', details: respFallback.error.message })
       }
-      // @ts-ignore
-      ;(respFallback as any).data && (gruposError as any) // noop, solo para mantener estructura mental
-      // @ts-ignore
-      ;(grupos as any) // noop
-      // usaremos más abajo el resultado del fallback
-      // (nota: para simplicidad, reasignamos con una variable)
-      // eslint-disable-next-line no-inner-declarations
-      const gruposListFallback = respFallback.data || []
-      // Reemplazar el resultado original
-      // @ts-ignore
-      ;(req as any).__gruposListFallback = gruposListFallback
+      gruposList = respFallback.data || []
     } else if (gruposError) {
       console.error('Error grupos en batch:', gruposError)
       return res.status(500).json({ error: 'Error obteniendo grupos', details: gruposError.message })
+    } else {
+      gruposList = grupos || []
     }
-
-    // Tomar grupos desde fallback si aplica
-    // @ts-ignore
-    const gruposList = ((req as any).__gruposListFallback as any[]) || (grupos || [])
     const grupoById = new Map(gruposList.map((g: any) => [g.id, g]))
 
     // Seguridad: si el request viene de un coordinador, solo permitir grupos de su carrera
@@ -233,7 +222,7 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
 
     const { to, subject, message, grupoIds } = req.body || {}
     const email = String(to || '').trim()
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const emailRegex = /^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{1,63}$/
     if (!email || !emailRegex.test(email)) {
       return res.status(400).json({ error: 'Correo de destino inválido.' })
     }
@@ -294,8 +283,10 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
       return res.status(403).json({ error: 'Los grupos seleccionados no pertenecen a tu carrera.' })
     }
 
-    const appBaseUrl =
-      String(process.env.FRONTEND_URL || process.env.VITE_PUBLIC_APP_URL || 'http://localhost:5173').replace(/\/+$/, '')
+    let appBaseUrl = String(process.env.FRONTEND_URL || process.env.VITE_PUBLIC_APP_URL || 'http://localhost:5173')
+    while (appBaseUrl.endsWith('/')) {
+      appBaseUrl = appBaseUrl.slice(0, -1)
+    }
 
     const links = filteredRows.map((r: any) => {
       const curso = Array.isArray(r.curso) ? r.curso[0] : r.curso

@@ -6,6 +6,8 @@ export type ResultadoQr =
       data: { profesorId: unknown; cursoId: unknown; grupoId: unknown }
     }
 
+type Relacion<T> = T | T[] | null | undefined
+
 /**
  * Decide si un token QR se puede usar. Lo llama GET /qr-evaluaciones/:token
  * después de consultar la fila (o con el resultado vacío).
@@ -35,17 +37,21 @@ export function resolverEvaluacionQr(params: {
   }
 }
 
-function uno<T>(valor: T | T[] | null | undefined): T | undefined {
+function uno<T>(valor: Relacion<T>): T | undefined {
   if (Array.isArray(valor)) return valor[0]
   return valor ?? undefined
 }
 
+function texto(valor: unknown): string {
+  return typeof valor === 'string' ? valor : ''
+}
+
 export function mapearRespuestaQr(row: Record<string, unknown>) {
-  const prof = uno(row.profesor as Record<string, unknown> | Record<string, unknown>[] | undefined)
-  const usu = uno(prof?.usuario as Record<string, unknown> | Record<string, unknown>[] | undefined)
-  const curso = uno(row.curso as Record<string, unknown> | Record<string, unknown>[] | undefined)
-  const grupo = uno(row.grupo as Record<string, unknown> | Record<string, unknown>[] | undefined)
-  const profesorNombre = `${String(usu?.nombre ?? '')} ${String(usu?.apellido ?? '')}`.trim()
+  const prof = uno(row.profesor as Relacion<Record<string, unknown>>)
+  const usu = uno(prof?.usuario as Relacion<Record<string, unknown>>)
+  const curso = uno(row.curso as Relacion<Record<string, unknown>>)
+  const grupo = uno(row.grupo as Relacion<Record<string, unknown>>)
+  const profesorNombre = `${texto(usu?.nombre)} ${texto(usu?.apellido)}`.trim()
   return {
     profesorId: row.profesor_id,
     cursoId: row.curso_id,

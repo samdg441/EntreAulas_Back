@@ -1,6 +1,6 @@
 import type { ResultadoRegla } from './auth'
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const EMAIL_REGEX = /^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{1,63}$/
 
 export function parsearGrupoIds(grupoIds: unknown): ResultadoRegla<{ ids: number[] }> {
   if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
