@@ -1,8 +1,8 @@
-sonar.projectKey=EntreAulas-Backend_Refactor
+sonar.projectKey=Nombre proyecto
 #Coloquen el nombre del proyecto que cada uno de ustedes creó en sonarqube
-sonar.projectName=EntreAulas-Backend_Refactor
+sonar.projectName=Nombre proyecto
 #Coloquen el nombre del proyecto que cada uno de ustedes creó en sonarqube
-sonar.host.url=http://localhost:9000
+sonar.host.url=http://localhost:xxxx (como este en docker)
 sonar.sourceEncoding=UTF-8
 
 sonar.sources=src
