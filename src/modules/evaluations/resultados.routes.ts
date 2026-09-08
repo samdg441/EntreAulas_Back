@@ -19,8 +19,8 @@ router.get(
       if (req.user.tipo_usuario === 'profesor') {
         filters.profesor_id = req.user.id
       }
-      if (periodo_id) filters.periodo_id = parseInt(periodo_id as string)
-      if (grupo_id) filters.grupo_id = parseInt(grupo_id as string)
+      if (periodo_id) filters.periodo_id = Number.parseInt(periodo_id as string)
+      if (grupo_id) filters.grupo_id = Number.parseInt(grupo_id as string)
 
       const evaluaciones = await evaluationsService.getCompletedResults(filters)
       res.json(evaluaciones)
@@ -42,8 +42,8 @@ router.get(
       if (req.user.tipo_usuario === 'profesor') {
         filters.profesor_id = req.user.id
       }
-      if (periodo_id) filters.periodo_id = parseInt(periodo_id as string)
-      if (grupo_id) filters.grupo_id = parseInt(grupo_id as string)
+      if (periodo_id) filters.periodo_id = Number.parseInt(periodo_id as string)
+      if (grupo_id) filters.grupo_id = Number.parseInt(grupo_id as string)
 
       const estadisticas = await evaluationsService.getRatingStatistics(filters)
       res.json(estadisticas)
