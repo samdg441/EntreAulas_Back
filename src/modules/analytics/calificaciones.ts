@@ -25,16 +25,35 @@ export function resumenMetricas(
   }
 }
 
+export type PartesPeriodo = { year: number; semester: 1 | 2 }
+
 export function esPeriodoValido(period: string): boolean {
   return /^\d{4}-[12]$/.test(String(period).trim())
 }
 
+/** Año y semestre (1|2) si el valor es YYYY-1 o YYYY-2. */
+export function partesPeriodo(period: unknown): PartesPeriodo | null {
+  const raw = String(period ?? '').trim()
+  if (!esPeriodoValido(raw)) return null
+  const [year, semester] = raw.split('-')
+  return { year: Number(year), semester: Number(semester) as 1 | 2 }
+}
+
 export function rangoFechasPeriodo(period: string): { start: string; end: string } | null {
-  if (!esPeriodoValido(period)) return null
-  const [year, semester] = String(period).split('-')
+  const partes = partesPeriodo(period)
+  if (!partes) return null
+  const { year, semester } = partes
   return {
-    start: `${year}-${semester === '1' ? '01' : '07'}-01`,
-    end: `${year}-${semester === '1' ? '06-30' : '12-31'}`,
+    start: `${year}-${semester === 1 ? '01' : '07'}-01`,
+    end: `${year}-${semester === 1 ? '06-30' : '12-31'}`,
+  }
+}
+
+/** Si el periodo no es válido, usa un rango amplio (reportes “todo”). */
+export function rangoFechasPeriodoOTodo(period: unknown): { start: string; end: string } {
+  return rangoFechasPeriodo(String(period ?? '').trim()) ?? {
+    start: '2020-01-01',
+    end: '2030-12-31',
   }
 }
 

@@ -1,7 +1,14 @@
 import { Router } from 'express'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { AiService } from './ai.service'
-import { fetchOpenTextsByFilters, fetchRatingsByFilters } from './ai-open-texts'
+import { teachersRepository } from '../academic/teachers.repository'
+import { analyticsRepository } from '../analytics/analytics.repository'
+import { partesPeriodo, rangoFechasPeriodo } from '../analytics/calificaciones'
+import {
+  badRequest,
+  forbidden,
+  sendError,
+} from '../../shared/errors'
 
 const router = Router()
 
@@ -10,90 +17,188 @@ router.post('/summarize', authenticateToken, requireRole(['docente', 'profesor',
   try {
     const { texts } = req.body as { texts: string[] }
     if (!Array.isArray(texts) || texts.length === 0) {
-      return res.status(400).json({ error: 'Se requiere un array no vacío en "texts"' })
+      throw badRequest('Se requiere un array no vacío en "texts"')
     }
     const result = await AiService.summarizeOpenResponses(texts)
     res.json(result)
   } catch (error) {
-    console.error('Error en /api/ai/summarize:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
+
+async function fetchOpenTextsByFilters(filters: any): Promise<string[]> {
+  if (!filters.profesor_id) {
+    throw new Error('profesor_id es requerido')
+  }
+
+  // CRÍTICO: El profesor_id que recibimos es un usuario_id, necesitamos obtener el id real de profesores
+  // Buscar en la tabla profesores donde usuario_id = filters.profesor_id
+
+  const profesor = await teachersRepository.findActiveByUsuarioId(filters.profesor_id)
+  if (!profesor) {
+    throw new Error(`No se encontró profesor activo para usuario_id: ${filters.profesor_id}`)
+  }
+
+  const profesorIdReal = profesor.id
+
+  // Usar exactamente la lógica del SQL que funciona:
+  // SELECT ... FROM evaluaciones e INNER JOIN respuestas_evaluacion re ON re.evaluacion_id = e.id
+  // WHERE e.carrera_id = X AND re.respuesta_texto IS NOT NULL ...
+
+  // by-professor: SIEMPRE filtrar por profesor_id real (no por carrera)
+  const evalOpts: {
+    columns: string
+    profesorId: string
+    gte?: string
+    lte?: string
+    periodoId?: string | number
+    grupoId?: string | number
+  } = {
+    columns: 'id',
+    profesorId: profesorIdReal,
+  }
+
+  // IMPORTANTE: Aplicar filtros opcionales SOLO si se proporcionan
+  // Si periodo_id no viene, buscar TODAS las evaluaciones de la carrera (como en el SQL que funciona)
+  if (filters.periodo_gte && filters.periodo_lte) {
+    evalOpts.gte = filters.periodo_gte
+    evalOpts.lte = filters.periodo_lte
+  } else if (filters.periodo_id !== undefined && filters.periodo_id !== null) {
+    evalOpts.periodoId = filters.periodo_id
+  }
+
+  if (filters.grupo_id !== undefined && filters.grupo_id !== null) {
+    evalOpts.grupoId = filters.grupo_id
+  }
+
+  const evaluaciones = await analyticsRepository.listEvaluaciones(evalOpts)
+
+  const evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
+
+  if (evaluacionIds.length === 0) {
+    return []
+  }
+
+  // Paso 3: Buscar respuestas usando los IDs de evaluaciones (simulando el INNER JOIN)
+  const respuestas = await analyticsRepository.listRespuestasTextoByEvaluacionIds(evaluacionIds)
+
+  // Paso 4: Aplicar filtros exactamente como el SQL:
+  // - respuesta_texto IS NOT NULL (ya filtrado)
+  // - TRIM(respuesta_texto) != ''
+  // - LENGTH(TRIM(respuesta_texto)) >= 3
+  const texts: string[] = []
+
+  for (const r of respuestas || []) {
+    const respuesta = r?.respuesta_texto
+
+    if (respuesta) {
+      const texto = String(respuesta).trim()
+
+      // Aplicar los mismos filtros que el SQL:
+      // TRIM(respuesta_texto) != '' Y LENGTH(TRIM(respuesta_texto)) >= 3
+      if (texto.length > 0 && texto.length >= 3) {
+        texts.push(texto)
+      }
+    }
+  }
+
+  return texts
+}
+
+async function fetchRatingsByFilters(filters: any): Promise<number[]> {
+  if (!filters.profesor_id) {
+    throw new Error('profesor_id es requerido')
+  }
+
+  const profesor = await teachersRepository.findActiveByUsuarioId(filters.profesor_id)
+  if (!profesor) {
+    throw new Error(`No se encontró profesor activo para usuario_id: ${filters.profesor_id}`)
+  }
+
+  const evalOpts: {
+    columns: string
+    profesorId: string
+    gte?: string
+    lte?: string
+    periodoId?: string | number
+    grupoId?: string | number
+  } = {
+    columns: 'id',
+    profesorId: profesor.id,
+  }
+
+  if (filters.periodo_gte && filters.periodo_lte) {
+    evalOpts.gte = filters.periodo_gte
+    evalOpts.lte = filters.periodo_lte
+  } else if (filters.periodo_id !== undefined && filters.periodo_id !== null) {
+    evalOpts.periodoId = filters.periodo_id
+  }
+  if (filters.grupo_id !== undefined && filters.grupo_id !== null) {
+    evalOpts.grupoId = filters.grupo_id
+  }
+
+  const evaluaciones = await analyticsRepository.listEvaluaciones(evalOpts)
+
+  const evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
+  if (evaluacionIds.length === 0) return []
+
+  const respuestas = await analyticsRepository.listRespuestasByEvaluacionIds(
+    evaluacionIds,
+    'respuesta_rating'
+  )
+  return (respuestas || [])
+    .map((r: any) => Number(r.respuesta_rating))
+    .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 5)
+}
 
 // GET /api/ai/summarize/by-professor?profesor_id=...&periodo_id=... (puede ser número o formato YYYY-X)
 router.get('/summarize/by-professor', authenticateToken, requireRole(['docente', 'profesor', 'coordinador', 'decano', 'admin']), async (req: any, res) => {
   try {
     const { profesor_id, periodo_id, grupo_id } = req.query
-    console.log('📥 [by-professor] Request recibido:', { profesor_id, periodo_id, grupo_id, user: req.user?.id })
-    
+
     if (!profesor_id) {
-      console.error('❌ [by-professor] profesor_id es requerido')
-      return res.status(400).json({ error: 'profesor_id es requerido' })
+      throw badRequest('profesor_id es requerido')
     }
 
     const filters: any = { profesor_id: String(profesor_id) }
-    
+
     // Si periodo_id es formato YYYY-X, aplicar rango de fechas para robustez.
     // También se intenta resolver periodo_id numérico para compatibilidad.
     if (periodo_id) {
-      const periodoStr = String(periodo_id)
-      if (periodoStr.includes('-')) {
-        const [year, sem] = periodoStr.split('-')
-        const startDate = `${year}-${sem === '1' ? '01' : '07'}-01`
-        const endDate = `${year}-${sem === '1' ? '06-30' : '12-31'}`
-        filters.periodo_gte = startDate
-        filters.periodo_lte = endDate
-
-        // Formato YYYY-X, buscar periodo_id desde la base de datos
-        console.log(`🔍 [by-professor] Buscando periodo_id para: ${periodoStr}`)
-        const { SupabaseDB } = await import('../../config/supabase-only')
-        const { data: periodos, error: periodoError } = await SupabaseDB.supabaseAdmin
-          .from('periodos_academicos')
-          .select('id, ano, semestre')
-          .eq('ano', year)
-          .eq('semestre', sem)
-          .maybeSingle()
-        
-        if (periodoError) {
-          console.error('❌ [by-professor] Error buscando periodo:', periodoError)
-        } else if (periodos?.id) {
-          filters.periodo_id = periodos.id
-          console.log(`✅ [by-professor] Periodo encontrado: ${periodoStr} → id=${periodos.id} (también se usará rango por fecha)`)
-        } else {
-          console.warn(`⚠️ [by-professor] Periodo no encontrado: ${periodoStr}`)
+      const partes = partesPeriodo(periodo_id)
+      if (partes) {
+        const rango = rangoFechasPeriodo(String(periodo_id))
+        if (rango) {
+          filters.periodo_gte = rango.start
+          filters.periodo_lte = rango.end
         }
-      } else {
+        try {
+          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
+          if (periodos?.id) {
+            filters.periodo_id = periodos.id
+          }
+        } catch {
+          // original ignored periodo errors
+        }
+      } else if (!String(periodo_id).includes('-')) {
         filters.periodo_id = Number(periodo_id)
-        console.log(`✅ [by-professor] Periodo ID numérico: ${periodo_id}`)
       }
     }
     if (grupo_id) filters.grupo_id = Number(grupo_id)
 
     // Profesores solo pueden consultarse a sí mismos
     if (req.user?.tipo_usuario === 'profesor' && req.user.id !== String(profesor_id)) {
-      console.warn(`⚠️ [by-professor] Usuario ${req.user.id} intentó acceder a profesor ${profesor_id}`)
-      return res.status(403).json({ error: 'No autorizado' })
+      throw forbidden('No autorizado')
     }
 
-    console.log('🔍 [by-professor] Filtros finales aplicados:', filters)
-    
     // Obtener profesor_id real y carrera_id para el SQL de debug
-    const { SupabaseDB } = await import('../../config/supabase-only')
-    const { data: profesor, error: profError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, carrera_id')
-      .eq('usuario_id', String(profesor_id))
-      .eq('activo', true)
-      .single()
-    
+    const profesor = await teachersRepository.findActiveByUsuarioId(String(profesor_id))
     const profesorIdReal = profesor?.id
     const carreraId = profesor?.carrera_id || null
-    
-    const texts = await fetchOpenTextsByFilters(filters)
-    
-    if (texts.length === 0) {
-      console.warn('⚠️ [by-professor] No se encontraron respuestas abiertas')
 
+    const texts = await fetchOpenTextsByFilters(filters)
+
+    if (texts.length === 0) {
       const ratings = await fetchRatingsByFilters(filters)
       if (ratings.length > 0) {
         const quantitative = AiService.summarizeFromRatings(ratings, 'profesor')
@@ -104,17 +209,17 @@ router.get('/summarize/by-professor', authenticateToken, requireRole(['docente',
           ...quantitative
         })
       }
-      
+
       // Generar SQL para mostrar al usuario usando carrera_id en lugar de profesor_id
-      let sqlWhere = `WHERE 
+      let sqlWhere = `WHERE
   e.carrera_id = ${carreraId}`
       if (filters.periodo_gte && filters.periodo_lte) {
         sqlWhere += `\n  AND e.fecha_creacion BETWEEN '${filters.periodo_gte}' AND '${filters.periodo_lte}'`
       } else if (filters.periodo_id) {
         sqlWhere += `\n  AND e.periodo_id = ${filters.periodo_id}`
       }
-      
-      const sqlCommand = `SELECT 
+
+      const sqlCommand = `SELECT
   e.id AS evaluacion_id,
   e.carrera_id,
   e.profesor_id,
@@ -122,34 +227,26 @@ router.get('/summarize/by-professor', authenticateToken, requireRole(['docente',
   re.respuesta_texto,
   re.respuesta_rating
 FROM evaluaciones e
-INNER JOIN respuestas_evaluacion re 
+INNER JOIN respuestas_evaluacion re
   ON re.evaluacion_id = e.id
 ${sqlWhere}
   AND re.respuesta_texto IS NOT NULL
   AND TRIM(re.respuesta_texto) != ''
   AND LENGTH(TRIM(re.respuesta_texto)) >= 3
 ORDER BY e.id, re.id;`
-      
-      return res.json({ 
-        textsCount: 0, 
+      return res.json({
+        textsCount: 0,
         summary: 'No se encontraron respuestas abiertas para este profesor en el período seleccionado. Verifica en Supabase ejecutando el SQL que aparece en la consola del servidor.',
         topics: [],
         sqlCommand: process.env.NODE_ENV === 'development' ? sqlCommand : undefined
       })
     }
-    
-    console.log(`🤖 [by-professor] Generando resumen IA con ${texts.length} textos...`)
+
     const result = await AiService.summarizeOpenResponses(texts, 'profesor')
-    console.log(`✅ [by-professor] Resumen generado exitosamente`)
-    
+
     res.json({ textsCount: texts.length, ...result })
   } catch (error: any) {
-    console.error('❌ [by-professor] Error:', error)
-    console.error('   Stack:', error.stack)
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
+    return sendError(res, error)
   }
 })
 
@@ -162,67 +259,61 @@ ORDER BY e.id, re.id;`
 router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador', 'decano', 'admin']), async (req: any, res) => {
   try {
     const { periodo_id } = req.query as any
-    const { SupabaseDB } = await import('../../config/supabase-only')
     const { RoleService } = await import('../auth/role.service')
-    
-    console.log('📥 [by-career] Request recibido:', { userId: req.user?.id, periodo_id })
-    
+
     // Paso 1: Obtener carrera_id del coordinador
     const coordinadorInfo = await RoleService.obtenerCoordinadorPorUsuario(req.user.id)
-    
+
     if (!coordinadorInfo || !coordinadorInfo.carrera_id) {
-      console.error('❌ [by-career] No se encontró carrera_id para el coordinador')
-      return res.status(400).json({ 
-        error: 'No se encontró información de carrera para el coordinador',
-        details: 'El usuario no está asociado a una carrera como coordinador'
-      })
+      throw badRequest('No se encontró información de carrera para el coordinador', 'El usuario no está asociado a una carrera como coordinador')
     }
-    
+
     const carreraId = coordinadorInfo.carrera_id
-    console.log(`✅ [by-career] Carrera del coordinador: ${carreraId}`)
-    
+
     // Paso 2: Convertir periodo_id si viene en formato YYYY-X
     let periodoIdNum: number | undefined = undefined
     let periodoDateRange: { gte: string; lte: string } | null = null
     if (periodo_id) {
-      const periodoStr = String(periodo_id)
-      if (periodoStr.includes('-')) {
-        const [year, sem] = periodoStr.split('-')
-        periodoDateRange = {
-          gte: `${year}-${sem === '1' ? '01' : '07'}-01`,
-          lte: `${year}-${sem === '1' ? '06-30' : '12-31'}`
+      const partes = partesPeriodo(periodo_id)
+      if (partes) {
+        const rango = rangoFechasPeriodo(String(periodo_id))
+        if (rango) {
+          periodoDateRange = { gte: rango.start, lte: rango.end }
         }
-        const { data: periodos } = await SupabaseDB.supabaseAdmin
-          .from('periodos_academicos')
-          .select('id')
-          .eq('ano', year)
-          .eq('semestre', sem)
-          .maybeSingle()
-        if (periodos?.id) {
-          periodoIdNum = periodos.id
-          console.log(`✅ [by-career] Periodo convertido: ${periodoStr} → id=${periodoIdNum}`)
+        try {
+          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
+          if (periodos?.id) {
+            periodoIdNum = periodos.id
+          }
+        } catch {
+          // original ignored periodo errors
         }
-      } else {
+      } else if (!String(periodo_id).includes('-')) {
         periodoIdNum = Number(periodo_id)
       }
     }
-    
-    // Paso 3: profesores activos de la carrera
-    const { data: profesores, error: profError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario:usuarios(nombre, apellido)')
-      .eq('carrera_id', carreraId)
-      .eq('activo', true)
 
-    if (profError) {
-      console.error('❌ [by-career] Error buscando profesores por carrera:', profError)
+    // Paso 3: profesores activos de la carrera
+    let profesores: any[]
+    try {
+      profesores = await teachersRepository.listActiveByCareer(carreraId)
+    } catch (profError) {
       throw profError
     }
 
     const profesorIds = (profesores || []).map((p: any) => p.id).filter(Boolean)
     const profesorNombreById = new Map<string, string>()
+    const usuarioIds = (profesores || []).map((p: any) => p.usuario_id).filter(Boolean)
+    let usuarios: any[] = []
+    try {
+      usuarios = await analyticsRepository.getUsuariosByIds(usuarioIds)
+    } catch {
+      usuarios = []
+    }
+    const usuarioById = new Map((usuarios || []).map((u: any) => [String(u.id), u]))
     ;(profesores || []).forEach((p: any) => {
-      const nombre = `${p?.usuario?.nombre || ''} ${p?.usuario?.apellido || ''}`.trim() || `Docente ${p.id}`
+      const u = usuarioById.get(String(p.usuario_id))
+      const nombre = `${u?.nombre || ''} ${u?.apellido || ''}`.trim() || `Docente ${p.id}`
       profesorNombreById.set(String(p.id), nombre)
     })
     if (profesorIds.length === 0) {
@@ -234,40 +325,33 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
     }
 
     // Paso 4: evaluaciones de esos profesores
-    let evaluacionesQuery = SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('id, profesor_id, calificacion_promedio')
-      .in('profesor_id', profesorIds)
-      .eq('completada', true)
-
-    if (periodoIdNum) {
-      evaluacionesQuery = evaluacionesQuery.eq('periodo_id', periodoIdNum)
-    }
-
-    const { data: evaluaciones, error: evalError } = await evaluacionesQuery
-    if (evalError) {
-      console.error('❌ [by-career] Error buscando evaluaciones:', evalError)
+    let evalsArray: any[] = []
+    try {
+      const evaluaciones = await analyticsRepository.listEvaluaciones({
+        columns: 'id, profesor_id, calificacion_promedio',
+        profesorIds,
+        completada: true,
+        ...(periodoIdNum ? { periodoId: periodoIdNum } : {}),
+      })
+      evalsArray = Array.isArray(evaluaciones) ? evaluaciones : []
+    } catch (evalError) {
       throw evalError
     }
-
-    let evalsArray: any[] = Array.isArray(evaluaciones) ? evaluaciones : []
 
     // Fallback: si vino periodo_id pero no hay evaluaciones, intentar por fecha_creacion
     // porque en algunos datos históricos periodo_id viene nulo/inconsistente.
     if (evalsArray.length === 0 && periodoDateRange) {
-      const { data: evalsByDate, error: evalByDateError } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id, calificacion_promedio')
-        .in('profesor_id', profesorIds)
-        .eq('completada', true)
-        .gte('fecha_creacion', periodoDateRange.gte)
-        .lte('fecha_creacion', periodoDateRange.lte)
-
-      if (evalByDateError) {
-        console.error('❌ [by-career] Error en fallback por fecha:', evalByDateError)
-      } else {
+      try {
+        const evalsByDate = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id, calificacion_promedio',
+          profesorIds,
+          completada: true,
+          gte: periodoDateRange.gte,
+          lte: periodoDateRange.lte,
+        })
         evalsArray = Array.isArray(evalsByDate) ? evalsByDate : []
-        console.log(`ℹ️ [by-career] Fallback por fecha aplicado, evaluaciones encontradas: ${evalsArray.length}`)
+      } catch {
+        // original ignored evalByDateError
       }
     }
 
@@ -289,15 +373,7 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
 
     let respuestas: any[] = []
     for (const chunk of chunkArray(evaluacionIds, 150)) {
-      const { data: chunkData, error: chunkError } = await SupabaseDB.supabaseAdmin
-        .from('respuestas_evaluacion')
-        .select('evaluacion_id, respuesta_texto')
-        .in('evaluacion_id', chunk)
-        .not('respuesta_texto', 'is', null)
-      if (chunkError) {
-        console.error('❌ [by-career] Error buscando respuestas abiertas (chunk):', chunkError)
-        throw chunkError
-      }
+      const chunkData = await analyticsRepository.listRespuestasTextoByEvaluacionIds(chunk)
       respuestas.push(...(Array.isArray(chunkData) ? chunkData : []))
     }
 
@@ -345,9 +421,7 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
         ejemplos: data.ejemplos
       }))
       .sort((a, b) => b.menciones - a.menciones)
-    
-    console.log(`✅ [by-career] Encontradas ${texts.length} respuestas válidas de la carrera ${carreraId}`)
-    
+
     if (texts.length === 0) {
       const ratings = evalsArray
         .map((e: any) => Number(e.calificacion_promedio))
@@ -378,7 +452,6 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
         const alertaBajoDesempeno = lowPerformers.length > 0
           ? ` Alerta: se detectaron ${lowPerformers.length} docentes con promedio menor a 4.0; se recomienda revisión y acompañamiento académico.`
           : ' No se detectaron docentes con promedio menor a 4.0 en el período consultado.'
-
         return res.json({
           textsCount: 0,
           ratingsCount: ratings.length,
@@ -394,7 +467,7 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
         })
       }
 
-      const sqlCommand = `SELECT 
+      const sqlCommand = `SELECT
   re.id AS respuesta_id,
   re.evaluacion_id,
   re.respuesta_texto
@@ -412,29 +485,21 @@ AND re.respuesta_texto IS NOT NULL
 AND TRIM(re.respuesta_texto) <> ''
 AND LENGTH(TRIM(re.respuesta_texto)) >= 3
 ORDER BY re.evaluacion_id, re.id;`
-      return res.json({ 
-        textsCount: 0, 
-        summary: 'No se encontraron respuestas abiertas válidas para esta carrera.', 
+      return res.json({
+        textsCount: 0,
+        summary: 'No se encontraron respuestas abiertas válidas para esta carrera.',
         topics: [],
         sqlCommand: process.env.NODE_ENV === 'development' ? sqlCommand : undefined
       })
     }
-    
-    console.log(`✅ [by-career] ${texts.length} respuestas válidas listas para análisis IA`)
-    
+
     // Paso 6: Generar resumen IA con contexto de coordinador (habla en general de todos los profesores)
-    console.log(`🤖 [by-career] Generando resumen IA con ${texts.length} textos (contexto: coordinador)...`)
+
     const result = await AiService.summarizeOpenResponses(texts, 'coordinador')
-    console.log(`✅ [by-career] Resumen generado exitosamente`)
-    
+
     res.json({ textsCount: texts.length, acosoProfesores, ...result })
   } catch (error: any) {
-    console.error('❌ [by-career] Error:', error)
-    console.error('   Stack:', error.stack)
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
+    return sendError(res, error)
   }
 })
 
@@ -444,81 +509,76 @@ ORDER BY re.evaluacion_id, re.id;`
 router.get('/summarize/by-faculty', authenticateToken, requireRole(['decano', 'admin']), async (req: any, res) => {
   try {
     const { periodo_id } = req.query as any
-    const { SupabaseDB } = await import('../../config/supabase-only')
-    
-    console.log('📥 [by-faculty] Request recibido:', { userId: req.user?.id, periodo_id })
-    
+
     // Paso 1: Convertir periodo_id si viene en formato YYYY-X
     let periodoIdNum: number | undefined = undefined
     if (periodo_id) {
-      const periodoStr = String(periodo_id)
-      if (periodoStr.includes('-')) {
-        const [year, sem] = periodoStr.split('-')
-        const { data: periodos } = await SupabaseDB.supabaseAdmin
-          .from('periodos_academicos')
-          .select('id')
-          .eq('ano', Number(year))
-          .eq('semestre', Number(sem))
-          .maybeSingle()
-        if (periodos?.id) {
-          periodoIdNum = periodos.id
-          console.log(`✅ [by-faculty] Periodo convertido: ${periodoStr} → id=${periodoIdNum}`)
+      const partes = partesPeriodo(periodo_id)
+      if (partes) {
+        try {
+          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
+          if (periodos?.id) {
+            periodoIdNum = periodos.id
+          }
+        } catch {
+          // original ignored periodo errors
         }
-      } else {
+      } else if (!String(periodo_id).includes('-')) {
         periodoIdNum = Number(periodo_id)
       }
     }
-    
+
     // Paso 2: Consultar directamente respuestas_evaluacion (igual que tu SQL)
     // Si hay período, obtener evaluacion_ids primero y filtrar
     let evaluacionIds: string[] | undefined = undefined
-    
+
     if (periodoIdNum) {
-      const { data: evaluaciones } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id')
-        .eq('periodo_id', periodoIdNum)
-      
-      evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
-      console.log(`✅ [by-faculty] Filtrando por periodo_id = ${periodoIdNum} (${evaluacionIds.length} evaluaciones)`)
+      try {
+        const evaluaciones = await analyticsRepository.listEvaluaciones({
+          columns: 'id',
+          periodoId: periodoIdNum,
+        })
+        evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
+      } catch {
+        evaluacionIds = []
+      }
     }
-    
+
     // Consultar respuestas_evaluacion directamente (como tu SQL)
-    let query = SupabaseDB.supabaseAdmin
-      .from('respuestas_evaluacion')
-      .select('respuesta_texto')
-      .not('respuesta_texto', 'is', null)
-    
+    let respuestas: any[] = []
     if (evaluacionIds && evaluacionIds.length > 0) {
-      query = query.in('evaluacion_id', evaluacionIds)
+      respuestas = await analyticsRepository.listRespuestasTextoByEvaluacionIds(evaluacionIds)
+    } else {
+      const allEvals = await analyticsRepository.listEvaluaciones({ columns: 'id' })
+      const allIds = (allEvals || []).map((e: any) => e.id)
+      const chunkArray = <T,>(arr: T[], size: number): T[][] => {
+        const out: T[][] = []
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+        return out
+      }
+      for (const chunk of chunkArray(allIds, 150)) {
+        const chunkData = await analyticsRepository.listRespuestasTextoByEvaluacionIds(chunk)
+        respuestas.push(...(Array.isArray(chunkData) ? chunkData : []))
+      }
     }
-    
-    const { data: respuestas, error: respError } = await query
-    
-    if (respError) {
-      console.error('❌ [by-faculty] Error consultando respuestas:', respError)
-      throw respError
-    }
-    
+
     // Paso 3: Aplicar filtros de texto exactamente como tu SQL:
     // TRIM(respuesta_texto) <> '' AND LENGTH(TRIM(respuesta_texto)) > 3
     const texts: string[] = (respuestas || [])
       .map((r: any) => String(r.respuesta_texto || '').trim())
       .filter((texto: string) => texto.length > 0 && texto.length > 3)
-    
-    console.log(`✅ [by-faculty] ${texts.length} respuestas de texto válidas encontradas`)
-    
+
     if (texts.length === 0) {
-      let sqlWhere = `WHERE 
+      let sqlWhere = `WHERE
   respuesta_texto IS NOT NULL
   AND TRIM(respuesta_texto) <> ''
   AND LENGTH(TRIM(respuesta_texto)) > 3`
-      
+
       if (periodoIdNum) {
         sqlWhere += `\n  AND evaluacion_id IN (SELECT id FROM evaluaciones WHERE periodo_id = ${periodoIdNum})`
       }
-      
-      const sqlCommand = `SELECT 
+
+      const sqlCommand = `SELECT
   id AS respuesta_id,
   evaluacion_id,
   pregunta_id,
@@ -527,32 +587,23 @@ router.get('/summarize/by-faculty', authenticateToken, requireRole(['decano', 'a
 FROM respuestas_evaluacion
 ${sqlWhere}
 ORDER BY evaluacion_id, id;`
-      
-      return res.json({ 
-        textsCount: 0, 
-        summary: 'No se encontraron respuestas abiertas válidas para la facultad en el período seleccionado.', 
+      return res.json({
+        textsCount: 0,
+        summary: 'No se encontraron respuestas abiertas válidas para la facultad en el período seleccionado.',
         topics: [],
         sqlCommand: process.env.NODE_ENV === 'development' ? sqlCommand : undefined
       })
     }
-    
+
     // Paso 4: Enviar textos directamente a la IA
-    console.log(`🤖 [by-faculty] Generando resumen IA con ${texts.length} textos...`)
+
     const result = await AiService.summarizeOpenResponses(texts, 'decano')
-    console.log(`✅ [by-faculty] Resumen generado exitosamente`)
-    
+
     res.json({ textsCount: texts.length, ...result })
   } catch (error: any) {
-    console.error('❌ [by-faculty] Error:', error)
-    console.error('   Stack:', error.stack)
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
+    return sendError(res, error)
   }
 })
 
 export default router
-
-
 

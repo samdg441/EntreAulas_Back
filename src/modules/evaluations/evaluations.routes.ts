@@ -1,7 +1,11 @@
 import { Router } from 'express'
 import { EvaluationsController } from './evaluations.controller'
 import { authenticateToken, requireRole } from '../../middleware/auth'
-import { supabaseAdmin } from '../../config/supabase-only'
+import {
+  internal,
+  sendError,
+} from '../../shared/errors'
+import { evaluationsRepository } from './evaluations.repository'
 
 const router = Router()
 
@@ -17,15 +21,10 @@ router.get(
 /** Categorías de pregunta (para armar encuestas). */
 router.get('/categories', async (_req, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('categorias_pregunta')
-      .select('id, nombre, descripcion, orden')
-      .order('orden', { ascending: true })
-    if (error) throw error
+    const data = await evaluationsRepository.listCategorias()
     res.json({ categories: data || [] })
   } catch (e) {
-    console.error('GET /api/evaluations/categories:', e)
-    res.status(500).json({ error: 'Error al listar categorías' })
+    return sendError(res, internal('Error al listar categorías'))
   }
 })
 

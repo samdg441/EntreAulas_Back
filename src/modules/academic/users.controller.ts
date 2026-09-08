@@ -2,6 +2,13 @@ import { Request, Response } from 'express'
 import { academicService } from './academic.service'
 import { authRepository } from '../auth/auth.repository'
 import { hashPassword } from '../../utils/passwordSecurity'
+import {
+  AppError,
+  badRequest,
+  internal,
+  notFound,
+  sendError,
+} from '../../shared/errors'
 
 const ALLOWED_USER_TYPES = [
   'estudiante',
@@ -18,8 +25,7 @@ export class UsersController {
       const users = await academicService.listUsersSummary()
       res.json({ users })
     } catch (e) {
-      console.error('GET /api/users:', e)
-      res.status(500).json({ error: 'Error al listar usuarios' })
+      return sendError(res, e instanceof AppError ? e : internal('Error al listar usuarios'))
     }
   }
 
@@ -29,12 +35,12 @@ export class UsersController {
       const { email, nombre, apellido, tipo_usuario, activo, password } = req.body || {}
 
       if (!id) {
-        return res.status(400).json({ error: 'ID de usuario requerido' })
+        throw badRequest('ID de usuario requerido')
       }
 
       const existing = await authRepository.findUserById(id)
       if (!existing) {
-        return res.status(404).json({ error: 'Usuario no encontrado' })
+        throw notFound('Usuario no encontrado')
       }
 
       const updates: Record<string, unknown> = {}
@@ -43,7 +49,7 @@ export class UsersController {
       if (typeof apellido === 'string' && apellido.trim()) updates.apellido = apellido.trim()
       if (typeof tipo_usuario === 'string') {
         if (!ALLOWED_USER_TYPES.includes(tipo_usuario as (typeof ALLOWED_USER_TYPES)[number])) {
-          return res.status(400).json({ error: 'tipo_usuario inválido' })
+          throw badRequest('tipo_usuario inválido')
         }
         updates.tipo_usuario = tipo_usuario
       }
@@ -51,19 +57,19 @@ export class UsersController {
 
       if (typeof password === 'string' && password.length > 0) {
         if (password.length < 8) {
-          return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
+          throw badRequest('La contraseña debe tener al menos 8 caracteres')
         }
         updates.password = await hashPassword(password)
       }
 
       if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: 'No hay campos para actualizar' })
+        throw badRequest('No hay campos para actualizar')
       }
 
       if (updates.email && updates.email !== existing.email) {
         const conflict = await authRepository.findUserByEmail(String(updates.email))
         if (conflict && conflict.id !== id) {
-          return res.status(400).json({ error: 'El email ya está registrado' })
+          throw badRequest('El email ya está registrado')
         }
       }
 
@@ -80,8 +86,7 @@ export class UsersController {
         },
       })
     } catch (e) {
-      console.error('PUT /api/users/:id:', e)
-      res.status(500).json({ error: 'Error al actualizar usuario' })
+      return sendError(res, e instanceof AppError ? e : internal('Error al actualizar usuario'))
     }
   }
 
@@ -89,17 +94,17 @@ export class UsersController {
     try {
       const { id } = req.params
       if (!id) {
-        return res.status(400).json({ error: 'ID de usuario requerido' })
+        throw badRequest('ID de usuario requerido')
       }
 
       const existing = await authRepository.findUserById(id)
       if (!existing) {
-        return res.status(404).json({ error: 'Usuario no encontrado' })
+        throw notFound('Usuario no encontrado')
       }
 
       // Evitar que un admin se desactive a sí mismo
       if (req.user?.id === id) {
-        return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' })
+        throw badRequest('No puedes desactivar tu propia cuenta')
       }
 
       const user = await academicService.deactivateUser(id)
@@ -115,8 +120,7 @@ export class UsersController {
         },
       })
     } catch (e) {
-      console.error('DELETE /api/users/:id:', e)
-      res.status(500).json({ error: 'Error al desactivar usuario' })
+      return sendError(res, e instanceof AppError ? e : internal('Error al desactivar usuario'))
     }
   }
 
@@ -125,8 +129,7 @@ export class UsersController {
       const facultades = await academicService.getAcademicStructure()
       res.json({ facultades })
     } catch (e) {
-      console.error('GET /api/users/academic-structure:', e)
-      res.status(500).json({ error: 'Error al obtener estructura académica' })
+      return sendError(res, e instanceof AppError ? e : internal('Error al obtener estructura académica'))
     }
   }
 
@@ -135,8 +138,7 @@ export class UsersController {
       const stats = await academicService.getDashboardStats()
       res.json(stats)
     } catch (e) {
-      console.error('GET /api/users/stats:', e)
-      res.status(500).json({ error: 'Error al obtener estadísticas' })
+      return sendError(res, e instanceof AppError ? e : internal('Error al obtener estadísticas'))
     }
   }
 
@@ -144,13 +146,12 @@ export class UsersController {
     try {
       const careerId = Number(req.params.careerId)
       if (!Number.isFinite(careerId)) {
-        return res.status(400).json({ error: 'careerId inválido' })
+        throw badRequest('careerId inválido')
       }
       const grupos = await academicService.getGruposConProfesorByCareer(careerId)
       res.json(grupos)
     } catch (e: any) {
-      console.error('GET /api/users/grupos-by-career:', e)
-      res.status(500).json({ error: 'Error al obtener grupos', details: e?.message })
+      return sendError(res, e instanceof AppError ? e : internal('Error al obtener grupos', e?.message))
     }
   }
 }
