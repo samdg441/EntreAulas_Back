@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { evaluationsService } from './evaluations.service'
+import {
+  sendError,
+} from '../../shared/errors'
+
 
 const router = Router()
 
@@ -23,7 +27,7 @@ router.get(
       res.json(evaluaciones)
     } catch (error) {
       console.error('Error al obtener resultados:', error)
-      res.status(500).json({ error: 'Error interno del servidor' })
+      return sendError(res, error)
     }
   }
 )
@@ -47,7 +51,7 @@ router.get(
       res.json(estadisticas)
     } catch (error) {
       console.error('Error al obtener estadísticas:', error)
-      res.status(500).json({ error: 'Error interno del servidor' })
+      return sendError(res, error)
     }
   }
 )

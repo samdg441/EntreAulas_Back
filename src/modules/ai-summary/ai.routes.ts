@@ -1,6 +1,12 @@
 import { Router } from 'express'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { AiService } from './ai.service'
+import {
+  badRequest,
+  forbidden,
+  sendError,
+} from '../../shared/errors'
+
 
 const router = Router()
 
@@ -9,13 +15,13 @@ router.post('/summarize', authenticateToken, requireRole(['docente', 'profesor',
   try {
     const { texts } = req.body as { texts: string[] }
     if (!Array.isArray(texts) || texts.length === 0) {
-      return res.status(400).json({ error: 'Se requiere un array no vacío en "texts"' })
+      throw badRequest('Se requiere un array no vacío en "texts"')
     }
     const result = await AiService.summarizeOpenResponses(texts)
     res.json(result)
   } catch (error) {
     console.error('Error en /api/ai/summarize:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -234,7 +240,7 @@ router.get('/summarize/by-professor', authenticateToken, requireRole(['docente',
     
     if (!profesor_id) {
       console.error('❌ [by-professor] profesor_id es requerido')
-      return res.status(400).json({ error: 'profesor_id es requerido' })
+      throw badRequest('profesor_id es requerido')
     }
 
     const filters: any = { profesor_id: String(profesor_id) }
@@ -278,7 +284,7 @@ router.get('/summarize/by-professor', authenticateToken, requireRole(['docente',
     // Profesores solo pueden consultarse a sí mismos
     if (req.user?.tipo_usuario === 'profesor' && req.user.id !== String(profesor_id)) {
       console.warn(`⚠️ [by-professor] Usuario ${req.user.id} intentó acceder a profesor ${profesor_id}`)
-      return res.status(403).json({ error: 'No autorizado' })
+      throw forbidden('No autorizado')
     }
 
     console.log('🔍 [by-professor] Filtros finales aplicados:', filters)
@@ -352,10 +358,7 @@ ORDER BY e.id, re.id;`
   } catch (error: any) {
     console.error('❌ [by-professor] Error:', error)
     console.error('   Stack:', error.stack)
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
+    return sendError(res, error)
   }
 })
 
@@ -378,10 +381,7 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
     
     if (!coordinadorInfo || !coordinadorInfo.carrera_id) {
       console.error('❌ [by-career] No se encontró carrera_id para el coordinador')
-      return res.status(400).json({ 
-        error: 'No se encontró información de carrera para el coordinador',
-        details: 'El usuario no está asociado a una carrera como coordinador'
-      })
+      throw badRequest('No se encontró información de carrera para el coordinador', 'El usuario no está asociado a una carrera como coordinador')
     }
     
     const carreraId = coordinadorInfo.carrera_id
@@ -637,10 +637,7 @@ ORDER BY re.evaluacion_id, re.id;`
   } catch (error: any) {
     console.error('❌ [by-career] Error:', error)
     console.error('   Stack:', error.stack)
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
+    return sendError(res, error)
   }
 })
 
@@ -751,10 +748,7 @@ ORDER BY evaluacion_id, id;`
   } catch (error: any) {
     console.error('❌ [by-faculty] Error:', error)
     console.error('   Stack:', error.stack)
-    res.status(500).json({ 
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
+    return sendError(res, error)
   }
 })
 

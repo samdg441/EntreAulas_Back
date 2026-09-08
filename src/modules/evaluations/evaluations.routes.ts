@@ -2,6 +2,11 @@ import { Router } from 'express'
 import { EvaluationsController } from './evaluations.controller'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { supabaseAdmin } from '../../config/supabase-only'
+import {
+  internal,
+  sendError,
+} from '../../shared/errors'
+
 
 const router = Router()
 
@@ -24,8 +29,7 @@ router.get('/categories', async (_req, res) => {
     if (error) throw error
     res.json({ categories: data || [] })
   } catch (e) {
-    console.error('GET /api/evaluations/categories:', e)
-    res.status(500).json({ error: 'Error al listar categorías' })
+    return sendError(res, internal('Error al listar categorías'))
   }
 })
 

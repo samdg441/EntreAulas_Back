@@ -4,6 +4,14 @@ import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
 import { calcularPromedio, esPeriodoValido, rangoFechasPeriodo, resumenMetricas } from './calificaciones'
+import {
+  badRequest,
+  forbidden,
+  internal,
+  notFound,
+  sendError,
+} from '../../shared/errors'
+
 
 const router = Router()
 
@@ -25,7 +33,7 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
 
     if (profesorError || !profesor) {
       console.log('❌ Backend: Profesor not found:', profesorError);
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     console.log('✅ Backend: Profesor found:', profesor);
@@ -46,7 +54,7 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
 
     if (evaluacionesError) {
       console.error('❌ Backend: Error consultando evaluaciones:', evaluacionesError)
-      return res.status(500).json({ error: 'Error consultando evaluaciones', details: evaluacionesError })
+      throw internal('Error consultando evaluaciones', evaluacionesError)
     }
 
     const metricas = resumenMetricas(evaluaciones || [])
@@ -140,7 +148,7 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('❌ Backend: Error al obtener estadísticas del profesor:', error)
     console.error('❌ Backend: Error stack:', (error as any)?.stack)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -212,7 +220,7 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
     let dateFilter: { gte?: string; lte?: string } = {}
     if (period) {
       if (!esPeriodoValido(String(period))) {
-        return res.status(400).json({ error: 'Período inválido. Use YYYY-1 o YYYY-2.' })
+        throw badRequest('Período inválido. Use YYYY-1 o YYYY-2.')
       }
       const rango = rangoFechasPeriodo(String(period))
       if (rango) {
@@ -239,7 +247,7 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
 
     if (evaluacionesError) {
       console.error('❌ Backend: Error consultando evaluaciones históricas:', evaluacionesError)
-      return res.status(500).json({ error: 'Error consultando evaluaciones históricas', details: evaluacionesError })
+      throw internal('Error consultando evaluaciones históricas', evaluacionesError)
     }
 
     // Calcular estadísticas históricas
@@ -321,7 +329,7 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
   } catch (error) {
     console.error('❌ Backend: Error al obtener estadísticas históricas del profesor:', error)
     console.error('❌ Backend: Error stack:', (error as any)?.stack)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -379,7 +387,7 @@ router.get('/course-rating/:professorId/:courseId', async (req, res) => {
     
     if (evalError) {
       console.error('❌ Error obteniendo evaluaciones:', evalError)
-      return res.status(500).json({ error: 'Error obteniendo evaluaciones' })
+      throw internal('Error obteniendo evaluaciones')
     }
     
     console.log(`🔍 Evaluaciones encontradas: ${evaluaciones?.length || 0}`)
@@ -417,7 +425,7 @@ router.get('/course-rating/:professorId/:courseId', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error en /teachers/course-rating:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -429,7 +437,7 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo decanos pueden acceder a estos resultados.' })
+      throw forbidden('Acceso denegado. Solo decanos pueden acceder a estos resultados.')
     }
 
     console.log('🔍 Obteniendo resultados para todas las carreras...')
@@ -450,7 +458,7 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
 
     if (carrerasError) {
       console.error('❌ Error obteniendo carreras:', carrerasError)
-      return res.status(500).json({ error: 'Error obteniendo carreras', details: carrerasError })
+      throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener estadísticas generales de evaluaciones
@@ -474,7 +482,7 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
 
     if (evalError) {
       console.error('❌ Error obteniendo evaluaciones generales:', evalError)
-      return res.status(500).json({ error: 'Error obteniendo evaluaciones', details: evalError })
+      throw internal('Error obteniendo evaluaciones', evalError)
     }
 
     // Procesar datos por carrera
@@ -526,7 +534,7 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
 
   } catch (error) {
     console.error('❌ Error en /teachers/career-results/all:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -539,7 +547,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo decanos pueden acceder a estos resultados.' })
+      throw forbidden('Acceso denegado. Solo decanos pueden acceder a estos resultados.')
     }
 
     console.log(`🔍 Obteniendo resultados para carrera ${careerId}...`)
@@ -559,7 +567,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 
     if (carreraError) {
       console.error('❌ Error obteniendo carrera:', carreraError)
-      return res.status(404).json({ error: 'Carrera no encontrada', details: carreraError })
+      throw notFound('Carrera no encontrada', carreraError)
     }
 
     // Obtener profesores de la carrera
@@ -582,7 +590,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 
     if (profesoresError) {
       console.error('❌ Error obteniendo profesores:', profesoresError)
-      return res.status(500).json({ error: 'Error obteniendo profesores', details: profesoresError })
+      throw internal('Error obteniendo profesores', profesoresError)
     }
 
     // Obtener evaluaciones de la carrera
@@ -612,7 +620,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 
     if (evaluacionesError) {
       console.error('❌ Error obteniendo evaluaciones:', evaluacionesError)
-      return res.status(500).json({ error: 'Error obteniendo evaluaciones', details: evaluacionesError })
+      throw internal('Error obteniendo evaluaciones', evaluacionesError)
     }
 
     // Procesar datos por profesor
@@ -680,7 +688,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 
   } catch (error) {
     console.error('❌ Error en /teachers/career-results/:careerId:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -694,7 +702,7 @@ router.get('/student-stats', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
-      return res.status(403).json({ error: 'Solo los estudiantes pueden acceder a estas estadísticas' })
+      throw forbidden('Solo los estudiantes pueden acceder a estas estadísticas')
     }
 
     // Obtener el ID del estudiante (si no existe, devolver datos en cero para que el dashboard cargue)
@@ -787,7 +795,7 @@ router.get('/student-stats', authenticateToken, async (req: any, res) => {
     res.json(stats)
   } catch (error) {
     console.error('❌ Backend: Error getting student stats:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -802,7 +810,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
     // Verificar que el usuario es un profesor
     if (user.tipo_usuario !== 'profesor') {
-      return res.status(403).json({ error: 'Solo los profesores pueden acceder a estas estadísticas' })
+      throw forbidden('Solo los profesores pueden acceder a estas estadísticas')
     }
 
     // Obtener el ID del profesor
@@ -814,7 +822,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
     if (profesorError || !profesor) {
       console.log('❌ Backend: Error finding teacher:', profesorError);
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     console.log('✅ Backend: Profesor found:', profesor);
@@ -828,7 +836,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
     if (completadasError) {
       console.log('❌ Backend: Error getting completed evaluations:', completadasError);
-      return res.status(500).json({ error: 'Error obteniendo evaluaciones completadas', details: completadasError.message })
+      throw internal('Error obteniendo evaluaciones completadas', completadasError.message)
     }
 
     const evaluacionesArray = Array.isArray(evaluacionesCompletadas) ? evaluacionesCompletadas : []
@@ -842,7 +850,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
     if (gruposError) {
       console.log('❌ Backend: Error getting groups for evaluations:', gruposError);
-      return res.status(500).json({ error: 'Error obteniendo grupos de evaluaciones', details: gruposError.message })
+      throw internal('Error obteniendo grupos de evaluaciones', gruposError.message)
     }
 
     const grupoToCurso = new Map<any, any>()
@@ -865,7 +873,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
     if (cursosError) {
       console.log('❌ Backend: Error getting teacher courses:', cursosError);
-      return res.status(500).json({ error: 'Error obteniendo cursos del profesor', details: cursosError.message })
+      throw internal('Error obteniendo cursos del profesor', cursosError.message)
     }
 
     const cursosActivosSet = new Set((asignacionesActivas || []).map((a: any) => a.curso_id).filter(Boolean))
@@ -879,7 +887,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
     if (cursosInfoError) {
       console.log('❌ Backend: Error getting courses info:', cursosInfoError);
-      return res.status(500).json({ error: 'Error obteniendo información de cursos', details: cursosInfoError.message })
+      throw internal('Error obteniendo información de cursos', cursosInfoError.message)
     }
 
     const cursoById = new Map<any, any>()
@@ -934,7 +942,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
     res.json(stats)
   } catch (error) {
     console.error('❌ Backend: Error getting teacher stats:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -946,7 +954,7 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
     const { period } = req.query
 
     if (user.tipo_usuario !== 'profesor') {
-      return res.status(403).json({ error: 'Solo los profesores pueden acceder a estas estadísticas' })
+      throw forbidden('Solo los profesores pueden acceder a estas estadísticas')
     }
 
     // Obtener ID del profesor por usuario autenticado
@@ -957,7 +965,7 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
       .single()
 
     if (profesorError || !profesor) {
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     // Rango de fechas del período
@@ -979,7 +987,7 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
       .lte('fecha_creacion', dateFilter.lte || '2030-12-31')
 
     if (evaluacionesError) {
-      return res.status(500).json({ error: 'Error consultando evaluaciones del período', details: evaluacionesError })
+      throw internal('Error consultando evaluaciones del período', evaluacionesError)
     }
 
     const totalEvaluaciones = evaluaciones?.length || 0
@@ -1054,7 +1062,7 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
 
     return res.json(stats)
   } catch (error) {
-    return res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -1067,7 +1075,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     const { period, courseId } = req.query
 
     if (user.tipo_usuario !== 'profesor') {
-      return res.status(403).json({ error: 'Solo los profesores pueden acceder a estas estadísticas' })
+      throw forbidden('Solo los profesores pueden acceder a estas estadísticas')
     }
 
     // 1) Profesor
@@ -1077,7 +1085,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
       .eq('usuario_id', user.id)
       .single()
     if (profesorError || !profesor) {
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     // 2) Rango de fechas del período
@@ -1098,7 +1106,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
       .gte('fecha_creacion', dateFilter.gte || '2020-01-01')
       .lte('fecha_creacion', dateFilter.lte || '2030-12-31')
     if (evalError) {
-      return res.status(500).json({ error: 'Error obteniendo evaluaciones', details: evalError })
+      throw internal('Error obteniendo evaluaciones', evalError)
     }
 
     let evalsArray: any[] = Array.isArray(evaluaciones) ? evaluaciones as any[] : []
@@ -1136,7 +1144,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
           .select('evaluacion_id, pregunta_id, valor')
           .in('evaluacion_id', evaluacionIds)
         if (fallback.error) {
-          return res.status(500).json({ error: 'Error obteniendo respuestas', details: fallback.error })
+          throw internal('Error obteniendo respuestas', fallback.error)
         }
         respuestas = Array.isArray(fallback.data) ? fallback.data : []
       }
@@ -1153,7 +1161,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
       .select('id, categoria_id')
       .in('id', preguntaIds)
     if (catPregError) {
-      return res.status(500).json({ error: 'Error obteniendo categorías de preguntas', details: catPregError })
+      throw internal('Error obteniendo categorías de preguntas', catPregError)
     }
     const preguntaToCategoria: any = {}
     ;(Array.isArray(catPreg) ? catPreg : []).forEach((cp: any) => { preguntaToCategoria[cp.id] = cp.categoria_id })
@@ -1187,7 +1195,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
 
     return res.json(result)
   } catch (error) {
-    return res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 

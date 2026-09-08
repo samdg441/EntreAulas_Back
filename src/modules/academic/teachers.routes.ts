@@ -3,7 +3,14 @@ import { z } from 'zod'
 import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
-
+import {
+  badRequest,
+  conflict,
+  forbidden,
+  internal,
+  notFound,
+  sendError,
+} from '../../shared/errors'
 
 const router = Router()
 
@@ -58,7 +65,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
 
       if (estudianteError) {
         console.error('Error obteniendo estudiante por usuario:', estudianteError)
-        return res.status(500).json({ error: 'DB estudiantes', details: estudianteError })
+        throw internal('DB estudiantes', estudianteError)
       }
       if (!estudiante) {
         // El usuario no tiene registro en estudiantes; no hay profesores que mostrar
@@ -73,7 +80,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
 
       if (inscError) {
         console.error('Error consultando inscripciones:', inscError)
-        return res.status(500).json({ error: 'DB inscripciones', details: inscError })
+        throw internal('DB inscripciones', inscError)
       }
 
       const grupoIds = Array.from(new Set((inscripciones || []).map((i: any) => i.grupo_id).filter(Boolean)))
@@ -109,7 +116,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
 
         if (gruposError) {
           console.error('Error consultando grupos:', gruposError)
-          return res.status(500).json({ error: 'DB grupos', details: gruposError })
+          throw internal('DB grupos', gruposError)
         }
         gruposDeEstudiante = gruposDeConsulta || []
 
@@ -165,7 +172,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
             .in('id', asignacionIds)
           if (asgErr) {
             console.error('Error consultando asignaciones para grupos:', asgErr)
-            return res.status(500).json({ error: 'DB asignaciones_profesor', details: asgErr })
+            throw internal('DB asignaciones_profesor', asgErr)
           }
           asignacionById = new Map((asigns || []).map((a: any) => [a.id, a]))
         }
@@ -209,7 +216,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
 
     if (profesoresError) {
       console.error('Error consultando profesores:', profesoresError)
-      return res.status(500).json({ error: 'DB profesores', details: profesoresError })
+      throw internal('DB profesores', profesoresError)
     }
 
     const profesorIds = (profesores || []).map((p: any) => p.id)
@@ -246,7 +253,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
 
     if (asignacionesError) {
       console.error('Error consultando asignaciones (ambos nombres):', asignacionesError)
-      return res.status(500).json({ error: 'DB asignaciones', details: asignacionesError })
+      throw internal('DB asignaciones', asignacionesError)
     }
 
     // Normalizar posibles variantes de nombres de columnas
@@ -287,7 +294,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
           .in('id', carreraIds)
         if (carrerasError) {
           console.error('Error consultando carreras:', carrerasError)
-          return res.status(500).json({ error: 'DB carreras', details: carrerasError })
+          throw internal('DB carreras', carrerasError)
         }
         carreras = carrerasData || []
       }
@@ -389,7 +396,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
     res.json(teachers)
   } catch (error) {
     console.error('Error al obtener profesores:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -413,7 +420,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
 
     if (profesorError || !profesor) {
       console.log('❌ Backend: Profesor not found:', profesorError);
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     console.log('✅ Backend: Profesor found:', profesor);
@@ -429,7 +436,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
       .eq('activa', true)
     if (asignsErr) {
       console.error('❌ Backend: Error consultando asignaciones_profesor:', asignsErr)
-      return res.status(500).json({ error: 'Error consultando asignaciones', details: asignsErr })
+      throw internal('Error consultando asignaciones', asignsErr)
     }
     let gruposFinal: any[] = []
     if (Array.isArray(asigns) && asigns.length > 0) {
@@ -442,7 +449,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
           .in('id', grupoIds)
         if (gruposAsignErr) {
           console.error('❌ Backend: Error consultando grupos por ids:', gruposAsignErr)
-          return res.status(500).json({ error: 'Error consultando grupos', details: gruposAsignErr })
+          throw internal('Error consultando grupos', gruposAsignErr)
         }
         gruposFinal = gruposPorAsign || []
       }
@@ -477,7 +484,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
         .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
       if (gruposCursoError) {
         console.error('❌ Backend: Error consultando grupos por curso:', gruposCursoError)
-        return res.status(500).json({ error: 'Error consultando grupos del curso', details: gruposCursoError })
+        throw internal('Error consultando grupos del curso', gruposCursoError)
       }
       gruposFinal = gruposPorCurso || []
     }
@@ -487,7 +494,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
   } catch (error) {
     console.error('❌ Backend: Error al obtener grupos del curso:', error)
     console.error('❌ Backend: Error stack:', (error as any)?.stack)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -524,7 +531,7 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
       console.log('❌ Backend: User is not a student:', user.tipo_usuario);
-      return res.status(403).json({ error: 'Solo los estudiantes pueden realizar evaluaciones' })
+      throw forbidden('Solo los estudiantes pueden realizar evaluaciones')
     }
 
     // Obtener el ID del estudiante
@@ -537,12 +544,12 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
 
     if (estudianteError) {
       console.log('❌ Backend: Error finding student:', estudianteError);
-      return res.status(404).json({ error: 'Error al buscar el estudiante', details: estudianteError.message })
+      throw notFound('Error al buscar el estudiante', estudianteError.message)
     }
 
     if (!estudiante) {
       console.log('❌ Backend: Student not found for user:', user.id);
-      return res.status(404).json({ error: 'Estudiante no encontrado' })
+      throw notFound('Estudiante no encontrado')
     }
 
     console.log('✅ Backend: Estudiante found:', estudiante);
@@ -559,7 +566,7 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
 
     if (existingEvaluation) {
       console.log('❌ Backend: Evaluation already exists');
-      return res.status(409).json({ error: 'Ya has evaluado a este profesor para este curso y grupo' })
+      throw conflict('Ya has evaluado a este profesor para este curso y grupo')
     }
 
     // Crear la evaluación principal
@@ -584,7 +591,7 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
     if (evaluacionError) {
       console.error('❌ Backend: Error creating evaluation:', evaluacionError);
       console.error('❌ Backend: Evaluation data that failed:', evaluationData);
-      return res.status(500).json({ error: 'Error al guardar la evaluación', details: evaluacionError.message })
+      throw internal('Error al guardar la evaluación', evaluacionError.message)
     }
 
     console.log('✅ Backend: Evaluation created:', evaluacion);
@@ -636,21 +643,16 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
       evaluationId: evaluacion.id
     })
   } catch (error) {
-    // Manejo específico de errores de validación Zod
     if (error instanceof z.ZodError) {
-      console.log('❌ Backend: Validation error:', error.errors);
-      return res.status(400).json({ 
-        error: 'Datos de evaluación inválidos', 
-        details: error.errors.map(err => ({
-          field: err.path.join('.'),
-          message: err.message
-        }))
-      })
+      return sendError(
+        res,
+        badRequest(
+          'Datos de evaluación inválidos',
+          error.errors.map((err) => ({ field: err.path.join('.'), message: err.message }))
+        )
+      )
     }
-    
-    console.error('❌ Backend: Error al guardar evaluación:', error)
-    console.error('❌ Backend: Error stack:', (error as any)?.stack)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -665,7 +667,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
 
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
-      return res.status(403).json({ error: 'Solo los estudiantes pueden acceder a las preguntas de evaluación' })
+      throw forbidden('Solo los estudiantes pueden acceder a las preguntas de evaluación')
     }
 
     // Obtener información del curso para determinar la carrera
@@ -677,7 +679,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
 
     if (cursoError || !curso) {
       console.log('❌ Backend: Curso not found:', cursoError);
-      return res.status(404).json({ error: 'Curso no encontrado' })
+      throw notFound('Curso no encontrado')
     }
 
     console.log('✅ Backend: Curso found:', curso);
@@ -754,7 +756,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
 
     if (preguntasError) {
       console.error('❌ Backend: Error obteniendo preguntas de la DB:', preguntasError);
-      return res.status(500).json({ error: 'Error obteniendo preguntas de evaluación' })
+      throw internal('Error obteniendo preguntas de evaluación')
     }
 
     // Si no hay preguntas específicas para esta carrera, obtener preguntas generales (sin carrera_id)
@@ -779,7 +781,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
 
       if (preguntasGeneralesError) {
         console.error('❌ Backend: Error obteniendo preguntas generales:', preguntasGeneralesError);
-        return res.status(500).json({ error: 'Error obteniendo preguntas de evaluación' })
+        throw internal('Error obteniendo preguntas de evaluación')
       }
 
       questions = preguntasGenerales || [];
@@ -806,7 +808,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
 
   } catch (error) {
     console.error('❌ Backend: Error getting evaluation questions:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -820,7 +822,7 @@ router.get('/student-info', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
-      return res.status(403).json({ error: 'Solo los estudiantes pueden acceder a esta información' })
+      throw forbidden('Solo los estudiantes pueden acceder a esta información')
     }
 
     // Obtener información del estudiante
@@ -836,7 +838,7 @@ router.get('/student-info', authenticateToken, async (req: any, res) => {
 
     if (estudianteError || !estudiante) {
       console.log('❌ Backend: Estudiante not found:', estudianteError);
-      return res.status(404).json({ error: 'Estudiante no encontrado' })
+      throw notFound('Estudiante no encontrado')
     }
 
     console.log('✅ Backend: Estudiante found:', estudiante);
@@ -849,7 +851,7 @@ router.get('/student-info', authenticateToken, async (req: any, res) => {
 
   } catch (error) {
     console.error('❌ Backend: Error getting student info:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -868,7 +870,7 @@ router.get('/teacher-info', authenticateToken, async (req: any, res) => {
                                user.tipo_usuario === 'coordinador';
     
     if (!canAccessAsTeacher) {
-      return res.status(403).json({ error: 'Solo los profesores y coordinadores pueden acceder a esta información' })
+      throw forbidden('Solo los profesores y coordinadores pueden acceder a esta información')
     }
 
     // Obtener información del profesor
@@ -884,7 +886,7 @@ router.get('/teacher-info', authenticateToken, async (req: any, res) => {
 
     if (profesorError || !profesor) {
       console.log('❌ Backend: Profesor not found:', profesorError);
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     console.log('✅ Backend: Profesor found:', profesor);
@@ -897,7 +899,7 @@ router.get('/teacher-info', authenticateToken, async (req: any, res) => {
 
   } catch (error) {
     console.error('❌ Backend: Error getting teacher info:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -916,7 +918,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
                                user.tipo_usuario === 'coordinador';
     
     if (!canAccessAsTeacher) {
-      return res.status(403).json({ error: 'Solo los profesores y coordinadores pueden acceder a esta información' })
+      throw forbidden('Solo los profesores y coordinadores pueden acceder a esta información')
     }
 
     // Obtener preguntas de la encuesta para la carrera específica
@@ -943,7 +945,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
 
     if (preguntasError) {
       console.error('❌ Backend: Error obteniendo preguntas de la DB:', preguntasError);
-      return res.status(500).json({ error: 'Error obteniendo preguntas de evaluación' })
+      throw internal('Error obteniendo preguntas de evaluación')
     }
 
     // Si no hay preguntas específicas para esta carrera, obtener preguntas generales
@@ -968,7 +970,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
 
       if (preguntasGeneralesError) {
         console.error('❌ Backend: Error obteniendo preguntas generales:', preguntasGeneralesError);
-        return res.status(500).json({ error: 'Error obteniendo preguntas de evaluación' })
+        throw internal('Error obteniendo preguntas de evaluación')
       }
 
       questions = preguntasGenerales || [];
@@ -1007,7 +1009,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
 
   } catch (error) {
     console.error('❌ Backend: Error getting survey by career:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -1040,7 +1042,7 @@ router.get('/debug-user', authenticateToken, async (req: any, res) => {
 
     if (usuarioError) {
       console.log('❌ Debug: Error getting user:', usuarioError);
-      return res.status(500).json({ error: 'Error obteniendo usuario', details: usuarioError })
+      throw internal('Error obteniendo usuario', usuarioError)
     }
 
     // Buscar si es profesor
@@ -1067,7 +1069,7 @@ router.get('/debug-user', authenticateToken, async (req: any, res) => {
 
   } catch (error) {
     console.error('❌ Debug: Error:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -1128,7 +1130,7 @@ router.get('/debug-auth', async (req: any, res) => {
 
   } catch (error) {
     console.error('❌ Debug Auth: Error:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -1143,7 +1145,7 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea coordinador o decano
     if (!user.roles?.includes('coordinador') && !user.roles?.includes('decano') && user.tipo_usuario !== 'coordinador') {
-      return res.status(403).json({ error: 'Acceso denegado. Solo coordinadores y decanos pueden ver esta información.' })
+      throw forbidden('Acceso denegado. Solo coordinadores y decanos pueden ver esta información.')
     }
 
     // 1) Traer profesores activos de la carrera directamente por columna profesores.carrera_id
@@ -1169,7 +1171,7 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
 
     if (profesErr) {
       console.error('Error consultando profesores por carrera_id:', profesErr)
-      return res.status(500).json({ error: 'Error obteniendo profesores por carrera', details: profesErr })
+      throw internal('Error obteniendo profesores por carrera', profesErr)
     }
 
     console.log(`🔎 Profesores base encontrados para carrera ${careerId}:`, profesBase?.length || 0)
@@ -1299,7 +1301,7 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
     res.json(result)
   } catch (error) {
     console.error('❌ Error en /teachers/by-career:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1313,7 +1315,7 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo el decano puede ver las materias de los profesores.' })
+      throw forbidden('Acceso denegado. Solo el decano puede ver las materias de los profesores.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
@@ -1327,7 +1329,7 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
 
     if (carrerasError) {
       console.error('Error consultando carreras:', carrerasError)
-      return res.status(500).json({ error: 'Error obteniendo carreras', details: carrerasError })
+      throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener profesores de cada carrera con sus materias específicas
@@ -1414,7 +1416,7 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
     res.json(result)
   } catch (error) {
     console.error('❌ Error en /teachers/professor-subjects:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1428,7 +1430,7 @@ router.get('/career-subjects', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo el decano puede ver las materias de las carreras.' })
+      throw forbidden('Acceso denegado. Solo el decano puede ver las materias de las carreras.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
@@ -1442,7 +1444,7 @@ router.get('/career-subjects', authenticateToken, async (req: any, res) => {
 
     if (carrerasError) {
       console.error('Error consultando carreras:', carrerasError)
-      return res.status(500).json({ error: 'Error obteniendo carreras', details: carrerasError })
+      throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener materias de cada carrera
@@ -1488,7 +1490,7 @@ router.get('/career-subjects', authenticateToken, async (req: any, res) => {
     res.json(result)
   } catch (error) {
     console.error('❌ Error en /teachers/career-subjects:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1502,7 +1504,7 @@ router.get('/detailed-faculty', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.' })
+      throw forbidden('Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
@@ -1516,7 +1518,7 @@ router.get('/detailed-faculty', authenticateToken, async (req: any, res) => {
 
     if (carrerasError) {
       console.error('Error consultando carreras:', carrerasError)
-      return res.status(500).json({ error: 'Error obteniendo carreras', details: carrerasError })
+      throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener profesores de cada carrera con información detallada
@@ -1600,7 +1602,7 @@ router.get('/detailed-faculty', authenticateToken, async (req: any, res) => {
     res.json(result)
   } catch (error) {
     console.error('❌ Error en /teachers/detailed-faculty:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1614,7 +1616,7 @@ router.get('/faculty', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.' })
+      throw forbidden('Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
@@ -1629,7 +1631,7 @@ router.get('/faculty', authenticateToken, async (req: any, res) => {
 
     if (carrerasError) {
       console.error('Error consultando carreras:', carrerasError)
-      return res.status(500).json({ error: 'Error obteniendo carreras', details: carrerasError })
+      throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener profesores de cada carrera
@@ -1692,7 +1694,7 @@ router.get('/faculty', authenticateToken, async (req: any, res) => {
     res.json(result)
   } catch (error) {
     console.error('❌ Error en /teachers/faculty:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1706,7 +1708,7 @@ router.get('/all', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.' })
+      throw forbidden('Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.')
     }
 
     // Obtener TODOS los profesores activos de la facultad
@@ -1736,7 +1738,7 @@ router.get('/all', authenticateToken, async (req: any, res) => {
 
     if (profesErr) {
       console.error('Error consultando todos los profesores:', profesErr)
-      return res.status(500).json({ error: 'Error obteniendo profesores', details: profesErr })
+      throw internal('Error obteniendo profesores', profesErr)
     }
 
     console.log(`🔎 Total profesores encontrados en la facultad:`, profesBase?.length || 0)
@@ -1776,7 +1778,7 @@ router.get('/all', authenticateToken, async (req: any, res) => {
     res.json(result)
   } catch (error) {
     console.error('❌ Error en /teachers/all:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1798,7 +1800,7 @@ router.get('/debug-groups/:profesorId/:courseId', authenticateToken, async (req:
 
     if (profesorError) {
       console.error('Error consultando profesor:', profesorError)
-      return res.status(500).json({ error: 'Error consultando profesor' })
+      throw internal('Error consultando profesor')
     }
 
     console.log('🔍 [DEBUG GROUPS] Profesor encontrado:', profesor)
@@ -1811,7 +1813,7 @@ router.get('/debug-groups/:profesorId/:courseId', authenticateToken, async (req:
 
     if (cursoError) {
       console.error('Error consultando curso:', cursoError)
-      return res.status(500).json({ error: 'Error consultando curso' })
+      throw internal('Error consultando curso')
     }
 
     console.log('🔍 [DEBUG GROUPS] Curso encontrado:', curso)
@@ -1837,7 +1839,7 @@ router.get('/debug-groups/:profesorId/:courseId', authenticateToken, async (req:
 
     if (gruposError) {
       console.error('Error consultando grupos:', gruposError)
-      return res.status(500).json({ error: 'Error consultando grupos' })
+      throw internal('Error consultando grupos')
     }
 
     console.log('🔍 [DEBUG GROUPS] Grupos por curso encontrados:', grupos)
@@ -1870,7 +1872,7 @@ router.get('/debug-groups/:profesorId/:courseId', authenticateToken, async (req:
     })
   } catch (error) {
     console.error('❌ Error en debug groups:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1897,7 +1899,7 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
 
     if (profError) {
       console.error('Error consultando profesores:', profError)
-      return res.status(500).json({ error: 'Error consultando profesores' })
+      throw internal('Error consultando profesores')
     }
 
     console.log('🔍 [DEBUG] Profesores encontrados:', profesores?.length || 0)
@@ -1919,7 +1921,7 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
 
     if (asigError) {
       console.error('Error consultando asignaciones:', asigError)
-      return res.status(500).json({ error: 'Error consultando asignaciones' })
+      throw internal('Error consultando asignaciones')
     }
 
     console.log('🔍 [DEBUG] Asignaciones encontradas:', asignaciones?.length || 0)
@@ -1937,7 +1939,7 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
 
     if (cursosError) {
       console.error('Error consultando cursos:', cursosError)
-      return res.status(500).json({ error: 'Error consultando cursos' })
+      throw internal('Error consultando cursos')
     }
 
     console.log('🔍 [DEBUG] Cursos de la carrera encontrados:', cursos?.length || 0)
@@ -1954,7 +1956,7 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
     })
   } catch (error) {
     console.error('❌ Error en debug assignments:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -1968,9 +1970,7 @@ router.get('/careers', authenticateToken, async (req: any, res) => {
     const isAdmin = user.roles?.includes('admin') || user.tipo_usuario === 'admin'
 
     if (!isCoordinador && !isAdmin) {
-      return res.status(403).json({
-        error: 'Acceso denegado. Solo coordinadores o administradores pueden ver esta información.',
-      })
+      throw forbidden('Acceso denegado. Solo coordinadores o administradores pueden ver esta información.')
     }
 
     // Schema seed usa `activa`; algunos entornos pueden tener `activo`
@@ -1988,13 +1988,13 @@ router.get('/careers', authenticateToken, async (req: any, res) => {
 
     if (error) {
       console.error('Error obteniendo carreras:', error)
-      return res.status(500).json({ error: 'Error obteniendo carreras', details: error })
+      throw internal('Error obteniendo carreras', error)
     }
 
     res.json(carreras || [])
   } catch (error) {
     console.error('Error en /teachers/careers:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 // GET /teachers/:teacherId/courses - Obtener cursos de un profesor específico
@@ -2011,7 +2011,7 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
     const isCoordinator = user.roles?.includes('coordinador') || user.tipo_usuario === 'coordinador'
     
     if (!isOwnProfile && !isCoordinator) {
-      return res.status(403).json({ error: 'Acceso denegado. Solo puedes ver tus propios cursos.' })
+      throw forbidden('Acceso denegado. Solo puedes ver tus propios cursos.')
     }
 
     // Primero obtener el profesor_id desde el usuario_id
@@ -2024,7 +2024,7 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
 
     if (profesorError) {
       console.error('Error obteniendo profesor por usuario_id:', profesorError)
-      return res.status(500).json({ error: 'Error obteniendo información del profesor', details: profesorError })
+      throw internal('Error obteniendo información del profesor', profesorError)
     }
 
     if (!profesor) {
@@ -2062,7 +2062,7 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
 
     if (asignError) {
       console.error('Error consultando asignaciones del profesor:', asignError)
-      return res.status(500).json({ error: 'Error obteniendo cursos del profesor', details: asignError })
+      throw internal('Error obteniendo cursos del profesor', asignError)
     }
 
     // Filtrar solo cursos activos y formatear respuesta
@@ -2083,7 +2083,7 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
 
   } catch (error) {
     console.error('❌ Error en /teachers/:teacherId/courses:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -2097,7 +2097,7 @@ router.get('/student-enrolled-subjects', authenticateToken, async (req: any, res
 
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
-      return res.status(403).json({ error: 'Solo los estudiantes pueden acceder a esta información' })
+      throw forbidden('Solo los estudiantes pueden acceder a esta información')
     }
 
     // Obtener el ID del estudiante (si no existe, devolver lista vacía para que el dashboard cargue)
@@ -2201,7 +2201,7 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
 
     // Verificar que el usuario es un profesor
     if (user.tipo_usuario !== 'profesor') {
-      return res.status(403).json({ error: 'Solo los profesores pueden acceder a estos datos' })
+      throw forbidden('Solo los profesores pueden acceder a estos datos')
     }
 
     // Obtener cursos del profesor con información detallada
@@ -2232,7 +2232,7 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
 
     if (cursosError) {
       console.log('❌ Backend: Error getting teacher courses:', cursosError);
-      return res.status(500).json({ error: 'Error al obtener cursos del profesor', details: cursosError.message })
+      throw internal('Error al obtener cursos del profesor', cursosError.message)
     }
 
     // Formatear los datos
@@ -2262,7 +2262,7 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
     res.json(cursosFormateados)
   } catch (error) {
     console.error('❌ Backend: Error getting teacher courses:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -2276,7 +2276,7 @@ router.get('/teacher-id', authenticateToken, async (req: any, res) => {
 
     // Verificar que el usuario es un profesor
     if (user.tipo_usuario !== 'profesor') {
-      return res.status(403).json({ error: 'Solo los profesores pueden acceder a este endpoint' })
+      throw forbidden('Solo los profesores pueden acceder a este endpoint')
     }
 
     // Obtener el ID del profesor
@@ -2288,7 +2288,7 @@ router.get('/teacher-id', authenticateToken, async (req: any, res) => {
 
     if (profesorError || !profesor) {
       console.log('❌ Backend: Error finding teacher:', profesorError);
-      return res.status(404).json({ error: 'Profesor no encontrado' })
+      throw notFound('Profesor no encontrado')
     }
 
     console.log('✅ Backend: Teacher ID found:', profesor.id);
@@ -2296,7 +2296,7 @@ router.get('/teacher-id', authenticateToken, async (req: any, res) => {
     res.json({ teacherId: profesor.id })
   } catch (error) {
     console.error('❌ Backend: Error getting teacher ID:', error)
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 
@@ -2332,7 +2332,7 @@ router.get('/debug-professors', authenticateToken, async (req: any, res) => {
     })
   } catch (error) {
     console.error('❌ Debug error:', error);
-    res.status(500).json({ error: 'Error interno del servidor', details: (error as any)?.message || String(error) })
+    return sendError(res, error)
   }
 })
 

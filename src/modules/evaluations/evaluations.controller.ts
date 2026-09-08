@@ -1,5 +1,21 @@
 import { Request, Response } from 'express'
 import { evaluationsService } from './evaluations.service'
+import { AppError, badRequest, sendError } from '../../shared/errors'
+
+function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
+  if (error instanceof AppError) {
+    return res.status(error.status).json({
+      success: false,
+      error: error.message,
+      message: typeof error.details === 'string' ? error.details : error.message,
+    })
+  }
+  return res.status(500).json({
+    success: false,
+    error: 'Error interno del servidor',
+    message: fallbackMessage,
+  })
+}
 
 export class EvaluationsController {
   static async getQuestionsByCareer(req: Request, res: Response) {
@@ -14,12 +30,7 @@ export class EvaluationsController {
         message: 'Preguntas obtenidas exitosamente',
       })
     } catch (error) {
-      console.error('Error en getQuestionsByCareer:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Error interno del servidor',
-        message: 'No se pudieron obtener las preguntas de evaluación',
-      })
+      return sendEnvelope(res, error, 'No se pudieron obtener las preguntas de evaluación')
     }
   }
 
@@ -32,12 +43,7 @@ export class EvaluationsController {
         message: 'Preguntas obtenidas exitosamente',
       })
     } catch (error) {
-      console.error('Error en getAllQuestions:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Error interno del servidor',
-        message: 'No se pudieron obtener las preguntas de evaluación',
-      })
+      return sendEnvelope(res, error, 'No se pudieron obtener las preguntas de evaluación')
     }
   }
 
@@ -55,12 +61,10 @@ export class EvaluationsController {
       } = req.body
 
       if (!categoria_id || !texto_pregunta || !tipo_pregunta || orden === undefined) {
-        return res.status(400).json({
-          success: false,
-          error: 'Datos incompletos',
-          message:
-            'Faltan campos requeridos: categoria_id, texto_pregunta, tipo_pregunta, orden',
-        })
+        throw badRequest(
+          'Datos incompletos',
+          'Faltan campos requeridos: categoria_id, texto_pregunta, tipo_pregunta, orden'
+        )
       }
 
       const newQuestion = await evaluationsService.createQuestion({
@@ -80,12 +84,7 @@ export class EvaluationsController {
         message: 'Pregunta creada exitosamente',
       })
     } catch (error) {
-      console.error('Error en createQuestion:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Error interno del servidor',
-        message: 'No se pudo crear la pregunta de evaluación',
-      })
+      return sendEnvelope(res, error, 'No se pudo crear la pregunta de evaluación')
     }
   }
 
@@ -93,11 +92,7 @@ export class EvaluationsController {
     try {
       const { id } = req.params
       if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'ID requerido',
-          message: 'Se requiere el ID de la pregunta',
-        })
+        throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
       }
 
       const updatedQuestion = await evaluationsService.updateQuestion(
@@ -110,12 +105,7 @@ export class EvaluationsController {
         message: 'Pregunta actualizada exitosamente',
       })
     } catch (error) {
-      console.error('Error en updateQuestion:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Error interno del servidor',
-        message: 'No se pudo actualizar la pregunta de evaluación',
-      })
+      return sendEnvelope(res, error, 'No se pudo actualizar la pregunta de evaluación')
     }
   }
 
@@ -123,30 +113,17 @@ export class EvaluationsController {
     try {
       const { id } = req.params
       if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'ID requerido',
-          message: 'Se requiere el ID de la pregunta',
-        })
+        throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
       }
 
       const success = await evaluationsService.deactivateQuestion(parseInt(id))
       if (success) {
         res.json({ success: true, message: 'Pregunta desactivada exitosamente' })
       } else {
-        res.status(500).json({
-          success: false,
-          error: 'Error interno del servidor',
-          message: 'No se pudo desactivar la pregunta',
-        })
+        throw new AppError(500, 'Error interno del servidor', 'No se pudo desactivar la pregunta')
       }
     } catch (error) {
-      console.error('Error en deactivateQuestion:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Error interno del servidor',
-        message: 'No se pudo desactivar la pregunta de evaluación',
-      })
+      return sendEnvelope(res, error, 'No se pudo desactivar la pregunta de evaluación')
     }
   }
 
@@ -156,11 +133,7 @@ export class EvaluationsController {
       const carreraIdNumber = carreraId ? parseInt(carreraId) : undefined
 
       if (!categoriaId) {
-        return res.status(400).json({
-          success: false,
-          error: 'ID de categoría requerido',
-          message: 'Se requiere el ID de la categoría',
-        })
+        throw badRequest('ID de categoría requerido', 'Se requiere el ID de la categoría')
       }
 
       const questions = await evaluationsService.getQuestionsByCategoryAndCareer(
@@ -174,12 +147,7 @@ export class EvaluationsController {
         message: 'Preguntas obtenidas exitosamente',
       })
     } catch (error) {
-      console.error('Error en getQuestionsByCategoryAndCareer:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Error interno del servidor',
-        message: 'No se pudieron obtener las preguntas de evaluación',
-      })
+      return sendEnvelope(res, error, 'No se pudieron obtener las preguntas de evaluación')
     }
   }
 
@@ -188,8 +156,7 @@ export class EvaluationsController {
       const evaluaciones = await evaluationsService.getEvaluationsByStudent(req.user.id)
       res.json(evaluaciones)
     } catch (error) {
-      console.error('Error al obtener evaluaciones:', error)
-      res.status(500).json({ error: 'Error interno del servidor' })
+      return sendError(res, error)
     }
   }
 
@@ -198,8 +165,7 @@ export class EvaluationsController {
       const preguntas = await evaluationsService.getAllActiveQuestions()
       res.json(preguntas)
     } catch (error) {
-      console.error('Error al obtener preguntas:', error)
-      res.status(500).json({ error: 'Error interno del servidor' })
+      return sendError(res, error)
     }
   }
 }

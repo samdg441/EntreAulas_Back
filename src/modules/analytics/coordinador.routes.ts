@@ -4,6 +4,14 @@ import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { listGruposConProfesorByCareer } from '../academic/grupos-con-profesor.service'
 import { armarResumenCoordinador, esCoordinador, parsearPaginacion } from './coordinador-resumen'
+import {
+  badRequest,
+  forbidden,
+  internal,
+  notFound,
+  sendError,
+} from '../../shared/errors'
+
 
 const router = Router()
 
@@ -22,17 +30,14 @@ router.get(
       const user = req.user
       const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
       if (!coordinador?.carrera_id) {
-        return res.status(400).json({
-          error: 'No se encontró carrera asociada al coordinador',
-          details: 'El coordinador debe tener una carrera asignada.',
-        })
+        throw badRequest('No se encontró carrera asociada al coordinador', 'El coordinador debe tener una carrera asignada.')
       }
 
       const result = await listGruposConProfesorByCareer(Number(coordinador.carrera_id))
       res.json(result)
     } catch (error: any) {
       console.error('Error GET /coordinador/cursos-con-profesor:', error)
-      res.status(500).json({ error: 'Error interno del servidor', details: error?.message })
+      return sendError(res, error)
     }
   }
 )
@@ -48,15 +53,12 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
     if (!esCoordinador(user)) {
-      return res.status(403).json({ error: 'Solo coordinadores pueden acceder a esta información.' })
+      throw forbidden('Solo coordinadores pueden acceder a esta información.')
     }
 
     const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
     if (!coordinador?.carrera_id) {
-      return res.status(400).json({
-        error: 'No se encontró carrera asociada al coordinador',
-        details: 'El coordinador debe tener una carrera asignada.'
-      })
+      throw badRequest('No se encontró carrera asociada al coordinador', 'El coordinador debe tener una carrera asignada.')
     }
 
     const carreraId = Number(coordinador.carrera_id)
@@ -71,7 +73,7 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
 
     if (cursosError) {
       console.error('Error obteniendo cursos por carrera:', cursosError)
-      return res.status(500).json({ error: 'Error obteniendo cursos', details: cursosError.message })
+      throw internal('Error obteniendo cursos', cursosError.message)
     }
 
     const totalCursos = (cursos || []).length
@@ -84,7 +86,7 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
 
     if (profesoresError) {
       console.error('Error obteniendo profesores por carrera:', profesoresError)
-      return res.status(500).json({ error: 'Error obteniendo profesores', details: profesoresError.message })
+      throw internal('Error obteniendo profesores', profesoresError.message)
     }
 
     const profesoresList = profesores || []
@@ -110,7 +112,7 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
 
     if (usuariosError) {
       console.error('Error obteniendo usuarios de profesores:', usuariosError)
-      return res.status(500).json({ error: 'Error obteniendo usuarios', details: usuariosError.message })
+      throw internal('Error obteniendo usuarios', usuariosError.message)
     }
 
     const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
@@ -121,7 +123,7 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
 
     if (evaluacionesError) {
       console.error('Error obteniendo evaluaciones de profesores:', evaluacionesError)
-      return res.status(500).json({ error: 'Error obteniendo evaluaciones', details: evaluacionesError.message })
+      throw internal('Error obteniendo evaluaciones', evaluacionesError.message)
     }
 
     res.json(armarResumenCoordinador({
@@ -135,7 +137,7 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
     }))
   } catch (error) {
     console.error('Error GET /coordinador/dashboard-summary:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -151,15 +153,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
     if (!user?.roles?.includes('coordinador') && user?.tipo_usuario !== 'coordinador') {
-      return res.status(403).json({ error: 'Solo coordinadores pueden acceder a esta información.' })
+      throw forbidden('Solo coordinadores pueden acceder a esta información.')
     }
 
     const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
     if (!coordinador?.carrera_id) {
-      return res.status(400).json({
-        error: 'No se encontró carrera asociada al coordinador',
-        details: 'El coordinador debe tener una carrera asignada.'
-      })
+      throw badRequest('No se encontró carrera asociada al coordinador', 'El coordinador debe tener una carrera asignada.')
     }
 
     const carreraId = Number(coordinador.carrera_id)
@@ -189,7 +188,7 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
 
     if (profesoresError) {
       console.error('Error obteniendo profesores de carrera para reportes:', profesoresError)
-      return res.status(500).json({ error: 'Error obteniendo profesores', details: profesoresError.message })
+      throw internal('Error obteniendo profesores', profesoresError.message)
     }
 
     let profesorIds = (profesoresActivos || []).map((p: any) => p.id).filter(Boolean)
@@ -232,7 +231,7 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
         .eq('periodo_id', periodId)
       if (evalPeriodError) {
         console.error('Error obteniendo evaluaciones por periodo_id:', evalPeriodError)
-        return res.status(500).json({ error: 'Error obteniendo evaluaciones por período', details: evalPeriodError.message })
+        throw internal('Error obteniendo evaluaciones por período', evalPeriodError.message)
       }
       evalsArray = Array.isArray(evalsByPeriod) ? evalsByPeriod : []
       filterSource = 'periodo_id'
@@ -249,7 +248,7 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
         .lte('fecha_creacion', dateEnd)
       if (evalDateError) {
         console.error('Error obteniendo evaluaciones por fecha:', evalDateError)
-        return res.status(500).json({ error: 'Error obteniendo evaluaciones por fecha', details: evalDateError.message })
+        throw internal('Error obteniendo evaluaciones por fecha', evalDateError.message)
       }
       evalsArray = Array.isArray(evalsByDate) ? evalsByDate : []
       filterSource = 'fecha_creacion'
@@ -784,7 +783,7 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     })
   } catch (error) {
     console.error('Error GET /coordinador/reports-overview:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -796,12 +795,12 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
   try {
     const user = req.user
     if (!user?.roles?.includes('coordinador') && user?.tipo_usuario !== 'coordinador') {
-      return res.status(403).json({ error: 'Solo coordinadores pueden acceder a esta información.' })
+      throw forbidden('Solo coordinadores pueden acceder a esta información.')
     }
 
     const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
     if (!coordinador?.carrera_id) {
-      return res.status(400).json({ error: 'No se encontró carrera asociada al coordinador' })
+      throw badRequest('No se encontró carrera asociada al coordinador')
     }
 
     const carreraId = Number(coordinador.carrera_id)
@@ -823,10 +822,10 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
       .maybeSingle()
 
     if (profesorError) {
-      return res.status(500).json({ error: 'Error obteniendo docente', details: profesorError.message })
+      throw internal('Error obteniendo docente', profesorError.message)
     }
     if (!profesor) {
-      return res.status(404).json({ error: 'Docente no encontrado en la carrera del coordinador' })
+      throw notFound('Docente no encontrado en la carrera del coordinador')
     }
 
     let periodId: number | null = null
@@ -848,7 +847,7 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
         .eq('profesor_id', profesorId)
         .eq('completada', true)
         .eq('periodo_id', periodId)
-      if (error) return res.status(500).json({ error: 'Error obteniendo evaluaciones', details: error.message })
+      if (error) throw internal('Error obteniendo evaluaciones', error.message)
       evalsArray = Array.isArray(data) ? data : []
     }
 
@@ -860,7 +859,7 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
         .eq('completada', true)
         .gte('fecha_creacion', dateStart)
         .lte('fecha_creacion', dateEnd)
-      if (error) return res.status(500).json({ error: 'Error obteniendo evaluaciones por fecha', details: error.message })
+      if (error) throw internal('Error obteniendo evaluaciones por fecha', error.message)
       evalsArray = Array.isArray(data) ? data : []
     }
 
@@ -983,7 +982,7 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     })
   } catch (error) {
     console.error('Error GET /coordinador/profesor-stats/:profesorId:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
