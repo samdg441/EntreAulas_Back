@@ -44,7 +44,7 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const emailRegex = /^[^\s@]+@[^\s@.]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       throw badRequest('Formato de correo electrónico inválido')
     }

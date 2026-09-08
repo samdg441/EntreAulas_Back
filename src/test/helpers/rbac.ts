@@ -5,7 +5,7 @@ export function extraerBearer(authorization: string | undefined): string | null 
 }
 
 export function usuarioPuedeAutenticarse(user: { activo?: boolean } | null | undefined): boolean {
-  return Boolean(user && user.activo)
+  return !!user?.activo
 }
 
 export function usuarioTieneAlgunRol(
