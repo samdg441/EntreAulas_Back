@@ -16,6 +16,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',
+      reporter: ['text', 'lcov'],
+      reportOnFailure: true,
+      all: true,
+      include: [
+        'src/middleware/auth.ts',
+        'src/modules/evaluations/qr-resolucion.ts',
+      ],
       exclude: [
         'coverage/**',
         'dist/**',

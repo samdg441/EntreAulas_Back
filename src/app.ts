@@ -20,6 +20,7 @@ import aiRoutes from './routes/aiRoutes'
 dotenv.config()
 
 export const app = express()
+app.disable('x-powered-by')
 
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || '*',
