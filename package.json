@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:unit": "vitest run src/test/unit",
     "test:integration": "vitest run src/test/integration",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "node scripts/run-coverage.js",
     "test:defects": "vitest run --config vitest.defects.config.mts",
     "test:legacy-auth": "ts-node src/test-supabase-auth.ts",
     "test-connection": "ts-node src/test-backend-frontend-connection.ts",
