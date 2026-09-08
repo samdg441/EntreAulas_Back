@@ -3,6 +3,7 @@ import {
   evaluationsRepository,
 } from './evaluations.repository'
 import type { CreateQuestionInput, PreguntaEvaluacion } from './evaluations.types'
+import { logger } from '../../shared/logger'
 
 export class EvaluationsService {
   constructor(private readonly repo: EvaluationsRepository = evaluationsRepository) {}
@@ -11,7 +12,6 @@ export class EvaluationsService {
     try {
       return await this.repo.getQuestionsByCareer(carreraId)
     } catch (error) {
-      console.error('Error obteniendo preguntas por carrera:', error)
       throw new Error('Error al obtener preguntas de evaluación')
     }
   }
@@ -20,7 +20,6 @@ export class EvaluationsService {
     try {
       return await this.repo.getQuestionsWithCategories()
     } catch (error) {
-      console.error('Error obteniendo todas las preguntas:', error)
       throw new Error('Error al obtener preguntas de evaluación')
     }
   }
@@ -29,7 +28,6 @@ export class EvaluationsService {
     try {
       return await this.repo.getBasicQuestions()
     } catch (error) {
-      console.error('Error obteniendo preguntas básicas:', error)
       throw new Error('Error al obtener preguntas de evaluación')
     }
   }
@@ -42,7 +40,6 @@ export class EvaluationsService {
         activa: true,
       })
     } catch (error) {
-      console.error('Error creando pregunta:', error)
       throw new Error('Error al crear pregunta de evaluación')
     }
   }
@@ -51,7 +48,6 @@ export class EvaluationsService {
     try {
       return await this.repo.updateQuestion(preguntaId, updateData)
     } catch (error) {
-      console.error('Error actualizando pregunta:', error)
       throw new Error('Error al actualizar pregunta de evaluación')
     }
   }
@@ -60,7 +56,7 @@ export class EvaluationsService {
     try {
       return await this.repo.deactivateQuestion(preguntaId)
     } catch (error) {
-      console.error('Error desactivando pregunta:', error)
+      logger.error('Error desactivando pregunta:', error)
       return false
     }
   }
@@ -72,7 +68,6 @@ export class EvaluationsService {
     try {
       return await this.repo.getQuestionsByCategoryAndCareer(categoriaId, carreraId)
     } catch (error) {
-      console.error('Error obteniendo preguntas por categoría y carrera:', error)
       throw new Error('Error al obtener preguntas de evaluación')
     }
   }

@@ -1,10 +1,22 @@
 import { Router } from 'express'
+import { randomUUID } from 'crypto'
 import { randomUUID } from 'crypto' 
 import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
+import { academicRepository } from '../academic/academic.repository'
+import { qrRepository } from './qr.repository'
 import { mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
+import {
+  AppError,
+  badRequest,
+  forbidden,
+  internal,
+  notFound,
+  sendError,
+  unavailable,
+} from '../../shared/errors'
 
 const router = Router()
 
@@ -20,12 +32,12 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
 
     const { grupoIds } = req.body || {}
     if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
-      return res.status(400).json({ error: 'Se requiere grupoIds (array de IDs de grupo).' })
+      throw badRequest('Se requiere grupoIds (array de IDs de grupo).')
     }
 
     const ids = grupoIds.map((id: any) => Number(id)).filter((n: number) => Number.isFinite(n))
     if (ids.length === 0) {
-      return res.status(400).json({ error: 'grupoIds debe contener números válidos.' })
+      throw badRequest('grupoIds debe contener números válidos.')
     }
 
     const isCoordinador = user?.roles?.includes('coordinador') || user?.tipo_usuario === 'coordinador'
@@ -33,9 +45,7 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
     if (isCoordinador) {
       const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
       if (!coordinador?.carrera_id) {
-        return res.status(403).json({
-          error: 'Coordinador sin carrera asignada o no encontrado.',
-        })
+        throw forbidden('Coordinador sin carrera asignada o no encontrado.')
       }
       carreraId = Number(coordinador.carrera_id)
     }
@@ -70,16 +80,11 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
     let allowedCursoIds: Set<number> | null = null
     if (carreraId != null && gruposList.length > 0) {
       const cursoIds = Array.from(new Set(gruposList.map((g: any) => Number(g.curso_id)).filter((n: number) => Number.isFinite(n))))
-      const { data: cursosOk, error: cursosErr } = await SupabaseDB.supabaseAdmin
-        .from('cursos')
-        .select('id')
-        .eq('carrera_id', carreraId)
-        .eq('activo', true)
-        .in('id', cursoIds)
-
-      if (cursosErr) {
-        console.error('Error verificando cursos por carreraId:', cursosErr)
-        return res.status(500).json({ error: 'Error verificando cursos', details: cursosErr.message })
+      let cursosOk: any[] = []
+      try {
+        cursosOk = await academicRepository.listCursosActivosInCareer(carreraId, cursoIds)
+      } catch (cursosErr: any) {
+        throw internal('Error verificando cursos', cursosErr?.message)
       }
 
       allowedCursoIds = new Set((cursosOk || []).map((c: any) => Number(c.id)))
@@ -87,29 +92,14 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
 
     // Asignaciones profesor por grupo (tabla preferida) con fallback a cursos_profesor
     let asignaciones: any[] = []
-    let asigError: any = null
     try {
-      const respA = await SupabaseDB.supabaseAdmin
-        .from('asignaciones_profesor')
-        .select('id, grupo_id, profesor_id, curso_id')
-        .in('grupo_id', ids)
-        .eq('activa', true)
-      asignaciones = respA.data || []
-      asigError = respA.error || null
-    } catch (e) {
-      asigError = e
-    }
-    if (asigError) {
-      console.warn('Fallo asignaciones_profesor en batch; intentando cursos_profesor. Detalle:', asigError)
-      const respB = await SupabaseDB.supabaseAdmin
-        .from('cursos_profesor')
-        .select('id, grupo_id, profesor_id, curso_id')
-        .in('grupo_id', ids)
-      if (respB.error) {
-        console.error('Error cursos_profesor en batch:', respB.error)
-        return res.status(500).json({ error: 'Error obteniendo asignaciones', details: respB.error.message })
+      asignaciones = await academicRepository.listAsignacionesActivasByGrupoIds(ids)
+    } catch {
+      try {
+        asignaciones = await academicRepository.listAsignacionesByGrupoIds(ids)
+      } catch (asigError: any) {
+        throw internal('Error obteniendo asignaciones', asigError?.message)
       }
-      asignaciones = respB.data || []
     }
 
     const asignacionByGrupoId = new Map<number, any>()
@@ -118,15 +108,11 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
     })
 
     // Idempotencia: si ya existe un QR activo para un grupo_id, reutilizar ese token.
-    const { data: existentes, error: existentesErr } = await SupabaseDB.supabaseAdmin
-      .from('qr_evaluaciones')
-      .select('grupo_id, token, profesor_id')
-      .eq('activo', true)
-      .in('grupo_id', ids)
-
-    if (existentesErr) {
-      console.error('Error buscando QRs existentes:', existentesErr)
-      return res.status(500).json({ error: 'Error verificando QRs existentes', details: existentesErr.message })
+    let existentes: any[] = []
+    try {
+      existentes = await qrRepository.listActivosByGrupoIds(ids)
+    } catch (existentesErr: any) {
+      throw internal('Error verificando QRs existentes', existentesErr?.message)
     }
 
     const existingByGrupoId = new Map<number, any>()
@@ -164,13 +150,13 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
 
       // Si el esquema tiene asignacion_profesor_id, intentar resolverlo
       if (!profesorId && (grupo as any)?.asignacion_profesor_id) {
-        const { data: asgRow, error: asgErr } = await SupabaseDB.supabaseAdmin
-          .from('asignaciones_profesor')
-          .select('id, profesor_id')
-          .eq('id', (grupo as any).asignacion_profesor_id)
-          .maybeSingle()
-        if (!asgErr && asgRow?.profesor_id) {
-          profesorId = asgRow.profesor_id
+        try {
+          const asgRow = await academicRepository.findAsignacionByGrupo(grupoId)
+          if (asgRow?.profesor_id) {
+            profesorId = asgRow.profesor_id
+          }
+        } catch {
+          // mismo comportamiento: si falla la resolución, se sigue sin profesorId
         }
       }
 
@@ -192,12 +178,9 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
         row.periodo_id = periodoId
       }
 
-      const { error: insertError } = await SupabaseDB.supabaseAdmin
-        .from('qr_evaluaciones')
-        .insert([row])
-
-      if (insertError) {
-        console.error('Error insert qr_evaluaciones para grupo', grupoId, insertError)
+      try {
+        await qrRepository.insert(row)
+      } catch {
         continue
       }
       created.push({ grupoId, token })
@@ -205,8 +188,7 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
 
     res.status(201).json({ created, skipped })
   } catch (error) {
-    console.error('Error POST /qr-evaluaciones/batch:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -224,52 +206,39 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
     const email = String(to || '').trim()
     const emailRegex = /^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{1,63}$/
     if (!email || !emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Correo de destino inválido.' })
+      throw badRequest('Correo de destino inválido.')
     }
 
     const mailSubject = String(subject || '').trim()
     if (!mailSubject) {
-      return res.status(400).json({ error: 'El asunto es requerido.' })
+      throw badRequest('El asunto es requerido.')
     }
 
     if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
-      return res.status(400).json({ error: 'Se requiere grupoIds (array de IDs de grupo).' })
+      throw badRequest('Se requiere grupoIds (array de IDs de grupo).')
     }
     const ids = Array.from(new Set(grupoIds.map((id: any) => Number(id)).filter((n: number) => Number.isFinite(n))))
     if (ids.length === 0) {
-      return res.status(400).json({ error: 'grupoIds debe contener números válidos.' })
+      throw badRequest('grupoIds debe contener números válidos.')
     }
 
     let carreraId: number | null = null
     if (isCoordinador) {
       const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
       if (!coordinador?.carrera_id) {
-        return res.status(403).json({ error: 'Coordinador sin carrera asignada o no encontrado.' })
+        throw forbidden('Coordinador sin carrera asignada o no encontrado.')
       }
       carreraId = Number(coordinador.carrera_id)
     }
 
-    const { data: rows, error: rowsError } = await SupabaseDB.supabaseAdmin
-      .from('qr_evaluaciones')
-      .select(`
-        grupo_id,
-        token,
-        curso_id,
-        curso:cursos(id, nombre, codigo, carrera_id),
-        grupo:grupos(id, numero_grupo),
-        profesor:profesores(id, usuario:usuarios(nombre, apellido))
-      `)
-      .eq('activo', true)
-      .in('grupo_id', ids)
-
-    if (rowsError) {
-      console.error('Error consultando QRs para share-email:', rowsError)
-      return res.status(500).json({ error: 'Error consultando QRs', details: rowsError.message })
+    let rowsList: any[] = []
+    try {
+      rowsList = await qrRepository.listActivosParaShare(ids)
+    } catch (rowsError: any) {
+      throw internal('Error consultando QRs', rowsError?.message)
     }
-
-    const rowsList = rows || []
     if (rowsList.length === 0) {
-      return res.status(404).json({ error: 'No hay QRs activos para los grupos seleccionados.' })
+      throw notFound('No hay QRs activos para los grupos seleccionados.')
     }
 
     const filteredRows = carreraId == null
@@ -280,7 +249,7 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
         })
 
     if (filteredRows.length === 0) {
-      return res.status(403).json({ error: 'Los grupos seleccionados no pertenecen a tu carrera.' })
+      throw forbidden('Los grupos seleccionados no pertenecen a tu carrera.')
     }
 
     let appBaseUrl = String(process.env.FRONTEND_URL || process.env.VITE_PUBLIC_APP_URL || 'http://localhost:5173')
@@ -330,9 +299,7 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
     `
 
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.SMTP_FROM) {
-      return res.status(503).json({
-        error: 'Servicio de correo no configurado. Faltan variables SMTP en el backend.'
-      })
+      throw unavailable('Servicio de correo no configurado. Faltan variables SMTP en el backend.')
     }
 
     await sendMail({
@@ -348,11 +315,12 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
       totalLinks: links.length
     })
   } catch (error: any) {
-    console.error('Error POST /qr-evaluaciones/share-email:', error)
-    res.status(500).json({
-      error: 'Error enviando el correo',
-      details: error?.message || 'Error interno del servidor'
-    })
+    return sendError(
+      res,
+      error instanceof AppError
+        ? error
+        : internal('Error enviando el correo', error?.message || 'Error interno del servidor')
+    )
   }
 })
 
@@ -365,44 +333,20 @@ router.get('/:token', async (req: any, res) => {
     const { token } = req.params
     if (!token) {
       const r = resolverEvaluacionQr({})
-      if (!r.ok) return res.status(r.status).json({ error: r.error })
+      if (!r.ok) throw new AppError(r.status, r.error)
     }
 
-    const { data: row, error } = await SupabaseDB.supabaseAdmin
-      .from('qr_evaluaciones')
-      .select(`
-        id,
-        token,
-        profesor_id,
-        curso_id,
-        grupo_id,
-        periodo_id,
-        profesor:profesores(
-          id,
-          usuario:usuarios(
-            nombre,
-            apellido
-          )
-        ),
-        curso:cursos(
-          id,
-          nombre,
-          codigo
-        ),
-        grupo:grupos(
-          id,
-          numero_grupo,
-          horario,
-          aula
-        )
-      `)
-      .eq('token', token)
-      .eq('activo', true)
-      .maybeSingle()
+    let row: any = null
+    let errorBd = false
+    try {
+      row = await qrRepository.findActivoByToken(token)
+    } catch {
+      errorBd = true
+    }
 
     const resultado = resolverEvaluacionQr({
       token,
-      errorBd: Boolean(error),
+      errorBd,
       qr: row
         ? {
             activo: true,
@@ -413,13 +357,12 @@ router.get('/:token', async (req: any, res) => {
         : null,
     })
     if (!resultado.ok) {
-      return res.status(resultado.status).json({ error: resultado.error })
+      throw new AppError(resultado.status, resultado.error)
     }
 
     res.json(mapearRespuestaQr(row as Record<string, unknown>))
   } catch (error) {
-    console.error('Error GET /qr-evaluaciones/:token:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -434,54 +377,40 @@ router.post('/:token/auto-enroll', authenticateToken, async (req: any, res) => {
     const user = req.user
 
     if (!token) {
-      return res.status(400).json({ error: 'Token requerido.' })
+      throw badRequest('Token requerido.')
     }
 
     if (!user || user.tipo_usuario !== 'estudiante') {
-      return res.status(403).json({ error: 'Solo los estudiantes pueden matricularse por QR.' })
+      throw forbidden('Solo los estudiantes pueden matricularse por QR.')
     }
 
     // Resolver estudiante por usuario autenticado
-    const { data: estudiante, error: estudianteError } = await SupabaseDB.supabaseAdmin
-      .from('estudiantes')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
+    const estudiante = await academicRepository.findEstudianteByUsuarioId(user.id)
 
-    if (estudianteError || !estudiante) {
-      return res.status(404).json({ error: 'No se encontró registro de estudiante para este usuario.' })
+    if (!estudiante) {
+      throw notFound('No se encontró registro de estudiante para este usuario.')
     }
 
     // Resolver QR activo y grupo destino
-    const { data: qrRow, error: qrError } = await SupabaseDB.supabaseAdmin
-      .from('qr_evaluaciones')
-      .select('id, token, grupo_id, activo')
-      .eq('token', token)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (qrError) {
-      console.error('Error en auto-enroll (qr lookup):', qrError)
-      return res.status(500).json({ error: 'Error resolviendo el QR.' })
+    let qrRow: any = null
+    try {
+      qrRow = await qrRepository.findActivoGrupoByToken(token)
+    } catch {
+      throw internal('Error resolviendo el QR.')
     }
 
     if (!qrRow?.grupo_id) {
-      return res.status(404).json({ error: 'QR inválido o expirado.' })
+      throw notFound('QR inválido o expirado.')
     }
 
     const grupoId = Number(qrRow.grupo_id)
 
     // Buscar inscripción existente
-    const { data: inscExistente, error: inscExistenteError } = await SupabaseDB.supabaseAdmin
-      .from('inscripciones')
-      .select('id, activa')
-      .eq('estudiante_id', estudiante.id)
-      .eq('grupo_id', grupoId)
-      .maybeSingle()
-
-    if (inscExistenteError) {
-      console.error('Error en auto-enroll (existing enrollment):', inscExistenteError)
-      return res.status(500).json({ error: 'Error validando inscripción existente.' })
+    let inscExistente: any = null
+    try {
+      inscExistente = await academicRepository.findInscripcion(estudiante.id, grupoId)
+    } catch {
+      throw internal('Error validando inscripción existente.')
     }
 
     if (inscExistente?.id) {
@@ -495,16 +424,11 @@ router.post('/:token/auto-enroll', authenticateToken, async (req: any, res) => {
       }
 
       // Intentar reactivar inscripción previa
-      const { error: reactivateError } = await SupabaseDB.supabaseAdmin
-        .from('inscripciones')
-        .update({ activa: true })
-        .eq('id', inscExistente.id)
-
-      if (reactivateError) {
-        console.error('Error reactivando inscripción:', reactivateError)
-        return res.status(500).json({ error: 'No se pudo reactivar la inscripción existente.' })
+      try {
+        await academicRepository.reactivateInscripcion(inscExistente.id)
+      } catch {
+        throw internal('No se pudo reactivar la inscripción existente.')
       }
-
       return res.json({
         enrolled: true,
         reactivated: true,
@@ -514,35 +438,11 @@ router.post('/:token/auto-enroll', authenticateToken, async (req: any, res) => {
     }
 
     // Crear inscripción nueva (fallback si el esquema no usa columna activa)
-    let insertError: any = null
-    const insertPayload: any = {
-      estudiante_id: estudiante.id,
-      grupo_id: grupoId,
-      activa: true
+    try {
+      await academicRepository.insertInscripcion(estudiante.id, grupoId)
+    } catch {
+      throw internal('No se pudo crear la inscripción automática.')
     }
-
-    const respInsert = await SupabaseDB.supabaseAdmin
-      .from('inscripciones')
-      .insert([insertPayload])
-      .select('id')
-      .maybeSingle()
-
-    insertError = respInsert.error
-
-    if (insertError && (insertError.code === '42703' || String(insertError?.message || '').includes('activa'))) {
-      const respInsertFallback = await SupabaseDB.supabaseAdmin
-        .from('inscripciones')
-        .insert([{ estudiante_id: estudiante.id, grupo_id: grupoId }])
-        .select('id')
-        .maybeSingle()
-      insertError = respInsertFallback.error
-    }
-
-    if (insertError) {
-      console.error('Error creando inscripción automática por QR:', insertError)
-      return res.status(500).json({ error: 'No se pudo crear la inscripción automática.' })
-    }
-
     return res.status(201).json({
       enrolled: true,
       created: true,
@@ -550,8 +450,7 @@ router.post('/:token/auto-enroll', authenticateToken, async (req: any, res) => {
       grupoId
     })
   } catch (error) {
-    console.error('Error POST /qr-evaluaciones/:token/auto-enroll:', error)
-    return res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 

@@ -1,6 +1,7 @@
 import type { AiSummaryProvider, AiSummaryResult, SummaryContext } from './ai.types'
 import { GeminiSummaryProvider } from './providers/gemini.provider'
 import { LocalSummaryProvider } from './providers/local.provider'
+import { logger } from '../../shared/logger'
 
 export type { AiSummaryResult, SummaryContext } from './ai.types'
 
@@ -239,7 +240,7 @@ export class AiService {
         ? `\nEjemplos detectados:\n- ${ejemplos.join('\n- ')}`
         : ''
       mensajeAcoso = `⚠️ ALERTA: Se detectaron menciones que podrían referirse a situaciones de acoso o comportamiento inapropiado en ${textosConAcoso.length} respuesta(s). Se recomienda revisar estas respuestas inmediatamente y tomar las acciones correspondientes según los protocolos institucionales.${ejemplosTexto}`
-      console.warn('🚨 [AI Service] Posible acoso detectado:', textosConAcoso.length, 'respuesta(s)')
+      logger.warn('Posible acoso detectado:', textosConAcoso.length, 'respuesta(s)')
     }
     
     // Strategy: Gemini → Local (fallback)
@@ -256,10 +257,8 @@ export class AiService {
     for (const provider of providers) {
       result = await provider.summarize(responses, context)
       if (result?.summary) {
-        console.log(`✅ Resumen generado por estrategia: ${provider.name}`)
         break
       }
-      console.log(`📝 Estrategia ${provider.name} no produjo resumen; probando siguiente`)
     }
 
     const combinedTopics = [

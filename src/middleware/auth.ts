@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { SupabaseDB } from '../config/supabase-only'
 import { RoleService } from '../services/roleService'
+import { logger } from '../shared/logger'
 
 /**
  * Verifica JWT en `Authorization: Bearer <token>`.
@@ -11,7 +12,7 @@ import { RoleService } from '../services/roleService'
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
   const secret = process.env.JWT_SECRET
   if (!secret) {
-    console.error('JWT_SECRET no está definido en el entorno')
+    logger.error('JWT_SECRET no está definido en el entorno')
     return res.status(500).json({ error: 'Configuración del servidor incompleta' })
   }
 
@@ -54,7 +55,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({ error: 'Token inválido', code: 'TOKEN_INVALID' })
     }
-    console.error('authenticateToken:', error)
+    logger.error('authenticateToken:', error)
     return res.status(401).json({ error: 'No autorizado' })
   }
 }
