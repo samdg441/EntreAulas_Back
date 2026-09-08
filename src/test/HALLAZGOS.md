@@ -1,6 +1,6 @@
 # Registro de defectos (V&V)
 
-Defectos detectados durante la validación de los requisitos RQ6, RQ14–RQ17 y RQ18–RQ24.
+Defectos detectados durante la validación de los requisitos RQ6, RQ10–RQ13, RQ14–RQ17, RQ18–RQ24, RQ29 y RQ31.
 Cada uno tiene una prueba ejecutable que **falla mientras el defecto siga abierto**.
 
 ```bash
@@ -31,13 +31,20 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | ABIERTO |
 | DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | ABIERTO |
 | DEF-20 | Rol `Coordinador` recibe 403 en el resumen | RQ24 | Media | ABIERTO |
+| DEF-21 | `create-user` acepta `tipo_usuario` inválido | RQ10 | **Alta** | ABIERTO |
+| DEF-22 | Promedio student-stats fuera de escala | RQ11 | **Alta** | ABIERTO |
 | DEF-22 | Rol `Admin` recibe 403 en POST `/batch` | RQ6 | Media | ABIERTO |
+| DEF-23 | Se evalúa un grupo sin inscripción | RQ13 | **Alta** | ABIERTO |
 | DEF-23 | `Estudiante` no puede auto-inscribirse | RQ14 | Media | ABIERTO |
+| DEF-24 | Un docente lee el resumen IA de otro profesor | RQ29 | **Alta** | ABIERTO |
 | DEF-24 | Grupo inexistente se omite en silencio | RQ15 | Media | ABIERTO |
+| DEF-25 | Decano/admin reciben 400 de coordinador en by-career | RQ31 | **Alta** | ABIERTO |
 | DEF-25 | HTML del correo QR no escapa el mensaje | RQ16 | Media | ABIERTO |
 | DEF-26 | GET `/qr-evaluaciones/` vacío responde 404 | RQ17 | Baja | ABIERTO |
 
-Camino fallido por requisito asignado: RQ6 → DEF-22 · RQ14 → DEF-23 · RQ15 → DEF-24 · RQ16 → DEF-25 · RQ17 → DEF-26.
+Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
+
+Camino fallido por requisito asignado: RQ6 → DEF-22 (`DEF-22-rbac-mayusculas`) · RQ14 → DEF-23 (`DEF-23-auto-enroll-mayusculas`) · RQ15 → DEF-24 (`DEF-24-grupo-inexistente-silencioso`) · RQ16 → DEF-25 (`DEF-25-correo-html-sin-escapar`) · RQ17 → DEF-26.
 
 Técnica de detección: análisis de valores límite y particiones de equivalencia
 sobre los parámetros de entrada, y pruebas de consistencia entre endpoints que
@@ -518,6 +525,139 @@ sí se rechazan (esperado).
 **Resultado obtenido.** `403`.
 
 **Corrección propuesta.** Normalizar roles a minúsculas, igual que DEF-05.
+
+---
+
+## DEF-21 — create-user no valida `tipo_usuario`
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ10 — Gestionar usuarios |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-21-create-user-tipo-invalido.test.ts` |
+| Archivo | `src/modules/auth/auth.routes.ts:482` |
+
+**Descripción.** `PUT /api/users/:id` rechaza tipos fuera de `ALLOWED_USER_TYPES`
+(`estudiante`, `profesor`, `docente`, `coordinador`, `admin`, `decano`) con
+`400 tipo_usuario inválido`. `POST /auth/create-user` solo comprueba que el
+campo exista y persiste valores como `superadmin` o `root`.
+
+**Pasos para reproducir.** Admin autenticado; `POST /api/auth/create-user` con
+`tipo_usuario: "superadmin"` y el resto de campos válidos.
+
+**Resultado esperado.** `400 { "error": "tipo_usuario inválido" }` y no se crea
+el usuario.
+**Resultado obtenido.** `201` y el tipo queda persistido.
+
+**Corrección propuesta.** Reutilizar el mismo enum y mensaje que el PUT
+(`users.controller.ts`).
+
+---
+
+## DEF-22 — El promedio de student-stats no se acota a la escala 1–5
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ11 — Evaluaciones del estudiante |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-22-student-stats-promedio-fuera-escala.test.ts` |
+| Archivo | `src/modules/analytics/teachers-analytics.routes.ts:760` |
+| Relacionado | DEF-17 (mismo cálculo en teacher-stats) |
+
+**Descripción.** `GET /teachers/student-stats` hace
+`sum + (e.calificacion_promedio || 0)` sin filtrar rango ni nulos. Un `99`,
+un `-3` o un `null` junto a un `5` distorsionan `promedioGeneral` del dashboard
+del estudiante.
+
+**Resultado esperado.** Promedio en `[1, 5]` (o `0` si no hay calificaciones
+válidas); un `null` no entra en el promedio.
+**Resultado obtenido.** Se publican `99`, `-3` y `2.5`.
+
+**Corrección propuesta.** La misma que DEF-17: filtrar nulos y fuera de 1–5
+antes de promediar.
+
+---
+
+## DEF-23 — Se puede evaluar un grupo sin estar inscrito
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ13 — Enviar evaluación docente |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-23-evaluacion-sin-inscripcion.test.ts` |
+| Archivo | `src/modules/academic/teachers.routes.ts:550` |
+
+**Descripción.** El POST comprueba que el usuario sea estudiante, que exista
+fila en `estudiantes` y que no haya duplicado profesor/grupo/periodo. No consulta
+`inscripciones` ni la asignación del profesor al grupo. Cualquier estudiante
+autenticado puede evaluar cualquier profesor, curso y grupo.
+
+**Pasos para reproducir.** Estudiante autenticado con perfil; body Zod válido
+para un `groupId` en el que no está inscrito.
+
+**Resultado esperado.** `403` y no se inserta la evaluación.
+**Resultado obtenido.** `200` con `evaluationId`.
+
+**Corrección propuesta.** Exigir inscripción activa en el grupo (y, de ser
+posible, que el profesor imparta ese grupo) antes del insert.
+
+---
+
+## DEF-24 — Un docente lee el resumen IA de otro profesor
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ29 — Resumen generado con IA |
+| Severidad | Alta (control de acceso, tipo IDOR) |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-24-docente-resumen-otro-profesor.test.ts` |
+| Archivo | `src/modules/ai-summary/ai.routes.ts:278` |
+| Relacionado | DEF-02 / DEF-06 |
+
+**Descripción.** La guarda “solo puede consultarse a sí mismo” aplica únicamente
+si `tipo_usuario === 'profesor'`. `requireRole` también autoriza `docente`,
+que se salta la comprobación y puede pedir `profesor_id` de otro usuario.
+
+**Pasos para reproducir.** Usuario `tipo_usuario: docente`;
+`GET /api/ai/summarize/by-professor?profesor_id=` de otro docente.
+
+**Resultado esperado.** `403`.
+**Resultado obtenido.** `200` con el resumen ajeno.
+
+**Corrección propuesta.** Aplicar la misma comprobación a `profesor` y `docente`
+(salvo coordinador/decano/admin).
+
+---
+
+## DEF-25 — Decano/admin reciben 400 de coordinador en by-career
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ31 — Recibir alerta de acoso con IA |
+| Severidad | Alta |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-25-decano-by-career-sin-coordinador.test.ts` |
+| Archivo | `src/modules/ai-summary/ai.routes.ts:368` |
+
+**Descripción.** `requireRole(['coordinador', 'decano', 'admin'])` deja pasar a
+decano y admin, pero el handler solo resuelve la carrera con
+`obtenerCoordinadorPorUsuario`. Sin fila en `coordinadores`, responden 400
+aunque envíen `carrera_id` en query.
+
+**Pasos para reproducir.** Usuario decano o admin;
+`GET /api/ai/summarize/by-career?carrera_id=1`.
+
+**Resultado esperado.** `200` (admin/decano eligen carrera; o redirigir a
+`by-faculty`).
+**Resultado obtenido.** `400` “No se encontró información de carrera para el
+coordinador”.
+
+**Corrección propuesta.** Para decano, resolver facultad/carrera de su perfil;
+para admin, aceptar `carrera_id` en query. No reutilizar el mensaje de
+coordinador.
 
 ---
 
