@@ -31,6 +31,80 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
+const VALID_USER_TYPES = ['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano']
+
+
+async function migrarPasswordSiHaceFalta(
+  userId: string,
+  passwordCheck: { migratePlaintextToHash?: string }
+): Promise<void> {
+  if (!passwordCheck.migratePlaintextToHash) return
+  try {
+    const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
+    await authRepository.updateUser(userId, { password: hashedPassword })
+  } catch (updateError) {
+    console.error('Error migrando contraseña a bcrypt:', updateError)
+  }
+}
+
+function tieneRolValido(tipoUsuario: string, roles: string[]): boolean {
+  return (
+    VALID_USER_TYPES.includes(tipoUsuario) ||
+    roles.some((rol) => VALID_USER_TYPES.includes(rol))
+  )
+}
+
+// Normaliza 'docente' a 'profesor' para compatibilidad con el frontend.
+function normalizarTipoUsuario(tipoUsuario: string): string {
+  return tipoUsuario === 'docente' ? 'profesor' : tipoUsuario
+}
+
+function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
+  if (roles.includes('admin')) return 'Administrador del sistema'
+  if (roles.includes('decano')) return 'Decano de la facultad'
+  if (roles.includes('coordinador')) return 'Coordinador del sistema'
+  if (roles.includes('profesor') || roles.includes('docente')) return 'Profesor/Docente del sistema'
+  if (roles.includes('estudiante')) return 'Estudiante del sistema'
+  return roles.length > 1
+    ? `Usuario con múltiples roles: ${roles.join(', ')}`
+    : `Usuario con rol: ${roles[0] || tipoUsuario}`
+}
+
+async function obtenerCoordinadorInfo(
+  roles: string[],
+  userId: string
+): Promise<{ carrera_id: unknown } | null> {
+  if (!roles.includes('coordinador')) return null
+  try {
+    const { RoleService } = await import('./role.service')
+    const info = await RoleService.obtenerCoordinadorPorUsuario(userId)
+    return info ? { carrera_id: info.carrera_id ?? null } : null
+  } catch (e) {
+    console.warn('Error obteniendo info del coordinador:', e)
+    return null
+  }
+}
+
+async function obtenerDecanoInfo(
+  roles: string[],
+  userId: string
+): Promise<Record<string, unknown> | null> {
+  if (!roles.includes('decano')) return null
+  try {
+    const { RoleService } = await import('./role.service')
+    const info = await RoleService.obtenerDecanoPorUsuario(userId)
+    if (!info) return null
+    return {
+      facultad_id: info.facultad_id ?? null,
+      facultad_nombre: info.facultades?.nombre ?? null,
+      fecha_nombramiento: info.fecha_nombramiento
+    }
+  } catch (e) {
+    console.warn('Error obteniendo info del decano:', e)
+    return null
+  }
+}
+
 // POST /auth/register
 router.post('/register', async (req, res) => {
   try {
@@ -112,24 +186,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' })
     }
 
-    if (passwordCheck.migratePlaintextToHash) {
-      try {
-        const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-        await authRepository.updateUser(user.id, { password: hashedPassword })
-      } catch (updateError) {
-        console.error('Error migrando contraseña a bcrypt:', updateError)
-      }
-    }
+    await migrarPasswordSiHaceFalta(user.id, passwordCheck)
 
     const { RoleService } = await import('./role.service')
     const roles = await RoleService.obtenerRolesUsuario(user.id)
 
-    const validUserTypes = ['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano']
-    const tieneRolValido =
-      validUserTypes.includes(user.tipo_usuario) ||
-      roles.some((rol) => validUserTypes.includes(rol))
-
-    if (!tieneRolValido) {
+    if (!tieneRolValido(user.tipo_usuario, roles)) {
       return res.status(401).json({ error: 'Tipo de usuario no válido' })
     }
 
@@ -161,52 +223,19 @@ router.post('/login', async (req, res) => {
     const dashboard = await RoleService.obtenerDashboardUsuario(user.id)
     const permisos = await RoleService.obtenerPermisosUsuario(user.id)
 
-    let coordinadorInfo: any = null
-    try {
-      if (roles.includes('coordinador')) {
-        const info = await RoleService.obtenerCoordinadorPorUsuario(user.id)
-        if (info) {
-          coordinadorInfo = { carrera_id: info.carrera_id ?? null }
-        }
-      }
-    } catch (e) {
-      console.warn('Error obteniendo info del coordinador:', e)
-    }
+    const coordinadorInfo = await obtenerCoordinadorInfo(roles, user.id)
+    const decanoInfo = await obtenerDecanoInfo(roles, user.id)
 
-    let decanoInfo: any = null
-    try {
-      if (roles.includes('decano')) {
-        const info = await RoleService.obtenerDecanoPorUsuario(user.id)
-        if (info) {
-          decanoInfo = {
-            facultad_id: info.facultad_id ?? null,
-            facultad_nombre: info.facultades?.nombre ?? null,
-            fecha_nombramiento: info.fecha_nombramiento
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Error obteniendo info del decano:', e)
-    }
-
-    // Determinar el tipo de usuario para la respuesta
-    let userTypeDisplay = user.tipo_usuario
-    let userRole = user.tipo_usuario
-    
     // Normalizar 'docente' a 'profesor' para compatibilidad
-    if (user.tipo_usuario === 'docente') {
-      userTypeDisplay = 'profesor'
-      userRole = 'profesor'
-    }
+    const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
+    const userRole = userTypeDisplay
 
     // Información adicional según los roles del usuario
-    let additionalInfo: any = {
+    const additionalInfo: any = {
       dashboard: dashboard,
       permissions: permisos,
       roles: roles,
-      role_description: roles.length > 1 ? 
-        `Usuario con múltiples roles: ${roles.join(', ')}` : 
-        `Usuario con rol: ${roles[0] || user.tipo_usuario}`
+      role_description: describirRolPrincipal(roles, user.tipo_usuario)
     }
 
     if (coordinadorInfo) {
@@ -215,19 +244,6 @@ router.post('/login', async (req, res) => {
 
     if (decanoInfo) {
       additionalInfo.decano = decanoInfo
-    }
-    
-    // Información específica por rol principal
-    if (roles.includes('admin')) {
-      additionalInfo.role_description = 'Administrador del sistema'
-    } else if (roles.includes('decano')) {
-      additionalInfo.role_description = 'Decano de la facultad'
-    } else if (roles.includes('coordinador')) {
-      additionalInfo.role_description = 'Coordinador del sistema'
-    } else if (roles.includes('profesor') || roles.includes('docente')) {
-      additionalInfo.role_description = 'Profesor/Docente del sistema'
-    } else if (roles.includes('estudiante')) {
-      additionalInfo.role_description = 'Estudiante del sistema'
     }
 
     res.json({
@@ -274,14 +290,7 @@ router.post('/login-with-role', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' })
     }
 
-    if (passwordCheck.migratePlaintextToHash) {
-      try {
-        const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-        await authRepository.updateUser(user.id, { password: hashedPassword })
-      } catch (updateError) {
-        console.error('Error migrando contraseña a bcrypt:', updateError)
-      }
-    }
+    await migrarPasswordSiHaceFalta(user.id, passwordCheck)
 
     const { RoleService } = await import('./role.service')
     const roles = await RoleService.obtenerRolesUsuario(user.id)
