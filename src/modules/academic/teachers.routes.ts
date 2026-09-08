@@ -1,8 +1,11 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
+import { teachersRepository } from './teachers.repository'
+import { academicRepository } from './academic.repository'
+import { analyticsRepository } from '../analytics/analytics.repository'
+import { evaluationsRepository } from '../evaluations/evaluations.repository'
 import {
   badRequest,
   conflict,
@@ -57,65 +60,26 @@ router.get('/', authenticateToken, async (req: any, res) => {
     let profesorIdsFiltro: string[] | null = null
     if (user?.tipo_usuario === 'estudiante') {
       // Mapear usuario -> estudiante.id
-      const { data: estudiante, error: estudianteError } = await SupabaseDB.supabaseAdmin
-        .from('estudiantes')
-        .select('id')
-        .eq('usuario_id', user.id)
-        .single()
-
-      if (estudianteError) {
-        console.error('Error obteniendo estudiante por usuario:', estudianteError)
-        throw internal('DB estudiantes', estudianteError)
-      }
+      const estudiante = await academicRepository.findEstudianteByUsuarioId(user.id)
       if (!estudiante) {
-        // El usuario no tiene registro en estudiantes; no hay profesores que mostrar
         return res.json([])
       }
 
-      const { data: inscripciones, error: inscError } = await SupabaseDB.supabaseAdmin
-        .from('inscripciones')
-        .select('grupo_id')
-        .eq('estudiante_id', estudiante.id)
-        .eq('activa', true)
-
-      if (inscError) {
-        console.error('Error consultando inscripciones:', inscError)
+      let inscripciones
+      try {
+        inscripciones = await academicRepository.listInscripcionesActivas(estudiante.id)
+      } catch (inscError) {
         throw internal('DB inscripciones', inscError)
       }
 
-      const grupoIds = Array.from(new Set((inscripciones || []).map((i: any) => i.grupo_id).filter(Boolean)))
+      const grupoIds = [...new Set((inscripciones || []).map((i: any) => i.grupo_id).filter(Boolean))]
       if (grupoIds.length > 0) {
         // Algunos esquemas usan 'asignacion_profesor_id' en lugar de 'profesor_id'
         // Algunos esquemas no tienen profesor_id/asignacion_profesor_id en grupos. Intentar con ambos y hacer fallback.
         let gruposDeConsulta: any[] = []
-        let gruposError: any = null
         try {
-          const respGrupos = await SupabaseDB.supabaseAdmin
-            .from('grupos')
-            .select('id, curso_id, profesor_id, asignacion_profesor_id')
-            .in('id', grupoIds)
-          gruposDeConsulta = respGrupos.data || []
-          gruposError = respGrupos.error || null
-        } catch (e) {
-          gruposError = e
-        }
-
-        // Fallback cuando alguna de las columnas no existe
-        if (gruposError && (gruposError.code === '42703' || String(gruposError?.message || '').includes('column') )) {
-          try {
-            const respGruposFallback = await SupabaseDB.supabaseAdmin
-              .from('grupos')
-              .select('id, curso_id')
-              .in('id', grupoIds)
-            gruposDeConsulta = respGruposFallback.data || []
-            gruposError = respGruposFallback.error || null
-          } catch (e2) {
-            gruposError = e2
-          }
-        }
-
-        if (gruposError) {
-          console.error('Error consultando grupos:', gruposError)
+          gruposDeConsulta = await academicRepository.listGruposByIdsFlexible(grupoIds)
+        } catch (gruposError) {
           throw internal('DB grupos', gruposError)
         }
         gruposDeEstudiante = gruposDeConsulta || []
@@ -123,58 +87,33 @@ router.get('/', authenticateToken, async (req: any, res) => {
         // Si los grupos no traen profesor, resolver mediante asignaciones por grupo
         const necesitaResolverProfesor = gruposDeEstudiante.some((g: any) => !g.profesor_id)
         if (necesitaResolverProfesor && grupoIds.length > 0) {
-          let asignacionesPorGrupo: any[] = []
-          let asignErr: any = null
           try {
-            const respA = await SupabaseDB.supabaseAdmin
-              .from('asignaciones_profesor')
-              .select('id, grupo_id, profesor_id, curso_id')
-              .in('grupo_id', grupoIds)
-            asignacionesPorGrupo = respA.data || []
-            asignErr = respA.error || null
-          } catch (e) {
-            asignErr = e
-          }
-
-          if (asignErr) {
-            // Fallback a cursos_profesor
-            try {
-              const respB = await SupabaseDB.supabaseAdmin
-                .from('cursos_profesor')
-                .select('id, grupo_id, profesor_id, curso_id')
-                .in('grupo_id', grupoIds)
-              asignacionesPorGrupo = respB.data || []
-              asignErr = respB.error || null
-            } catch (e2) {
-              asignErr = e2
+            const asignacionesPorGrupo = await academicRepository.listAsignacionesByGrupoIds(grupoIds)
+            if (asignacionesPorGrupo.length > 0) {
+              const asigByGrupo = new Map(asignacionesPorGrupo.map((a: any) => [a.grupo_id, a]))
+              gruposDeEstudiante = gruposDeEstudiante.map((g: any) => {
+                const a = asigByGrupo.get(g.id)
+                if (a) {
+                  return { ...g, profesor_id: a.profesor_id, curso_id: g.curso_id || a.curso_id }
+                }
+                return g
+              })
             }
-          }
-
-          if (!asignErr && asignacionesPorGrupo.length > 0) {
-            const asigByGrupo = new Map(asignacionesPorGrupo.map((a: any) => [a.grupo_id, a]))
-            gruposDeEstudiante = gruposDeEstudiante.map((g: any) => {
-              const a = asigByGrupo.get(g.id)
-              if (a) {
-                return { ...g, profesor_id: a.profesor_id, curso_id: g.curso_id || a.curso_id }
-              }
-              return g
-            })
+          } catch {
+            // Si falla el fallback de asignaciones, continuar sin resolver profesor
           }
         }
 
         // Si no hay profesor_id directo, resolverlo via asignaciones_profesor
-        const asignacionIds = Array.from(new Set(gruposDeEstudiante.map((g: any) => g.asignacion_profesor_id).filter(Boolean)))
+        const asignacionIds = [...new Set(gruposDeEstudiante.map((g: any) => g.asignacion_profesor_id).filter(Boolean))]
         let asignacionById = new Map<string, any>()
         if (asignacionIds.length > 0) {
-          const { data: asigns, error: asgErr } = await SupabaseDB.supabaseAdmin
-            .from('asignaciones_profesor')
-            .select('id, profesor_id, curso_id')
-            .in('id', asignacionIds)
-          if (asgErr) {
-            console.error('Error consultando asignaciones para grupos:', asgErr)
+          try {
+            const asigns = await academicRepository.listAsignacionesByIds(asignacionIds)
+            asignacionById = new Map((asigns || []).map((a: any) => [a.id, a]))
+          } catch (asgErr) {
             throw internal('DB asignaciones_profesor', asgErr)
           }
-          asignacionById = new Map((asigns || []).map((a: any) => [a.id, a]))
         }
 
         gruposDeEstudiante = gruposDeEstudiante.map((g: any) => {
@@ -187,72 +126,29 @@ router.get('/', authenticateToken, async (req: any, res) => {
           return g
         })
 
-        profesorIdsFiltro = Array.from(new Set(gruposDeEstudiante.map((g: any) => g.profesor_id).filter(Boolean)))
+        profesorIdsFiltro = [...new Set(gruposDeEstudiante.map((g: any) => g.profesor_id).filter(Boolean))]
       } else {
         // Sin inscripciones => devolver lista vacía
         return res.json([])
       }
     }
     // 1) Traer profesores + usuario relacionado (sin joins adicionales)
-    let queryProfes = SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        *,
-        usuario:usuarios(
-          id,
-          nombre,
-          apellido,
-          email,
-          activo
-        )
-      `)
-      .eq('activo', true)
-
-    if (profesorIdsFiltro && profesorIdsFiltro.length > 0) {
-      queryProfes = queryProfes.in('id', profesorIdsFiltro)
-    }
-
-    const { data: profesores, error: profesoresError } = await queryProfes
-
-    if (profesoresError) {
-      console.error('Error consultando profesores:', profesoresError)
+    let profesores: any[] = []
+    try {
+      profesores = await teachersRepository.listActiveWithUsuario(
+        profesorIdsFiltro && profesorIdsFiltro.length > 0 ? profesorIdsFiltro : undefined
+      )
+    } catch (profesoresError) {
       throw internal('DB profesores', profesoresError)
     }
 
     const profesorIds = (profesores || []).map((p: any) => p.id)
 
     // 2) Traer asignaciones y cursos por separado y combinarlos
-    // Intento 1: tabla asignaciones_profesor (nombre preferido)
     let asignaciones: any[] = []
-    let asignacionesError: any = null
     try {
-      const resp = await SupabaseDB.supabaseAdmin
-        .from('asignaciones_profesor')
-        .select('*')
-        .in('profesor_id', profesorIds.length ? profesorIds : ['00000000-0000-0000-0000-000000000000'])
-      asignaciones = resp.data || []
-      asignacionesError = resp.error || null
-    } catch (e) {
-      asignacionesError = e
-    }
-
-    // Fallback: algunas bases usan cursos_profesor con mismas columnas clave
-    if (asignacionesError) {
-      console.warn('Fallo con asignaciones_profesor; intentando cursos_profesor. Detalle:', asignacionesError)
-      try {
-        const respFallback = await SupabaseDB.supabaseAdmin
-          .from('cursos_profesor')
-          .select('*')
-          .in('profesor_id', profesorIds.length ? profesorIds : ['00000000-0000-0000-0000-000000000000'])
-        asignaciones = respFallback.data || []
-        asignacionesError = respFallback.error || null
-      } catch (e2) {
-        asignacionesError = e2
-      }
-    }
-
-    if (asignacionesError) {
-      console.error('Error consultando asignaciones (ambos nombres):', asignacionesError)
+      asignaciones = await academicRepository.listAsignacionesByProfesorIds(profesorIds)
+    } catch (asignacionesError) {
       throw internal('DB asignaciones', asignacionesError)
     }
 
@@ -264,17 +160,16 @@ router.get('/', authenticateToken, async (req: any, res) => {
     }))
 
     // Traer grupos para mapearlos por curso y profesor (para usuarios no-estudiante)
-    const grupoIdsAsignados = Array.from(new Set((asignaciones || []).map((a: any) => a.grupo_id).filter(Boolean)))
+    const grupoIdsAsignados = [...new Set((asignaciones || []).map((a: any) => a.grupo_id).filter(Boolean))]
     let gruposPorAsignaciones: any[] = []
     if (grupoIdsAsignados.length > 0) {
-      const { data: gruposAll, error: gruposAllError } = await SupabaseDB.supabaseAdmin
-        .from('grupos')
-        .select('id, curso_id, numero_grupo, horario, aula')
-        .in('id', grupoIdsAsignados)
-      if (gruposAllError) {
-        console.warn('Advertencia: no se pudieron cargar grupos por asignaciones:', gruposAllError)
-      } else {
-        gruposPorAsignaciones = gruposAll || []
+      try {
+        gruposPorAsignaciones = await academicRepository.listGruposByIds(
+          grupoIdsAsignados,
+          'id, curso_id, numero_grupo, horario, aula'
+        )
+      } catch {
+        gruposPorAsignaciones = []
       }
     }
 
@@ -284,36 +179,23 @@ router.get('/', authenticateToken, async (req: any, res) => {
     // 3) Traer carreras para mapear departamento (según carrera_id)
     let carreras: any[] = []
     if (tieneCarreraId) {
-      const carreraIds = Array.from(
-        new Set(cursos.map((c: any) => c.carrera_id).filter((id: any) => id !== null && id !== undefined))
-      )
+      const carreraIds = [...new Set(cursos.map((c: any) => c.carrera_id).filter((id: any) => id !== null && id !== undefined))]
       if (carreraIds.length > 0) {
-        const { data: carrerasData, error: carrerasError } = await SupabaseDB.supabaseAdmin
-          .from('carreras')
-          .select('id, nombre')
-          .in('id', carreraIds)
-        if (carrerasError) {
-          console.error('Error consultando carreras:', carrerasError)
+        try {
+          carreras = await academicRepository.listCarrerasByIds(carreraIds)
+        } catch (carrerasError) {
           throw internal('DB carreras', carrerasError)
         }
-        carreras = carrerasData || []
       }
     }
 
-    const cursoIds = Array.from(new Set((asignaciones || []).map((a: any) => a.curso_id).filter((id: any) => id !== null && id !== undefined)))
-    console.log('🔍 Curso IDs from asignaciones:', cursoIds);
-    
+    const cursoIds = [...new Set((asignaciones || []).map((a: any) => a.curso_id).filter((id: any) => id !== null && id !== undefined))]
+
     if (cursoIds.length > 0 && cursos.length === 0) {
       // Cargar cursos solo con las columnas seguras si aún no se han cargado
       try {
-        const respCursos = await SupabaseDB.supabaseAdmin
-          .from('cursos')
-          .select('id, nombre, codigo, creditos, descripcion')
-          .in('id', cursoIds)
-        cursos = respCursos.data || []
-        console.log('🔍 Cursos loaded:', cursos);
+        cursos = await academicRepository.listCursosByIds(cursoIds, 'id, nombre, codigo, creditos, descripcion')
       } catch (e) {
-        console.warn('No fue posible cargar cursos por ids:', e)
       }
     }
     const cursoById = new Map((cursos || []).map((c: any) => [c.id, c]))
@@ -351,13 +233,9 @@ router.get('/', authenticateToken, async (req: any, res) => {
       const apellido = profesor.usuario?.apellido || ''
       const email = profesor.usuario?.email || ''
       const asignacionesDeProfesor = asignacionesByProfesor.get(profesor.id) || []
-      
-      console.log(`🔍 Processing profesor ${nombre} ${apellido} (${profesor.id})`);
-      console.log(`🔍 Asignaciones:`, asignacionesDeProfesor);
-      
+
       const courses = asignacionesDeProfesor.map((a: any) => {
         const c = cursoById.get(a.curso_id)
-        console.log(`🔍 Course for curso_id ${a.curso_id}:`, c);
         return c
           ? {
               id: c.id,
@@ -381,9 +259,6 @@ router.get('/', authenticateToken, async (req: any, res) => {
             }
           : null
       }).filter(Boolean)
-
-      console.log(`✅ Final courses for ${nombre}:`, courses);
-
       return {
         id: profesor.id,
         name: `${nombre} ${apellido}`.trim(),
@@ -395,7 +270,6 @@ router.get('/', authenticateToken, async (req: any, res) => {
 
     res.json(teachers)
   } catch (error) {
-    console.error('Error al obtener profesores:', error)
     return sendError(res, error)
   }
 })
@@ -407,93 +281,72 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
     const { profesorId, courseId } = req.params
     const user = req.user
 
-    console.log('🔍 Backend: Getting groups for profesorId:', profesorId, 'courseId:', courseId);
-    console.log('🔍 Backend: User type:', user?.tipo_usuario);
-
     // Verificar que el profesor existe y está activo
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('id', profesorId)
-      .eq('activo', true)
-      .single()
-
-    if (profesorError || !profesor) {
-      console.log('❌ Backend: Profesor not found:', profesorError);
+    const profesor = await teachersRepository.findActiveProfessor(profesorId)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
-
-    console.log('✅ Backend: Profesor found:', profesor);
 
     // Buscar grupos del curso Y del profesor específico
     const numericCourseId = Number(courseId)
     // Buscar primero en asignaciones_profesor (es la fuente que relaciona profesor-curso-grupo)
-    const { data: asigns, error: asignsErr } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select('id, profesor_id, curso_id, grupo_id, activa')
-      .eq('profesor_id', profesorId)
-      .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
-      .eq('activa', true)
-    if (asignsErr) {
-      console.error('❌ Backend: Error consultando asignaciones_profesor:', asignsErr)
+    let asigns: any[] = []
+    try {
+      asigns = await academicRepository.listAsignacionesByProfesorAndCurso(
+        profesorId,
+        Number.isNaN(numericCourseId) ? courseId : numericCourseId
+      )
+    } catch (asignsErr) {
       throw internal('Error consultando asignaciones', asignsErr)
     }
     let gruposFinal: any[] = []
     if (Array.isArray(asigns) && asigns.length > 0) {
-      const grupoIds = Array.from(new Set((asigns || []).map((a: any) => a.grupo_id).filter(Boolean)))
-      console.log('🔍 grupoIds desde asignaciones_profesor:', grupoIds)
+      const grupoIds = [...new Set((asigns || []).map((a: any) => a.grupo_id).filter(Boolean))]
+
       if (grupoIds.length > 0) {
-        const { data: gruposPorAsign, error: gruposAsignErr } = await SupabaseDB.supabaseAdmin
-          .from('grupos')
-          .select('id, numero_grupo, horario, aula, curso_id')
-          .in('id', grupoIds)
-        if (gruposAsignErr) {
-          console.error('❌ Backend: Error consultando grupos por ids:', gruposAsignErr)
+        try {
+          gruposFinal = await academicRepository.listGruposByIds(
+            grupoIds,
+            'id, numero_grupo, horario, aula, curso_id'
+          )
+        } catch (gruposAsignErr) {
           throw internal('Error consultando grupos', gruposAsignErr)
         }
-        gruposFinal = gruposPorAsign || []
       }
     }
 
     if (!gruposFinal || gruposFinal.length === 0) {
       // Intentar también por usuario_id si el esquema de grupos usa usuario_id en profesor_id
-      console.log('⚠️ No hay grupos por profesor_id (profesores.id). Intentando por usuario_id del profesor...')
-      const { data: profRow, error: profErr } = await SupabaseDB.supabaseAdmin
-        .from('profesores')
-        .select('usuario_id')
-        .eq('id', profesorId)
-        .single()
-      if (!profErr && profRow?.usuario_id) {
-        const { data: gruposPorUsuario, error: gruposUsuarioErr } = await SupabaseDB.supabaseAdmin
-          .from('grupos')
-          .select('id, numero_grupo, horario, aula, curso_id, profesor_id')
-          .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
-          .eq('profesor_id', profRow.usuario_id)
-        if (!gruposUsuarioErr && gruposPorUsuario?.length) {
-          console.log('✅ Encontrados grupos usando usuario_id del profesor')
-          gruposFinal = gruposPorUsuario
+
+      const usuarioId = await teachersRepository.findUsuarioId(profesorId)
+      if (usuarioId) {
+        try {
+          const gruposPorUsuario = await academicRepository.listGruposByCurso(
+            Number.isNaN(numericCourseId) ? courseId : numericCourseId,
+            'profesor_id'
+          )
+          const filtrados = (gruposPorUsuario || []).filter((g: any) => g.profesor_id === usuarioId)
+          if (filtrados.length) {
+            gruposFinal = filtrados
+          }
+        } catch {
+          // continuar con el fallback por curso
         }
       }
     }
 
     if (!gruposFinal || gruposFinal.length === 0) {
-      console.log('⚠️ No hay grupos para el profesor en este curso. Buscando grupos del curso en general...')
-      const { data: gruposPorCurso, error: gruposCursoError } = await SupabaseDB.supabaseAdmin
-        .from('grupos')
-        .select('id, numero_grupo, horario, aula, curso_id')
-        .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
-      if (gruposCursoError) {
-        console.error('❌ Backend: Error consultando grupos por curso:', gruposCursoError)
+      try {
+        gruposFinal = await academicRepository.listGruposByCurso(
+          Number.isNaN(numericCourseId) ? courseId : numericCourseId
+        )
+      } catch (gruposCursoError) {
         throw internal('Error consultando grupos del curso', gruposCursoError)
       }
-      gruposFinal = gruposPorCurso || []
     }
 
-    console.log('🔍 Backend: Final groups to return:', gruposFinal);
     res.json(gruposFinal)
   } catch (error) {
-    console.error('❌ Backend: Error al obtener grupos del curso:', error)
-    console.error('❌ Backend: Error stack:', (error as any)?.stack)
     return sendError(res, error)
   }
 })
@@ -503,7 +356,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
 router.post('/evaluations', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    
+
     // Validar datos de entrada
     const validatedData = evaluationSchema.parse(req.body)
     const {
@@ -518,54 +371,39 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
     // Asegurar que courseId sea un número para las consultas de BD
     const numericCourseId = typeof courseId === 'string' ? Number.parseInt(courseId, 10) : courseId
 
-    console.log('🔍 Backend: Saving evaluation:', {
-      teacherId,
-      courseId: numericCourseId,
-      groupId,
-      studentId: user.id,
-      userType: user.tipo_usuario,
-      overallRating,
-      answersCount: answers?.length || 0
-    });
-
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
-      console.log('❌ Backend: User is not a student:', user.tipo_usuario);
       throw forbidden('Solo los estudiantes pueden realizar evaluaciones')
     }
 
     // Obtener el ID del estudiante
-    console.log('🔍 Backend: Looking for student with usuario_id:', user.id);
-    const { data: estudiante, error: estudianteError } = await SupabaseDB.supabaseAdmin
-      .from('estudiantes')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
 
-    if (estudianteError) {
-      console.log('❌ Backend: Error finding student:', estudianteError);
-      throw notFound('Error al buscar el estudiante', estudianteError.message)
+    let estudiante
+    try {
+      estudiante = await academicRepository.findEstudianteByUsuarioId(user.id)
+    } catch (estudianteError) {
+      throw notFound('Error al buscar el estudiante', (estudianteError as Error)?.message ?? estudianteError)
     }
 
     if (!estudiante) {
-      console.log('❌ Backend: Student not found for user:', user.id);
       throw notFound('Estudiante no encontrado')
     }
 
-    console.log('✅ Backend: Estudiante found:', estudiante);
-
     // Verificar que no haya una evaluación previa para este profesor y grupo
-    const { data: existingEvaluation, error: existingError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('id')
-      .eq('profesor_id', teacherId)
-      .eq('estudiante_id', estudiante.id)
-      .eq('grupo_id', groupId || 1)
-      .eq('periodo_id', 1)
-      .maybeSingle()
+    let existingEvaluation: any[] = []
+    try {
+      existingEvaluation = await analyticsRepository.listEvaluaciones({
+        columns: 'id',
+        profesorId: teacherId,
+        estudianteId: estudiante.id,
+        grupoId: groupId || 1,
+        periodoId: 1,
+      })
+    } catch {
+      existingEvaluation = []
+    }
 
-    if (existingEvaluation) {
-      console.log('❌ Backend: Evaluation already exists');
+    if (existingEvaluation && existingEvaluation.length > 0) {
       throw conflict('Ya has evaluado a este profesor para este curso y grupo')
     }
 
@@ -581,20 +419,12 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
       fecha_completada: new Date().toISOString()
     }
 
-    console.log('🔍 Backend: Inserting evaluation with data:', evaluationData);
-    const { data: evaluacion, error: evaluacionError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .insert(evaluationData)
-      .select('id')
-      .single()
-
-    if (evaluacionError) {
-      console.error('❌ Backend: Error creating evaluation:', evaluacionError);
-      console.error('❌ Backend: Evaluation data that failed:', evaluationData);
-      throw internal('Error al guardar la evaluación', evaluacionError.message)
+    let evaluacion: any
+    try {
+      evaluacion = await analyticsRepository.insertEvaluacion(evaluationData)
+    } catch (evaluacionError: any) {
+      throw internal('Error al guardar la evaluación', evaluacionError?.message ?? evaluacionError)
     }
-
-    console.log('✅ Backend: Evaluation created:', evaluacion);
 
     // Guardar las respuestas individuales si existen
     if (answers && answers.length > 0) {
@@ -618,27 +448,20 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
         if (answer.selectedOption !== null && answer.selectedOption !== undefined) {
           responseData.respuesta_opcion = answer.selectedOption;
         }
-
         return responseData;
       }).filter((response: any) => response.respuesta_rating !== undefined || response.respuesta_texto !== undefined || response.respuesta_opcion !== undefined);
 
       if (respuestasData.length > 0) {
-        const { error: respuestasError } = await SupabaseDB.supabaseAdmin
-          .from('respuestas_evaluacion')
-          .insert(respuestasData)
-
-        if (respuestasError) {
-          console.error('❌ Backend: Error saving answers:', respuestasError);
+        try {
+          await analyticsRepository.insertRespuestas(respuestasData)
+        } catch {
           // No fallar la operación completa si solo fallan las respuestas individuales
-        } else {
-          console.log('✅ Backend: Answers saved successfully:', respuestasData.length, 'responses');
         }
       }
     }
 
-    console.log('✅ Backend: Evaluation saved successfully');
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Evaluación guardada exitosamente',
       evaluationId: evaluacion.id
     })
@@ -663,26 +486,23 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
     const { courseId } = req.params
     const user = req.user
 
-    console.log('🔍 Backend: Getting evaluation questions for courseId:', courseId);
-
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
       throw forbidden('Solo los estudiantes pueden acceder a las preguntas de evaluación')
     }
 
     // Obtener información del curso para determinar la carrera
-    const { data: curso, error: cursoError } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id, codigo, nombre')
-      .eq('id', courseId)
-      .single()
-
-    if (cursoError || !curso) {
-      console.log('❌ Backend: Curso not found:', cursoError);
-      throw notFound('Curso no encontrado')
+    let curso: any = null
+    try {
+      const cursos = await academicRepository.listCursosByIds([courseId], 'id, codigo, nombre')
+      curso = cursos?.[0] || null
+    } catch {
+      curso = null
     }
 
-    console.log('✅ Backend: Curso found:', curso);
+    if (!curso) {
+      throw notFound('Curso no encontrado')
+    }
 
     // Determinar la carrera basada en el código del curso (si aplica)
     const codigoCurso = curso.codigo || '';
@@ -719,72 +539,31 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
     // Fallback: si el código del curso no permite inferir la carrera, usar la carrera del estudiante
     let carreraId: number | null = carreraIdFromCourseCode
     if (carreraId === null) {
-      const { data: estudianteRow, error: estudianteError } = await SupabaseDB.supabaseAdmin
-        .from('estudiantes')
-        .select('carrera_id')
-        .eq('usuario_id', user.id)
-        .single()
-
-      if (!estudianteError && estudianteRow?.carrera_id != null) {
-        carreraId = Number(estudianteRow.carrera_id)
+      try {
+        const estudianteRow = await academicRepository.findEstudianteInfoByUsuarioId(user.id)
+        if (estudianteRow?.carrera_id != null) {
+          carreraId = Number(estudianteRow.carrera_id)
+        }
+      } catch {
+        // continuar sin carrera
       }
     }
 
-    console.log('🔍 Backend: Course code:', codigoCurso, '-> Career ID (resolved):', carreraId, '(fromCourseCode:', carreraIdFromCourseCode, ')');
-
     // Obtener preguntas específicas de la base de datos para esta carrera
-    let query = SupabaseDB.supabaseAdmin
-      .from('preguntas_evaluacion')
-      .select(`
-        id,
-        texto_pregunta,
-        tipo_pregunta,
-        opciones,
-        orden,
-        categoria:categorias_pregunta(nombre)
-      `)
-      .eq('activa', true)
-      .order('orden', { ascending: true });
-
-    if (carreraId) {
-      query = query.eq('id_carrera', carreraId);
-    } else {
-      query = query.is('id_carrera', null);
-    }
-
-    const { data: preguntasDB, error: preguntasError } = await query;
-
-    if (preguntasError) {
-      console.error('❌ Backend: Error obteniendo preguntas de la DB:', preguntasError);
+    let questions: any[] = []
+    try {
+      questions = await evaluationsRepository.getActiveQuestionsByCareer(carreraId)
+    } catch {
       throw internal('Error obteniendo preguntas de evaluación')
     }
 
     // Si no hay preguntas específicas para esta carrera, obtener preguntas generales (sin carrera_id)
-    let questions = preguntasDB || [];
-    
     if (questions.length === 0 && carreraIdFromCourseCode) {
-      console.log('⚠️ Backend: No hay preguntas específicas para carrera', carreraId, ', obteniendo preguntas generales...');
-      
-      const { data: preguntasGenerales, error: preguntasGeneralesError } = await SupabaseDB.supabaseAdmin
-        .from('preguntas_evaluacion')
-        .select(`
-          id,
-          texto_pregunta,
-          tipo_pregunta,
-          opciones,
-          orden,
-          categoria:categorias_pregunta(nombre)
-        `)
-        .is('id_carrera', null)
-        .eq('activa', true)
-        .order('orden', { ascending: true })
-
-      if (preguntasGeneralesError) {
-        console.error('❌ Backend: Error obteniendo preguntas generales:', preguntasGeneralesError);
+      try {
+        questions = await evaluationsRepository.getActiveQuestionsByCareer(null)
+      } catch {
         throw internal('Error obteniendo preguntas de evaluación')
       }
-
-      questions = preguntasGenerales || [];
     }
 
     // Transformar las preguntas al formato esperado por el frontend
@@ -796,8 +575,6 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
       options: pregunta.opciones
     }))
 
-    console.log('✅ Backend: Questions found for course:', curso.nombre, 'Career ID:', carreraId, 'Count:', questionsFormatted.length);
-
     res.json({
       courseId: Number.parseInt(courseId),
       courseCode: curso.codigo,
@@ -805,9 +582,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
       carreraId: carreraId != null ? Number(carreraId) : null,
       questions: questionsFormatted
     })
-
   } catch (error) {
-    console.error('❌ Backend: Error getting evaluation questions:', error)
     return sendError(res, error)
   }
 })
@@ -818,39 +593,29 @@ router.get('/student-info', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 Backend: Getting student info for user:', user.id);
-
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
       throw forbidden('Solo los estudiantes pueden acceder a esta información')
     }
 
     // Obtener información del estudiante
-    const { data: estudiante, error: estudianteError } = await SupabaseDB.supabaseAdmin
-      .from('estudiantes')
-      .select(`
-        id,
-        carrera_id,
-        carrera:carreras(id, nombre)
-      `)
-      .eq('usuario_id', user.id)
-      .single()
-
-    if (estudianteError || !estudiante) {
-      console.log('❌ Backend: Estudiante not found:', estudianteError);
-      throw notFound('Estudiante no encontrado')
+    let estudiante: any
+    try {
+      estudiante = await academicRepository.findEstudianteInfoByUsuarioId(user.id)
+    } catch {
+      estudiante = null
     }
 
-    console.log('✅ Backend: Estudiante found:', estudiante);
+    if (!estudiante) {
+      throw notFound('Estudiante no encontrado')
+    }
 
     res.json({
       estudianteId: estudiante.id,
       carreraId: estudiante.carrera_id,
       carrera: estudiante.carrera
     })
-
   } catch (error) {
-    console.error('❌ Backend: Error getting student info:', error)
     return sendError(res, error)
   }
 })
@@ -861,44 +626,27 @@ router.get('/teacher-info', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 Backend: Getting teacher info for user:', user.id);
-    console.log('🔍 Backend: User type:', user.tipo_usuario);
-
     // Verificar que el usuario es un profesor o coordinador (que puede ser profesor también)
-    const canAccessAsTeacher = user.tipo_usuario === 'profesor' || 
+    const canAccessAsTeacher = user.tipo_usuario === 'profesor' ||
                                user.tipo_usuario === 'docente' ||
                                user.tipo_usuario === 'coordinador';
-    
+
     if (!canAccessAsTeacher) {
       throw forbidden('Solo los profesores y coordinadores pueden acceder a esta información')
     }
 
     // Obtener información del profesor
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        id,
-        carrera_id,
-        carrera:carreras(id, nombre)
-      `)
-      .eq('usuario_id', user.id)
-      .single()
-
-    if (profesorError || !profesor) {
-      console.log('❌ Backend: Profesor not found:', profesorError);
+    const profesor = await teachersRepository.findTeacherInfoByUsuarioId(user.id)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
-
-    console.log('✅ Backend: Profesor found:', profesor);
 
     res.json({
       profesorId: profesor.id,
       carreraId: profesor.carrera_id,
       carrera: profesor.carrera
     })
-
   } catch (error) {
-    console.error('❌ Backend: Error getting teacher info:', error)
     return sendError(res, error)
   }
 })
@@ -910,83 +658,42 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
     const user = req.user
     const { careerId } = req.params
 
-    console.log('🔍 Backend: Getting survey for career:', careerId, 'for user:', user.id);
-
     // Verificar que el usuario es un profesor o coordinador (que puede ser profesor también)
-    const canAccessAsTeacher = user.tipo_usuario === 'profesor' || 
+    const canAccessAsTeacher = user.tipo_usuario === 'profesor' ||
                                user.tipo_usuario === 'docente' ||
                                user.tipo_usuario === 'coordinador';
-    
+
     if (!canAccessAsTeacher) {
       throw forbidden('Solo los profesores y coordinadores pueden acceder a esta información')
     }
 
     // Obtener preguntas de la encuesta para la carrera específica
-    let query = SupabaseDB.supabaseAdmin
-      .from('preguntas_evaluacion')
-      .select(`
-        id,
-        texto_pregunta,
-        tipo_pregunta,
-        opciones,
-        orden,
-        categoria:categorias_pregunta(nombre)
-      `)
-      .eq('activa', true)
-      .order('orden', { ascending: true });
+    const parsedCareerId =
+      careerId && careerId !== 'null' ? Number.parseInt(careerId) : null
 
-    if (careerId && careerId !== 'null') {
-      query = query.eq('id_carrera', Number.parseInt(careerId));
-    } else {
-      query = query.is('id_carrera', null);
-    }
-
-    const { data: preguntasDB, error: preguntasError } = await query;
-
-    if (preguntasError) {
-      console.error('❌ Backend: Error obteniendo preguntas de la DB:', preguntasError);
+    let questions: any[] = []
+    try {
+      questions = await evaluationsRepository.getActiveQuestionsByCareer(parsedCareerId)
+    } catch {
       throw internal('Error obteniendo preguntas de evaluación')
     }
 
     // Si no hay preguntas específicas para esta carrera, obtener preguntas generales
-    let questions = preguntasDB || [];
-    
     if (questions.length === 0 && careerId && careerId !== 'null') {
-      console.log('⚠️ Backend: No hay preguntas específicas para carrera', careerId, ', obteniendo preguntas generales...');
-      
-      const { data: preguntasGenerales, error: preguntasGeneralesError } = await SupabaseDB.supabaseAdmin
-        .from('preguntas_evaluacion')
-        .select(`
-          id,
-          texto_pregunta,
-          tipo_pregunta,
-          opciones,
-          orden,
-          categoria:categorias_pregunta(nombre)
-        `)
-        .is('id_carrera', null)
-        .eq('activa', true)
-        .order('orden', { ascending: true })
-
-      if (preguntasGeneralesError) {
-        console.error('❌ Backend: Error obteniendo preguntas generales:', preguntasGeneralesError);
+      try {
+        questions = await evaluationsRepository.getActiveQuestionsByCareer(null)
+      } catch {
         throw internal('Error obteniendo preguntas de evaluación')
       }
-
-      questions = preguntasGenerales || [];
     }
 
     // Obtener información de la carrera
     let carreraInfo = null;
     if (careerId && careerId !== 'null') {
-      const { data: carreraData, error: carreraError } = await SupabaseDB.supabaseAdmin
-        .from('carreras')
-        .select('id, nombre')
-        .eq('id', careerId)
-        .single()
-
-      if (!carreraError && carreraData) {
-        carreraInfo = carreraData;
+      try {
+        carreraInfo = await academicRepository.getCarreraById(careerId, 'id, nombre')
+      } catch {
+        carreraInfo = null
       }
     }
 
@@ -999,16 +706,12 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
       options: pregunta.opciones
     }))
 
-    console.log('✅ Backend: Survey questions found for career:', careerId, 'Count:', questionsFormatted.length);
-
     res.json({
       careerId: careerId ? Number.parseInt(careerId) : null,
       career: carreraInfo,
       questions: questionsFormatted
     })
-
   } catch (error) {
-    console.error('❌ Backend: Error getting survey by career:', error)
     return sendError(res, error)
   }
 })
@@ -1024,41 +727,22 @@ router.get('/test', (req, res) => {
 router.get('/debug-user', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    console.log('🔍 Debug: User info from token:', user);
 
     // Buscar información completa del usuario
-    const { data: usuarioCompleto, error: usuarioError } = await SupabaseDB.supabaseAdmin
-      .from('usuarios')
-      .select(`
-        id,
-        nombre,
-        apellido,
-        email,
-        tipo_usuario,
-        activo
-      `)
-      .eq('id', user.id)
-      .single()
+    const { data: usuarioCompleto, error: usuarioError } = await academicRepository.findUsuarioById(user.id)
 
     if (usuarioError) {
-      console.log('❌ Debug: Error getting user:', usuarioError);
       throw internal('Error obteniendo usuario', usuarioError)
     }
 
     // Buscar si es profesor
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        id,
-        usuario_id,
-        carrera_id,
-            activa,
-        carrera:carreras(id, nombre)
-      `)
-      .eq('usuario_id', user.id)
-      .single()
-
-    console.log('🔍 Debug: Profesor info:', profesor, 'Error:', profesorError);
+    let profesor: any = null
+    let profesorError: any = null
+    try {
+      profesor = await teachersRepository.findTeacherInfoByUsuarioId(user.id)
+    } catch (err) {
+      profesorError = err
+    }
 
     res.json({
       userFromToken: user,
@@ -1066,9 +750,7 @@ router.get('/debug-user', authenticateToken, async (req: any, res) => {
       profesor: profesor || null,
       profesorError: profesorError || null
     })
-
   } catch (error) {
-    console.error('❌ Debug: Error:', error)
     return sendError(res, error)
   }
 })
@@ -1079,12 +761,9 @@ router.get('/debug-auth', async (req: any, res) => {
   try {
     const authHeader = req.headers['authorization']
     const token = authHeader && authHeader.split(' ')[1]
-    
-    console.log('🔍 Debug Auth: Auth header:', authHeader);
-    console.log('🔍 Debug Auth: Token:', token ? 'Present' : 'Missing');
 
     if (!token) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'No token provided',
         authHeader: authHeader,
         hasToken: false
@@ -1093,23 +772,9 @@ router.get('/debug-auth', async (req: any, res) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
-      console.log('🔍 Debug Auth: Decoded token:', decoded);
 
       // Buscar usuario directamente
-      const { data: user, error: userError } = await SupabaseDB.supabaseAdmin
-        .from('usuarios')
-        .select(`
-          id,
-          nombre,
-          apellido,
-          email,
-          tipo_usuario,
-          activo
-        `)
-        .eq('id', decoded.userId)
-        .single()
-
-      console.log('🔍 Debug Auth: User from DB:', user, 'Error:', userError);
+      const { data: user, error: userError } = await academicRepository.findUsuarioById(decoded.userId)
 
       res.json({
         tokenPresent: true,
@@ -1118,18 +783,14 @@ router.get('/debug-auth', async (req: any, res) => {
         userError: userError,
         authHeader: authHeader
       })
-
     } catch (jwtError) {
-      console.log('❌ Debug Auth: JWT Error:', jwtError);
-      res.status(401).json({ 
+      res.status(401).json({
         error: 'Invalid token',
         jwtError: jwtError,
         token: token
       })
     }
-
   } catch (error) {
-    console.error('❌ Debug Auth: Error:', error)
     return sendError(res, error)
   }
 })
@@ -1141,114 +802,56 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
     const user = req.user
     const { careerId } = req.params
 
-    console.log('🔍 [/teachers/by-career] Request received', { userId: user?.id, careerId })
-
     // Verificar que el usuario sea coordinador o decano
     if (!user.roles?.includes('coordinador') && !user.roles?.includes('decano') && user.tipo_usuario !== 'coordinador') {
       throw forbidden('Acceso denegado. Solo coordinadores y decanos pueden ver esta información.')
     }
 
     // 1) Traer profesores activos de la carrera directamente por columna profesores.carrera_id
-    const { data: profesBase, error: profesErr } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        id,
-        usuario_id,
-        activo,
-        codigo_profesor,
-        carrera_id,
-        usuarios:usuarios(
-          id,
-          nombre,
-          apellido,
-          email,
-          activo
-        )
-      `)
-      .eq('activo', true)
-      .eq('usuarios.activo', true)
-      .eq('carrera_id', careerId)
-
-    if (profesErr) {
-      console.error('Error consultando profesores por carrera_id:', profesErr)
+    let profesBase: any[] = []
+    try {
+      profesBase = await teachersRepository.listByCareerDetailed(careerId)
+    } catch (profesErr) {
       throw internal('Error obteniendo profesores por carrera', profesErr)
     }
 
-    console.log(`🔎 Profesores base encontrados para carrera ${careerId}:`, profesBase?.length || 0)
-    console.log('🔍 Profesores encontrados:', profesBase?.map((p: any) => ({
-      id: p.id,
-      nombre: p.usuarios?.nombre,
-      apellido: p.usuarios?.apellido,
-      carrera_id: p.carrera_id
-    })))
-
     const profesorIds = (profesBase || []).map((p: any) => p.id)
-    console.log('🔍 IDs de profesores para buscar asignaciones:', profesorIds)
 
     // 2) Buscar asignaciones por profesor_id en la tabla correcta
     let asignaciones: any[] = []
     try {
-      console.log('🔍 Buscando asignaciones por profesor_id:', profesorIds)
-      
-      // Intentar primero con asignaciones_profesor
-      let resp = await SupabaseDB.supabaseAdmin
-        .from('asignaciones_profesor')
-        .select('id, profesor_id, curso_id, activa')
-        .in('profesor_id', profesorIds.length ? profesorIds : ['00000000-0000-0000-0000-000000000000'])
-        .eq('activa', true)
-      
-      console.log('🔍 Respuesta de asignaciones_profesor:', resp)
-      
-      if (resp.error || !resp.data || resp.data.length === 0) {
-        console.log('🔍 No hay datos en asignaciones_profesor para estos profesores')
-        asignaciones = []
-      } else {
-        asignaciones = resp.data.map((item: any) => ({
+      const resp = await academicRepository.listAsignacionesByProfesorIds(profesorIds)
+      asignaciones = (resp || [])
+        .filter((item: any) => item.activa)
+        .map((item: any) => ({
           ...item,
           periodo_academico: null, // asignaciones_profesor no tiene periodo_academico
           activa: true
         }))
-      }
-      
-      console.log('🔍 Error de asignaciones:', resp.error)
     } catch (e) {
-      console.error('❌ Error en consulta de asignaciones:', e)
       // Si falla, continuar sin cursos
       asignaciones = []
     }
 
-    console.log('🔎 Asignaciones cargadas:', asignaciones?.length || 0)
-    console.log('🔎 Asignaciones encontradas:', asignaciones?.map(a => ({ profesor_id: a.profesor_id, curso_id: a.curso_id })))
+    const cursoIds = [...new Set((asignaciones || []).map((a: any) => a.curso_id).filter(Boolean))]
 
-    const cursoIds = Array.from(new Set((asignaciones || []).map((a: any) => a.curso_id).filter(Boolean)))
-    console.log('🔍 IDs de cursos extraídos de asignaciones:', cursoIds)
-    
     let cursos: any[] = []
     if (cursoIds.length > 0) {
-      console.log('🔍 Buscando cursos específicos de asignaciones...')
-      const { data: cursosData, error: cursosErr } = await SupabaseDB.supabaseAdmin
-        .from('cursos')
-        .select('id, nombre, codigo, carrera_id')
-        .in('id', cursoIds)
-      console.log('🔍 Respuesta de cursos específicos:', { data: cursosData, error: cursosErr })
-      if (!cursosErr) cursos = cursosData || []
-      console.log('🔎 Cursos encontrados de asignaciones:', cursos?.length || 0)
-      console.log('🔎 Cursos encontrados:', cursos?.map(c => ({ id: c.id, nombre: c.nombre, carrera_id: c.carrera_id })))
+      try {
+        cursos = await academicRepository.listCursosByIds(cursoIds, 'id, nombre, codigo, carrera_id')
+      } catch {
+        cursos = []
+      }
     } else {
-      console.log('⚠️ No hay cursoIds de asignaciones; no se cargarán cursos adicionales. Se mostrará vacío para no exponer materias no asignadas.')
       cursos = []
     }
-    console.log('🔎 Cursos filtrados por carrera cargados:', cursos?.length || 0)
+
     const cursoById = new Map((cursos || []).map((c: any) => [c.id, c]))
 
     // Cargar nombre de la carrera para enriquecer "department"
     let carreraNombre: string | null = null
     try {
-      const { data: carreraData } = await SupabaseDB.supabaseAdmin
-        .from('carreras')
-        .select('id,nombre')
-        .eq('id', careerId)
-        .single()
+      const carreraData: any = await academicRepository.getCarreraById(careerId, 'id, nombre')
       carreraNombre = carreraData?.nombre || null
     } catch {}
 
@@ -1261,13 +864,12 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
 
     const result = (profesBase || []).map((p: any) => {
       const asigns = asignacionesByProfesor.get(p.id) || []
-      console.log(`🔍 DEBUG: Profesor ${p.id} (${p.usuarios?.nombre}) - asignaciones:`, asigns)
-      
+
       // Obtener cursos de las asignaciones
       const cursosDeAsignaciones = asigns
         .map((a: any) => {
           const curso = cursoById.get(a.curso_id)
-          console.log(`🔍 DEBUG: curso_id: ${a.curso_id}, curso encontrado:`, curso)
+
           if (curso) {
             return {
               ...curso,
@@ -1278,11 +880,9 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
           return null
         })
         .filter(Boolean)
-      
+
       // Mostrar únicamente cursos provenientes de asignaciones; si no hay, lista vacía
       const cursosProf = cursosDeAsignaciones
-      
-      console.log(`🔍 DEBUG: cursosProf final para ${p.usuarios?.nombre}:`, cursosProf)
       return {
         id: p.id,
         usuario_id: p.usuario_id,
@@ -1297,10 +897,8 @@ router.get('/by-career/:careerId', authenticateToken, async (req: any, res) => {
       }
     })
 
-    console.log(`✅ Respuesta profesores por carrera ${careerId}:`, { profesores: result.length })
     res.json(result)
   } catch (error) {
-    console.error('❌ Error en /teachers/by-career:', error)
     return sendError(res, error)
   }
 })
@@ -1311,69 +909,67 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 [/teachers/professor-subjects] Request received', { userId: user?.id })
-
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
       throw forbidden('Acceso denegado. Solo el decano puede ver las materias de los profesores.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
-    const { data: carreras, error: carrerasError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select('id, nombre')
-      .eq('activa', true)
-      .not('nombre', 'ilike', '%tronco común%')
-      .not('nombre', 'ilike', '%tronco comun%')
-      .order('nombre')
-
-    if (carrerasError) {
-      console.error('Error consultando carreras:', carrerasError)
+    let carreras: any[] = []
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre', {
+        activa: true,
+        excludeTroncoComun: true,
+        orderByNombre: true,
+      })
+    } catch (carrerasError) {
       throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener profesores de cada carrera con sus materias específicas
     const profesoresPorCarrera: {[key: string]: any[]} = {}
-    
-    for (const carrera of carreras) {
-      const { data: profesores, error: profesoresError } = await SupabaseDB.supabaseAdmin
-        .from('profesores')
-        .select(`
-          id,
-          usuario_id,
-          activo,
-          codigo_profesor,
-          carrera_id,
-          usuarios:usuarios(
-            id,
-            nombre,
-            apellido,
-            email,
-            activo
-          ),
-          asignaciones_profesor:asignaciones_profesor(
-            curso_id,
-            activa,
-            cursos:cursos(
-              id,
-              nombre,
-              codigo,
-              creditos,
-              activo
-            )
-          )
-        `)
-        .eq('activo', true)
-        .eq('usuarios.activo', true)
-        .eq('carrera_id', carrera.id)
-        .eq('asignaciones_profesor.activa', true)
 
-      if (profesoresError) {
-        console.error(`Error consultando profesores para carrera ${carrera.id}:`, profesoresError)
+    for (const carrera of carreras) {
+      let profesores: any[] = []
+      try {
+        profesores = await teachersRepository.listByCareerDetailed(carrera.id)
+      } catch {
         profesoresPorCarrera[carrera.id] = []
-      } else {
-        // Mapear profesores con sus materias específicas
-        const profesoresConMaterias = (profesores || []).map((p: any) => ({
+        continue
+      }
+
+      const profesorIds = (profesores || []).map((p: any) => p.id)
+      let asignaciones: any[] = []
+      try {
+        asignaciones = await academicRepository.listAsignacionesByProfesorIds(profesorIds)
+      } catch {
+        asignaciones = []
+      }
+      asignaciones = (asignaciones || []).filter((a: any) => a.activa)
+
+      const cursoIds = [...new Set(asignaciones.map((a: any) => a.curso_id).filter(Boolean))]
+      let cursos: any[] = []
+      try {
+        if (cursoIds.length > 0) {
+          cursos = await academicRepository.listCursosByIds(cursoIds, 'id, nombre, codigo, creditos, activo')
+        }
+      } catch {
+        cursos = []
+      }
+      const cursoById = new Map((cursos || []).map((c: any) => [c.id, c]))
+      const asignsByProf = new Map<string, any[]>()
+      asignaciones.forEach((a: any) => {
+        const list = asignsByProf.get(a.profesor_id) || []
+        list.push(a)
+        asignsByProf.set(a.profesor_id, list)
+      })
+
+      const profesoresConMaterias = (profesores || []).map((p: any) => {
+        const asignacionesProfesor = (asignsByProf.get(p.id) || []).map((asig: any) => ({
+          ...asig,
+          cursos: cursoById.get(asig.curso_id) || null,
+        }))
+        return {
           id: p.id,
           usuario_id: p.usuario_id,
           codigo_profesor: p.codigo_profesor || null,
@@ -1383,7 +979,7 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
           apellido: p.usuarios?.apellido || '',
           email: p.usuarios?.email || '',
           activo: p.activo,
-          materias_asignadas: (p.asignaciones_profesor || [])
+          materias_asignadas: asignacionesProfesor
             .filter((asig: any) => asig.cursos && asig.cursos.activo)
             .map((asig: any) => ({
               id: asig.cursos.id,
@@ -1391,12 +987,12 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
               codigo: asig.cursos.codigo,
               creditos: asig.cursos.creditos
             })),
-          total_materias_asignadas: (p.asignaciones_profesor || [])
+          total_materias_asignadas: asignacionesProfesor
             .filter((asig: any) => asig.cursos && asig.cursos.activo).length
-        }))
+        }
+      })
 
-        profesoresPorCarrera[carrera.id] = profesoresConMaterias
-      }
+      profesoresPorCarrera[carrera.id] = profesoresConMaterias
     }
 
     const result = {
@@ -1409,13 +1005,8 @@ router.get('/professor-subjects', authenticateToken, async (req: any, res) => {
       total_profesores: Object.values(profesoresPorCarrera).flat().length
     }
 
-    console.log(`✅ Respuesta materias específicas de profesores:`, { 
-      carreras: result.carreras.length, 
-      total_profesores: result.total_profesores 
-    })
     res.json(result)
   } catch (error) {
-    console.error('❌ Error en /teachers/professor-subjects:', error)
     return sendError(res, error)
   }
 })
@@ -1426,50 +1017,37 @@ router.get('/career-subjects', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 [/teachers/career-subjects] Request received', { userId: user?.id })
-
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
       throw forbidden('Acceso denegado. Solo el decano puede ver las materias de las carreras.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
-    const { data: carreras, error: carrerasError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select('id, nombre')
-      .eq('activa', true)
-      .not('nombre', 'ilike', '%tronco común%')
-      .not('nombre', 'ilike', '%tronco comun%')
-      .order('nombre')
-
-    if (carrerasError) {
-      console.error('Error consultando carreras:', carrerasError)
+    let carreras: any[] = []
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre', {
+        activa: true,
+        excludeTroncoComun: true,
+        orderByNombre: true,
+      })
+    } catch (carrerasError) {
       throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener materias de cada carrera
     const materiasPorCarrera: {[key: string]: any[]} = {}
-    
-    for (const carrera of carreras) {
-      const { data: cursos, error: cursosError } = await SupabaseDB.supabaseAdmin
-        .from('cursos')
-        .select(`
-          id,
-          nombre,
-          codigo,
-          creditos,
-          descripcion,
-          activo
-        `)
-        .eq('carrera_id', carrera.id)
-        .eq('activo', true)
-        .order('nombre')
 
-      if (cursosError) {
-        console.error(`Error consultando cursos para carrera ${carrera.id}:`, cursosError)
+    for (const carrera of carreras) {
+      try {
+        const cursos = await academicRepository.listCursosActivosByCareer(
+          carrera.id,
+          'id, nombre, codigo, creditos, descripcion, activo'
+        )
+        materiasPorCarrera[carrera.id] = [...(cursos || [])].sort((a: any, b: any) =>
+          String(a.nombre || '').localeCompare(String(b.nombre || ''))
+        )
+      } catch {
         materiasPorCarrera[carrera.id] = []
-      } else {
-        materiasPorCarrera[carrera.id] = cursos || []
       }
     }
 
@@ -1483,13 +1061,8 @@ router.get('/career-subjects', authenticateToken, async (req: any, res) => {
       total_materias: Object.values(materiasPorCarrera).flat().length
     }
 
-    console.log(`✅ Respuesta materias por carrera:`, { 
-      carreras: result.carreras.length, 
-      total_materias: result.total_materias 
-    })
     res.json(result)
   } catch (error) {
-    console.error('❌ Error en /teachers/career-subjects:', error)
     return sendError(res, error)
   }
 })
@@ -1500,89 +1073,60 @@ router.get('/detailed-faculty', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 [/teachers/detailed-faculty] Request received', { userId: user?.id })
-
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
       throw forbidden('Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
-    const { data: carreras, error: carrerasError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select('id, nombre')
-      .eq('activa', true)
-      .not('nombre', 'ilike', '%tronco común%')
-      .not('nombre', 'ilike', '%tronco comun%')
-      .order('nombre')
-
-    if (carrerasError) {
-      console.error('Error consultando carreras:', carrerasError)
+    let carreras: any[] = []
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre', {
+        activa: true,
+        excludeTroncoComun: true,
+        orderByNombre: true,
+      })
+    } catch (carrerasError) {
       throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener profesores de cada carrera con información detallada
     const profesoresPorCarrera: {[key: string]: any[]} = {}
-    
+
     for (const carrera of carreras) {
-      const { data: profesores, error: profesoresError } = await SupabaseDB.supabaseAdmin
-        .from('profesores')
-        .select(`
-          id,
-          usuario_id,
-          activa,
-          codigo_profesor,
-          carrera_id,
-          usuarios:usuarios(
-            id,
-            nombre,
-            apellido,
-            email,
-            activo
-          )
-        `)
-        .eq('activo', true)
-        .eq('usuarios.activo', true)
-        .eq('carrera_id', carrera.id)
-
-      if (profesoresError) {
-        console.error(`Error consultando profesores para carrera ${carrera.id}:`, profesoresError)
+      let profesores: any[] = []
+      try {
+        profesores = await teachersRepository.listByCareerDetailed(carrera.id)
+      } catch {
         profesoresPorCarrera[carrera.id] = []
-      } else {
-        // Obtener cursos de la carrera
-        const { data: cursosCarrera, error: cursosError } = await SupabaseDB.supabaseAdmin
-          .from('cursos')
-          .select(`
-            id,
-            nombre,
-            codigo,
-            creditos,
-            activo
-          `)
-          .eq('carrera_id', carrera.id)
-          .eq('activo', true)
-
-        if (cursosError) {
-          console.warn(`Error obteniendo cursos para carrera ${carrera.id}:`, cursosError)
-        }
-
-        // Mapear profesores con información de la carrera
-        const profesoresConMaterias = (profesores || []).map((p: any) => ({
-          id: p.id,
-          usuario_id: p.usuario_id,
-          codigo_profesor: p.codigo_profesor || null,
-          carrera_id: p.carrera_id,
-          carrera_nombre: carrera.nombre,
-          nombre: p.usuarios?.nombre || '',
-          apellido: p.usuarios?.apellido || '',
-          email: p.usuarios?.email || '',
-          activo: p.activo,
-          materias_carrera: cursosCarrera || [],
-          total_materias_carrera: cursosCarrera?.length || 0
-        }))
-
-        profesoresPorCarrera[carrera.id] = profesoresConMaterias
+        continue
       }
+
+      let cursosCarrera: any[] = []
+      try {
+        cursosCarrera = await academicRepository.listCursosActivosByCareer(
+          carrera.id,
+          'id, nombre, codigo, creditos, activo'
+        )
+      } catch {
+        cursosCarrera = []
+      }
+
+      const profesoresConMaterias = (profesores || []).map((p: any) => ({
+        id: p.id,
+        usuario_id: p.usuario_id,
+        codigo_profesor: p.codigo_profesor || null,
+        carrera_id: p.carrera_id,
+        carrera_nombre: carrera.nombre,
+        nombre: p.usuarios?.nombre || '',
+        apellido: p.usuarios?.apellido || '',
+        email: p.usuarios?.email || '',
+        activo: p.activo,
+        materias_carrera: cursosCarrera || [],
+        total_materias_carrera: cursosCarrera?.length || 0
+      }))
+
+      profesoresPorCarrera[carrera.id] = profesoresConMaterias
     }
 
     const result = {
@@ -1595,13 +1139,8 @@ router.get('/detailed-faculty', authenticateToken, async (req: any, res) => {
       total_profesores: Object.values(profesoresPorCarrera).flat().length
     }
 
-    console.log(`✅ Respuesta profesores detallados de la facultad:`, { 
-      carreras: result.carreras.length, 
-      total_profesores: result.total_profesores 
-    })
     res.json(result)
   } catch (error) {
-    console.error('❌ Error en /teachers/detailed-faculty:', error)
     return sendError(res, error)
   }
 })
@@ -1612,56 +1151,30 @@ router.get('/faculty', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 [/teachers/faculty] Request received', { userId: user?.id })
-
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
       throw forbidden('Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.')
     }
 
     // Obtener todas las carreras activas (excluyendo tronco común)
-    const { data: carreras, error: carrerasError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select('id, nombre')
-      .eq('activo', true)
-      .eq('activa', true)
-      .not('nombre', 'ilike', '%tronco común%')
-      .not('nombre', 'ilike', '%tronco comun%')
-      .order('nombre')
-
-    if (carrerasError) {
-      console.error('Error consultando carreras:', carrerasError)
+    let carreras: any[] = []
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre', {
+        activo: true,
+        activa: true,
+        excludeTroncoComun: true,
+        orderByNombre: true,
+      })
+    } catch (carrerasError) {
       throw internal('Error obteniendo carreras', carrerasError)
     }
 
     // Obtener profesores de cada carrera
     const profesoresPorCarrera: {[key: string]: any[]} = {}
-    
-    for (const carrera of carreras) {
-      const { data: profesores, error: profesoresError } = await SupabaseDB.supabaseAdmin
-        .from('profesores')
-        .select(`
-          id,
-          usuario_id,
-          activa,
-          codigo_profesor,
-          carrera_id,
-          usuarios:usuarios(
-            id,
-            nombre,
-            apellido,
-            email,
-            activo
-          )
-        `)
-        .eq('activo', true)
-        .eq('usuarios.activo', true)
-        .eq('carrera_id', carrera.id)
 
-      if (profesoresError) {
-        console.error(`Error consultando profesores para carrera ${carrera.id}:`, profesoresError)
-        profesoresPorCarrera[carrera.id] = []
-      } else {
+    for (const carrera of carreras) {
+      try {
+        const profesores = await teachersRepository.listByCareerDetailed(carrera.id)
         profesoresPorCarrera[carrera.id] = (profesores || []).map((p: any) => ({
           id: p.id,
           usuario_id: p.usuario_id,
@@ -1674,6 +1187,8 @@ router.get('/faculty', authenticateToken, async (req: any, res) => {
           email: p.usuarios?.email || '',
           activo: p.activo
         }))
+      } catch {
+        profesoresPorCarrera[carrera.id] = []
       }
     }
 
@@ -1687,13 +1202,8 @@ router.get('/faculty', authenticateToken, async (req: any, res) => {
       total_profesores: Object.values(profesoresPorCarrera).flat().length
     }
 
-    console.log(`✅ Respuesta profesores de la facultad:`, { 
-      carreras: result.carreras.length, 
-      total_profesores: result.total_profesores 
-    })
     res.json(result)
   } catch (error) {
-    console.error('❌ Error en /teachers/faculty:', error)
     return sendError(res, error)
   }
 })
@@ -1704,53 +1214,25 @@ router.get('/all', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
 
-    console.log('🔍 [/teachers/all] Request received', { userId: user?.id })
-
     // Verificar que el usuario sea decano
     if (!user.roles?.includes('decano')) {
       throw forbidden('Acceso denegado. Solo el decano puede ver todos los profesores de la facultad.')
     }
 
     // Obtener TODOS los profesores activos de la facultad
-    const { data: profesBase, error: profesErr } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        id,
-        usuario_id,
-            activa,
-        codigo_profesor,
-        carrera_id,
-        departamento,
-        usuarios:usuarios(
-          id,
-          nombre,
-          apellido,
-          email,
-          activo
-        ),
-        carreras:carreras(
-          id,
-          nombre
-        )
-      `)
-      .eq('activo', true)
-      .eq('usuarios.activo', true)
-
-    if (profesErr) {
-      console.error('Error consultando todos los profesores:', profesErr)
+    let profesBase: any[] = []
+    try {
+      profesBase = await teachersRepository.listActiveWithUsuario()
+    } catch (profesErr) {
       throw internal('Error obteniendo profesores', profesErr)
     }
 
-    console.log(`🔎 Total profesores encontrados en la facultad:`, profesBase?.length || 0)
-
     // Obtener todas las carreras para mostrar información completa
-    const { data: carreras, error: carrerasError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select('id, nombre')
-      .eq('activo', true)
-
-    if (carrerasError) {
-      console.warn('Error obteniendo carreras:', carrerasError)
+    let carreras: any[] = []
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre', { activo: true })
+    } catch {
+      carreras = []
     }
 
     const carreraById = new Map()
@@ -1759,6 +1241,7 @@ router.get('/all', authenticateToken, async (req: any, res) => {
     })
 
     const result = (profesBase || []).map((p: any) => {
+      const usuario = p.usuarios || p.usuario
       const carrera = carreraById.get(p.carrera_id)
       return {
         id: p.id,
@@ -1767,17 +1250,15 @@ router.get('/all', authenticateToken, async (req: any, res) => {
         carrera_id: p.carrera_id,
         carrera_nombre: carrera?.nombre || 'Sin carrera asignada',
         departamento: p.departamento || 'Sin departamento',
-        nombre: p.usuarios?.nombre || '',
-        apellido: p.usuarios?.apellido || '',
-        email: p.usuarios?.email || '',
+        nombre: usuario?.nombre || '',
+        apellido: usuario?.apellido || '',
+        email: usuario?.email || '',
         activo: p.activo
       }
     })
 
-    console.log(`✅ Respuesta todos los profesores de la facultad:`, { profesores: result.length })
     res.json(result)
   } catch (error) {
-    console.error('❌ Error en /teachers/all:', error)
     return sendError(res, error)
   }
 })
@@ -1789,72 +1270,45 @@ router.get('/debug-groups/:profesorId/:courseId', authenticateToken, async (req:
     const user = req.user
     const { profesorId, courseId } = req.params
 
-    console.log('🔍 [DEBUG GROUPS] Verificando grupos para profesor:', profesorId, 'curso:', courseId)
-
     // 1. Verificar que el profesor existe
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario_id, carrera_id')
-      .eq('id', profesorId)
-      .eq('activo', true)
-
-    if (profesorError) {
-      console.error('Error consultando profesor:', profesorError)
+    let profesor: any[] = []
+    try {
+      profesor = await teachersRepository.listActiveById(profesorId)
+    } catch {
       throw internal('Error consultando profesor')
     }
 
-    console.log('🔍 [DEBUG GROUPS] Profesor encontrado:', profesor)
-
     // 2. Verificar que el curso existe
-    const { data: curso, error: cursoError } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id, nombre, codigo, carrera_id')
-      .eq('id', courseId)
-
-    if (cursoError) {
-      console.error('Error consultando curso:', cursoError)
+    let curso: any[] = []
+    try {
+      curso = await academicRepository.listCursosByIds([courseId], 'id, nombre, codigo, carrera_id')
+    } catch {
       throw internal('Error consultando curso')
     }
 
-    console.log('🔍 [DEBUG GROUPS] Curso encontrado:', curso)
-
     // 3. Verificar asignaciones del profesor para este curso
-    const { data: asignaciones, error: asignacionesError } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select('id, profesor_id, curso_id, activa')
-      .eq('profesor_id', profesorId)
-      .eq('curso_id', courseId)
-
-    if (asignacionesError) {
-      console.error('Error consultando asignaciones:', asignacionesError)
+    let asignaciones: any[] = []
+    try {
+      asignaciones = await academicRepository.listAsignacionesByProfesorAndCursoAll(profesorId, courseId)
+    } catch {
+      asignaciones = []
     }
 
-    console.log('🔍 [DEBUG GROUPS] Asignaciones del profesor para este curso:', asignaciones)
-
     // 4. Traer grupos por curso_id (la tabla grupos no tiene profesor_id)
-    const { data: grupos, error: gruposError } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, numero_grupo, horario, aula, curso_id')
-      .eq('curso_id', courseId)
-
-    if (gruposError) {
-      console.error('Error consultando grupos:', gruposError)
+    let grupos: any[] = []
+    try {
+      grupos = await academicRepository.listGruposByCurso(courseId)
+    } catch {
       throw internal('Error consultando grupos')
     }
 
-    console.log('🔍 [DEBUG GROUPS] Grupos por curso encontrados:', grupos)
-
     // 5. Verificar si hay grupos en general (para debug)
-    const { data: todosLosGrupos, error: todosLosGruposError } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, numero_grupo, curso_id, profesor_id')
-      .limit(10)
-
-    if (todosLosGruposError) {
-      console.error('Error consultando todos los grupos:', todosLosGruposError)
+    let todosLosGrupos: any[] = []
+    try {
+      todosLosGrupos = await academicRepository.listGruposSample(10)
+    } catch {
+      todosLosGrupos = []
     }
-
-    console.log('🔍 [DEBUG GROUPS] Muestra de todos los grupos:', todosLosGrupos)
 
     res.json({
       profesor: profesor || null,
@@ -1871,7 +1325,6 @@ router.get('/debug-groups/:profesorId/:courseId', authenticateToken, async (req:
       }
     })
   } catch (error) {
-    console.error('❌ Error en debug groups:', error)
     return sendError(res, error)
   }
 })
@@ -1883,66 +1336,31 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
     const user = req.user
     const { careerId } = req.params
 
-    console.log('🔍 [DEBUG] Verificando asignaciones para carrera:', careerId)
-
     // 1. Verificar profesores de la carrera
-    const { data: profesores, error: profError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        id,
-        usuario_id,
-        carrera_id,
-        usuarios:usuarios(nombre, apellido, email)
-      `)
-      .eq('carrera_id', careerId)
-      .eq('activo', true)
-
-    if (profError) {
-      console.error('Error consultando profesores:', profError)
+    let profesores: any[] = []
+    try {
+      profesores = await teachersRepository.listByCareerDetailed(careerId)
+    } catch {
       throw internal('Error consultando profesores')
     }
 
-    console.log('🔍 [DEBUG] Profesores encontrados:', profesores?.length || 0)
-
     // 2. Verificar asignaciones por profesor_id
     const profesorIds = profesores?.map((p: any) => p.id) || []
-    console.log('🔍 [DEBUG] IDs de profesores para buscar asignaciones:', profesorIds)
-    
-    const { data: asignaciones, error: asigError } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select(`
-        id,
-        profesor_id,
-        curso_id,
-        activa,
-        cursos:cursos(id, nombre, codigo, carrera_id)
-      `)
-      .in('profesor_id', profesorIds.length > 0 ? profesorIds : ['00000000-0000-0000-0000-000000000000'])
 
-    if (asigError) {
-      console.error('Error consultando asignaciones:', asigError)
+    let asignaciones: any[] = []
+    try {
+      asignaciones = await academicRepository.listAsignacionesConCursos(profesorIds)
+    } catch {
       throw internal('Error consultando asignaciones')
     }
 
-    console.log('🔍 [DEBUG] Asignaciones encontradas:', asignaciones?.length || 0)
-
     // 3. Verificar cursos de la carrera
-    const { data: cursos, error: cursosError } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select(`
-        id,
-        nombre,
-        codigo,
-        carrera_id
-      `)
-      .eq('carrera_id', careerId)
-
-    if (cursosError) {
-      console.error('Error consultando cursos:', cursosError)
+    let cursos: any[] = []
+    try {
+      cursos = await academicRepository.listCursosByCareer(careerId, 'id, nombre, codigo, carrera_id')
+    } catch {
       throw internal('Error consultando cursos')
     }
-
-    console.log('🔍 [DEBUG] Cursos de la carrera encontrados:', cursos?.length || 0)
 
     res.json({
       profesores: profesores || [],
@@ -1955,7 +1373,6 @@ router.get('/debug-assignments/:careerId', authenticateToken, async (req: any, r
       }
     })
   } catch (error) {
-    console.error('❌ Error en debug assignments:', error)
     return sendError(res, error)
   }
 })
@@ -1975,25 +1392,18 @@ router.get('/careers', authenticateToken, async (req: any, res) => {
 
     // Schema seed usa `activa`; algunos entornos pueden tener `activo`
     let carreras: any[] | null = null
-    let error: any = null
 
-    const primary = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select('id, nombre, facultad_id, activa')
-      .eq('activa', true)
-      .order('nombre')
-
-    carreras = primary.data
-    error = primary.error
-
-    if (error) {
-      console.error('Error obteniendo carreras:', error)
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre, facultad_id, activa', {
+        activa: true,
+        orderByNombre: true,
+      })
+    } catch (error) {
       throw internal('Error obteniendo carreras', error)
     }
 
     res.json(carreras || [])
   } catch (error) {
-    console.error('Error en /teachers/careers:', error)
     return sendError(res, error)
   }
 })
@@ -2004,64 +1414,31 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
     const user = req.user
     const { teacherId } = req.params
 
-    console.log('🔍 [/teachers/:teacherId/courses] Request received', { userId: user?.id, teacherId })
-
     // Verificar que el usuario sea el mismo profesor o un coordinador
     const isOwnProfile = user.id === teacherId
     const isCoordinator = user.roles?.includes('coordinador') || user.tipo_usuario === 'coordinador'
-    
+
     if (!isOwnProfile && !isCoordinator) {
       throw forbidden('Acceso denegado. Solo puedes ver tus propios cursos.')
     }
 
     // Primero obtener el profesor_id desde el usuario_id
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('usuario_id', teacherId)
-      .eq('activo', true)
-      .single()
-
-    if (profesorError) {
-      console.error('Error obteniendo profesor por usuario_id:', profesorError)
+    let profesor: any
+    try {
+      profesor = await teachersRepository.findActiveByUsuarioId(teacherId)
+    } catch (profesorError) {
       throw internal('Error obteniendo información del profesor', profesorError)
     }
 
     if (!profesor) {
-      console.log('⚠️ No se encontró profesor activo para usuario_id:', teacherId)
       return res.json([]) // Retornar array vacío si no es profesor
     }
 
-    console.log('🔍 Profesor encontrado:', profesor.id)
-
     // Obtener asignaciones del profesor con información de cursos
-    const { data: asignaciones, error: asignError } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select(`
-        id,
-        profesor_id,
-        curso_id,
-            activa,
-        cursos:cursos(
-          id,
-          nombre,
-          codigo,
-          creditos,
-          descripcion,
-          activo,
-          carrera_id,
-          carreras:carreras(
-            id,
-            nombre,
-            codigo
-          )
-        )
-      `)
-      .eq('profesor_id', profesor.id)
-      .eq('activa', true)
-
-    if (asignError) {
-      console.error('Error consultando asignaciones del profesor:', asignError)
+    let asignaciones: any[] = []
+    try {
+      asignaciones = await academicRepository.listAsignacionesConCursoCarrera(profesor.id)
+    } catch (asignError) {
       throw internal('Error obteniendo cursos del profesor', asignError)
     }
 
@@ -2078,11 +1455,8 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
         carrera: asig.cursos.carreras
       }))
 
-    console.log(`✅ Cursos encontrados para profesor ${profesor.id} (usuario ${teacherId}):`, cursos.length)
     res.json(cursos)
-
   } catch (error) {
-    console.error('❌ Error en /teachers/:teacherId/courses:', error)
     return sendError(res, error)
   }
 })
@@ -2092,8 +1466,6 @@ router.get('/:teacherId/courses', authenticateToken, async (req: any, res) => {
 router.get('/student-enrolled-subjects', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    
-    console.log('🔍 Backend: Getting enrolled subjects for user:', user.id);
 
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
@@ -2101,54 +1473,22 @@ router.get('/student-enrolled-subjects', authenticateToken, async (req: any, res
     }
 
     // Obtener el ID del estudiante (si no existe, devolver lista vacía para que el dashboard cargue)
-    const { data: estudiante, error: estudianteError } = await SupabaseDB.supabaseAdmin
-      .from('estudiantes')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
+    let estudiante: any
+    try {
+      estudiante = await academicRepository.findEstudianteByUsuarioId(user.id)
+    } catch {
+      return res.json({ materiasMatriculadas: [], total: 0 });
+    }
 
-    if (estudianteError || !estudiante) {
-      console.log('⚠️ Backend: No row in estudiantes for user, returning empty enrollments:', user.id);
+    if (!estudiante) {
       return res.json({ materiasMatriculadas: [], total: 0 });
     }
 
     // Obtener materias matriculadas con información detallada
-    const { data: inscripciones, error: inscripcionesError } = await SupabaseDB.supabaseAdmin
-      .from('inscripciones')
-      .select(`
-        id,
-        grupo:grupos(
-          id,
-          numero_grupo,
-          horario,
-          aula,
-          curso:cursos(
-            id,
-            nombre,
-            codigo,
-            creditos
-          ),
-          asignaciones_profesor:asignaciones_profesor(
-            profesor:profesores(
-              id,
-              usuario:usuarios(
-                nombre,
-                apellido
-              )
-            )
-          ),
-          periodo:periodos_academicos(
-            id,
-            ano,
-            semestre
-          )
-        )
-      `)
-      .eq('estudiante_id', estudiante.id)
-      .eq('activa', true)
-
-    if (inscripcionesError) {
-      console.log('⚠️ Backend: Error getting enrollments, returning empty list:', inscripcionesError.message);
+    let inscripciones: any[] = []
+    try {
+      inscripciones = await academicRepository.listInscripcionesDetalladas(estudiante.id)
+    } catch {
       return res.json({ materiasMatriculadas: [], total: 0 });
     }
 
@@ -2178,14 +1518,11 @@ router.get('/student-enrolled-subjects', authenticateToken, async (req: any, res
       }
     })).filter((materia: any) => materia.grupo?.curso?.id) || []
 
-    console.log('✅ Backend: Enrolled subjects found:', materiasMatriculadas.length);
-
     res.json({
       materiasMatriculadas,
       total: materiasMatriculadas.length
     })
   } catch (error) {
-    console.error('❌ Backend: Error getting enrolled subjects, returning empty:', error);
     return res.json({ materiasMatriculadas: [], total: 0 });
   }
 })
@@ -2196,8 +1533,6 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
   try {
     const user = req.user
     const { teacherId } = req.params
-    
-    console.log('🔍 Backend: Getting teacher courses for teacher ID:', teacherId);
 
     // Verificar que el usuario es un profesor
     if (user.tipo_usuario !== 'profesor') {
@@ -2205,34 +1540,11 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
     }
 
     // Obtener cursos del profesor con información detallada
-    const { data: cursos, error: cursosError } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select(`
-        id,
-        curso:cursos(
-          id,
-          nombre,
-          codigo,
-          creditos
-        ),
-        grupo:grupos(
-          id,
-          numero_grupo,
-          horario,
-          aula,
-          periodo:periodos_academicos(
-            id,
-            nombre,
-            codigo
-          )
-        )
-      `)
-      .eq('profesor_id', teacherId)
-      .eq('activa', true)
-
-    if (cursosError) {
-      console.log('❌ Backend: Error getting teacher courses:', cursosError);
-      throw internal('Error al obtener cursos del profesor', cursosError.message)
+    let cursos: any[] = []
+    try {
+      cursos = await academicRepository.listAsignacionesConCursoGrupo(teacherId)
+    } catch (cursosError: any) {
+      throw internal('Error al obtener cursos del profesor', cursosError?.message ?? cursosError)
     }
 
     // Formatear los datos
@@ -2257,11 +1569,8 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
       }
     })).filter((curso: any) => curso.curso?.id) || []
 
-    console.log('✅ Backend: Teacher courses found:', cursosFormateados.length);
-
     res.json(cursosFormateados)
   } catch (error) {
-    console.error('❌ Backend: Error getting teacher courses:', error)
     return sendError(res, error)
   }
 })
@@ -2271,8 +1580,6 @@ router.get('/teacher-courses/:teacherId', authenticateToken, async (req: any, re
 router.get('/teacher-id', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    
-    console.log('🔍 Backend: Getting teacher ID for user:', user.id);
 
     // Verificar que el usuario es un profesor
     if (user.tipo_usuario !== 'profesor') {
@@ -2280,22 +1587,13 @@ router.get('/teacher-id', authenticateToken, async (req: any, res) => {
     }
 
     // Obtener el ID del profesor
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
-
-    if (profesorError || !profesor) {
-      console.log('❌ Backend: Error finding teacher:', profesorError);
+    const profesor = await teachersRepository.findByUsuarioId(user.id)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
 
-    console.log('✅ Backend: Teacher ID found:', profesor.id);
-
     res.json({ teacherId: profesor.id })
   } catch (error) {
-    console.error('❌ Backend: Error getting teacher ID:', error)
     return sendError(res, error)
   }
 })
@@ -2305,25 +1603,20 @@ router.get('/teacher-id', authenticateToken, async (req: any, res) => {
 router.get('/debug-professors', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    console.log('🔍 Debug: User info:', { id: user.id, tipo: user.tipo_usuario });
-    
+
     // Obtener todos los profesores
-    const { data: todosProfesores, error: todosError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, activo, usuario_id, usuario:usuarios(nombre, apellido, email)')
-      .limit(10)
-    
-    console.log('🔍 Debug: Todos los profesores:', { todosProfesores, todosError });
-    
+    let todosProfesores: any[] = []
+    try {
+      todosProfesores = await teachersRepository.listSample(10)
+    } catch {
+      todosProfesores = []
+    }
+
     // Buscar el profesor específico que está fallando
-    const { data: profesorEspecifico, error: profError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, activo, usuario_id, usuario:usuarios(nombre, apellido, email)')
-      .eq('id', '8c1f98db-6722-4aac-ad68-2a368b6324d4')
-      .single()
-    
-    console.log('🔍 Debug: Profesor específico:', { profesorEspecifico, profError });
-    
+    const { data: profesorEspecifico, error: profError } = await teachersRepository.findWithUsuario(
+      '8c1f98db-6722-4aac-ad68-2a368b6324d4'
+    )
+
     res.json({
       user: { id: user.id, tipo: user.tipo_usuario },
       todosProfesores: todosProfesores || [],
@@ -2331,7 +1624,6 @@ router.get('/debug-professors', authenticateToken, async (req: any, res) => {
       error: profError
     })
   } catch (error) {
-    console.error('❌ Debug error:', error);
     return sendError(res, error)
   }
 })

@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
+import { logger } from './logger'
 
 /** Error de aplicación con status HTTP. Las rutas lo lanzan; sendError lo serializa. */
 export class AppError extends Error {
@@ -52,6 +53,7 @@ export function sendError(res: Response, error: unknown): Response {
     return res.status(error.status).json(body)
   }
 
+  logger.error(error)
   const details = error instanceof Error ? error.message : String(error)
   return res.status(500).json({ error: 'Error interno del servidor', details })
 }

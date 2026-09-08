@@ -5,7 +5,6 @@ import {
   sendError,
 } from '../../shared/errors'
 
-
 const router = Router()
 
 router.get(
@@ -26,7 +25,6 @@ router.get(
       const evaluaciones = await evaluationsService.getCompletedResults(filters)
       res.json(evaluaciones)
     } catch (error) {
-      console.error('Error al obtener resultados:', error)
       return sendError(res, error)
     }
   }
@@ -50,7 +48,6 @@ router.get(
       const estadisticas = await evaluationsService.getRatingStatistics(filters)
       res.json(estadisticas)
     } catch (error) {
-      console.error('Error al obtener estadísticas:', error)
       return sendError(res, error)
     }
   }

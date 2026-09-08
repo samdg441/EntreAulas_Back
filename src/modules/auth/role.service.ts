@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../config/supabaseClient';
 import { hashPassword } from '../../utils/passwordSecurity';
 import { dashboardDesdeRoles, dashboardDesdeTipoUsuario } from './dashboard';
+import { logger } from '../../shared/logger';
 
 export interface UserRole {
   id: number;
@@ -44,13 +45,13 @@ export class RoleService {
         });
 
       if (error) {
-        console.error('Error asignando rol:', error);
+        logger.error('Error asignando rol:', error);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('Error en asignarRol:', error);
+      logger.error('Error en asignarRol:', error);
       return false;
     }
   }
@@ -67,13 +68,13 @@ export class RoleService {
         .eq('rol', rol);
 
       if (error) {
-        console.error('Error removiendo rol:', error);
+        logger.error('Error removiendo rol:', error);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('Error en removerRol:', error);
+      logger.error('Error en removerRol:', error);
       return false;
     }
   }
@@ -91,13 +92,13 @@ export class RoleService {
         .order('rol');
 
       if (error) {
-        console.error('Error obteniendo roles:', error);
+        logger.error('Error obteniendo roles:', error);
         return [];
       }
 
       return data?.map(item => item.rol) || [];
     } catch (error) {
-      console.error('Error en obtenerRolesUsuario:', error);
+      logger.error('Error en obtenerRolesUsuario:', error);
       return [];
     }
   }
@@ -116,13 +117,13 @@ export class RoleService {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error verificando rol:', error);
+        logger.error('Error verificando rol:', error);
         return false;
       }
 
       return !!data;
     } catch (error) {
-      console.error('Error en usuarioTieneRol:', error);
+      logger.error('Error en usuarioTieneRol:', error);
       return false;
     }
   }
@@ -160,7 +161,7 @@ export class RoleService {
         .single();
 
       if (usuarioError) {
-        console.error('Error creando usuario:', usuarioError);
+        logger.error('Error creando usuario:', usuarioError);
         return { success: false, error: 'Error creando usuario' };
       }
 
@@ -187,13 +188,13 @@ export class RoleService {
         });
 
       if (coordinadorError) {
-        console.error('Error creando coordinador:', coordinadorError);
+        logger.error('Error creando coordinador:', coordinadorError);
         return { success: false, error: 'Error creando coordinador' };
       }
 
       return { success: true, usuario_id: usuarioId };
     } catch (error) {
-      console.error('Error en crearCoordinadorProfesor:', error);
+      logger.error('Error en crearCoordinadorProfesor:', error);
       return { success: false, error: 'Error interno del servidor' };
     }
   }
@@ -209,13 +210,13 @@ export class RoleService {
         .eq('coordinador_activo', true);
 
       if (error) {
-        console.error('Error obteniendo coordinadores:', error);
+        logger.error('Error obteniendo coordinadores:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error en obtenerCoordinadores:', error);
+      logger.error('Error en obtenerCoordinadores:', error);
       return [];
     }
   }
@@ -225,8 +226,6 @@ export class RoleService {
    */
   static async obtenerCoordinadorPorUsuario(usuarioId: string): Promise<CoordinadorInfo | null> {
     try {
-      console.log('🔍 Buscando coordinador para usuario:', usuarioId)
-      
       // Usar directamente la tabla coordinadores en lugar de la vista
       const { data, error } = await supabaseAdmin
         .from('coordinadores')
@@ -234,18 +233,14 @@ export class RoleService {
         .eq('usuario_id', usuarioId)
         .eq('activo', true)
         .single();
-
-      console.log('🔍 Query coordinador - data:', data)
-      console.log('🔍 Query coordinador - error:', error)
-
       if (error && error.code !== 'PGRST116') {
-        console.error('❌ Error obteniendo coordinador:', error);
+        logger.error('❌ Error obteniendo coordinador:', error);
         return null;
       }
 
       return data || null;
     } catch (error) {
-      console.error('❌ Error en obtenerCoordinadorPorUsuario:', error);
+      logger.error('❌ Error en obtenerCoordinadorPorUsuario:', error);
       return null;
     }
   }
@@ -277,7 +272,7 @@ export class RoleService {
 
       return '/dashboard'
     } catch (error) {
-      console.error('Error en obtenerDashboardUsuario:', error);
+      logger.error('Error en obtenerDashboardUsuario:', error);
       return '/dashboard';
     }
   }
@@ -327,7 +322,7 @@ export class RoleService {
 
       return Array.from(permisos);
     } catch (error) {
-      console.error('Error en obtenerPermisosUsuario:', error);
+      logger.error('Error en obtenerPermisosUsuario:', error);
       return [];
     }
   }
@@ -340,7 +335,7 @@ export class RoleService {
       const permisos = await this.obtenerPermisosUsuario(usuarioId);
       return permisos.includes('all') || permisos.includes(permiso);
     } catch (error) {
-      console.error('Error en usuarioPuedeAcceder:', error);
+      logger.error('Error en usuarioPuedeAcceder:', error);
       return false;
     }
   }
@@ -371,13 +366,13 @@ export class RoleService {
         .single()
 
       if (error) {
-        console.error('Error obteniendo decano por usuario:', error)
+        logger.error('Error obteniendo decano por usuario:', error)
         return null
       }
 
       return data
     } catch (error) {
-      console.error('Error en obtenerDecanoPorUsuario:', error)
+      logger.error('Error en obtenerDecanoPorUsuario:', error)
       return null
     }
   }
@@ -416,13 +411,13 @@ export class RoleService {
         .single()
 
       if (error) {
-        console.error('Error obteniendo decano de facultad:', error)
+        logger.error('Error obteniendo decano de facultad:', error)
         return null
       }
 
       return data
     } catch (error) {
-      console.error('Error en obtenerDecanoFacultad:', error)
+      logger.error('Error en obtenerDecanoFacultad:', error)
       return null
     }
   }

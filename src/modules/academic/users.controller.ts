@@ -10,7 +10,6 @@ import {
   sendError,
 } from '../../shared/errors'
 
-
 const ALLOWED_USER_TYPES = [
   'estudiante',
   'profesor',

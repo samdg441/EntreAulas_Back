@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Response } from 'express'
 import {
   AppError,
@@ -53,8 +53,11 @@ class AppErrorPruebas {
   }
 
   C4_sendErrorInesperado() {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { res, capturado } = respuestaCapturada()
     sendError(res, new Error('boom'))
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
     expect(capturado.statusCode).toBe(500)
     expect(capturado.body).toEqual({
       error: 'Error interno del servidor',

@@ -15,7 +15,6 @@ import {
   unauthorized,
 } from '../../shared/errors'
 
-
 const router = Router()
 
 const registerSchema = z.object({
@@ -42,7 +41,7 @@ const loginSchema = z.object({
 router.post('/register', async (req, res) => {
   try {
     const validatedData = registerSchema.parse(req.body)
-    
+
     // Verificar si el usuario ya existe
     const existingUser = await authRepository.findUserByEmail(validatedData.email)
 
@@ -123,7 +122,6 @@ router.post('/login', async (req, res) => {
         const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
         await authRepository.updateUser(user.id, { password: hashedPassword })
       } catch (updateError) {
-        console.error('Error migrando contraseña a bcrypt:', updateError)
       }
     }
 
@@ -176,7 +174,6 @@ router.post('/login', async (req, res) => {
         }
       }
     } catch (e) {
-      console.warn('Error obteniendo info del coordinador:', e)
     }
 
     let decanoInfo: any = null
@@ -192,13 +189,12 @@ router.post('/login', async (req, res) => {
         }
       }
     } catch (e) {
-      console.warn('Error obteniendo info del decano:', e)
     }
 
     // Determinar el tipo de usuario para la respuesta
     let userTypeDisplay = user.tipo_usuario
     let userRole = user.tipo_usuario
-    
+
     // Normalizar 'docente' a 'profesor' para compatibilidad
     if (user.tipo_usuario === 'docente') {
       userTypeDisplay = 'profesor'
@@ -210,8 +206,8 @@ router.post('/login', async (req, res) => {
       dashboard: dashboard,
       permissions: permisos,
       roles: roles,
-      role_description: roles.length > 1 ? 
-        `Usuario con múltiples roles: ${roles.join(', ')}` : 
+      role_description: roles.length > 1 ?
+        `Usuario con múltiples roles: ${roles.join(', ')}` :
         `Usuario con rol: ${roles[0] || user.tipo_usuario}`
     }
 
@@ -222,7 +218,7 @@ router.post('/login', async (req, res) => {
     if (decanoInfo) {
       additionalInfo.decano = decanoInfo
     }
-    
+
     // Información específica por rol principal
     if (roles.includes('admin')) {
       additionalInfo.role_description = 'Administrador del sistema'
@@ -284,7 +280,6 @@ router.post('/login-with-role', async (req, res) => {
         const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
         await authRepository.updateUser(user.id, { password: hashedPassword })
       } catch (updateError) {
-        console.error('Error migrando contraseña a bcrypt:', updateError)
       }
     }
 
@@ -297,8 +292,8 @@ router.post('/login-with-role', async (req, res) => {
 
     // Generar token JWT
     const token = jwt.sign(
-      { 
-        userId: user.id, 
+      {
+        userId: user.id,
         email: user.email,
         selectedRole: selectedRole
       },
@@ -321,9 +316,7 @@ router.post('/login-with-role', async (req, res) => {
         dashboard: dashboard
       }
     })
-
   } catch (error) {
-    console.error('Error en login con rol:', error)
     return sendError(res, error)
   }
 })
@@ -352,7 +345,6 @@ router.get('/profile', authenticateToken, async (req, res) => {
       permisos: req.user.permisos
     })
   } catch (e) {
-    console.error('GET /auth/profile:', e)
     return sendError(res, e)
   }
 })
@@ -381,7 +373,7 @@ router.get('/me', async (req, res) => {
     // Determinar el tipo de usuario para la respuesta
     let userTypeDisplay = user.tipo_usuario
     let userRole = user.tipo_usuario
-    
+
     // Normalizar 'docente' a 'profesor' para compatibilidad
     if (user.tipo_usuario === 'docente') {
       userTypeDisplay = 'profesor'
@@ -390,7 +382,7 @@ router.get('/me', async (req, res) => {
 
     // Información adicional según el tipo de usuario
     let additionalInfo = {}
-    
+
     switch (user.tipo_usuario) {
       case 'estudiante':
         additionalInfo = {
@@ -450,11 +442,11 @@ router.get('/me', async (req, res) => {
 // POST /auth/create-user - Crear usuario con hash automático (solo administradores)
 router.post('/create-user', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    const { 
-      email, 
-      password, 
-      nombre, 
-      apellido, 
+    const {
+      email,
+      password,
+      nombre,
+      apellido,
       tipo_usuario,
       // Campos opcionales para profesores
       codigo_profesor,
@@ -464,7 +456,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       carrera_id,
       semestre
     } = req.body
-    
+
     if (!email || !password || !nombre || !apellido || !tipo_usuario) {
       throw badRequest('Todos los campos son requeridos')
     }
@@ -479,7 +471,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
     }
 
     const hashedPassword = await hashPassword(password)
-    
+
     // Crear usuario con inserción automática en tabla específica
     const user = await authRepository.createUserWithType({
       email,
@@ -495,7 +487,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       carrera_id,
       semestre
     })
-    
+
     res.status(201).json({
       message: 'Usuario creado exitosamente',
       user: {
@@ -508,7 +500,6 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       }
     })
   } catch (error) {
-    console.error('Error creando usuario:', error)
     return sendError(res, error)
   }
 })

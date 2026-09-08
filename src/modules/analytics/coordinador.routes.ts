@@ -1,8 +1,10 @@
 import { Router } from 'express'
-import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { listGruposConProfesorByCareer } from '../academic/grupos-con-profesor.service'
+import { teachersRepository } from '../academic/teachers.repository'
+import { academicRepository } from '../academic/academic.repository'
+import { analyticsRepository } from './analytics.repository'
 import { armarResumenCoordinador, esCoordinador, parsearPaginacion } from './coordinador-resumen'
 import {
   badRequest,
@@ -11,7 +13,6 @@ import {
   notFound,
   sendError,
 } from '../../shared/errors'
-
 
 const router = Router()
 
@@ -36,7 +37,6 @@ router.get(
       const result = await listGruposConProfesorByCareer(Number(coordinador.carrera_id))
       res.json(result)
     } catch (error: any) {
-      console.error('Error GET /coordinador/cursos-con-profesor:', error)
       return sendError(res, error)
     }
   }
@@ -65,31 +65,22 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
     const { page, pageSize } = parsearPaginacion(req.query || {})
     const search = String(req.query?.search || '').trim().toLowerCase()
 
-    const { data: cursos, error: cursosError } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id')
-      .eq('carrera_id', carreraId)
-      .eq('activo', true)
-
-    if (cursosError) {
-      console.error('Error obteniendo cursos por carrera:', cursosError)
+    let cursos: any[]
+    try {
+      cursos = await academicRepository.listCursosActivosByCareer(carreraId, 'id')
+    } catch (cursosError: any) {
       throw internal('Error obteniendo cursos', cursosError.message)
     }
 
     const totalCursos = (cursos || []).length
 
-    const { data: profesores, error: profesoresError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario_id, activo')
-      .eq('carrera_id', carreraId)
-      .eq('activo', true)
-
-    if (profesoresError) {
-      console.error('Error obteniendo profesores por carrera:', profesoresError)
-      throw internal('Error obteniendo profesores', profesoresError.message)
+    let profesoresList
+    try {
+      profesoresList = await teachersRepository.listActiveByCareer(carreraId)
+    } catch (profesoresError) {
+      throw internal('Error obteniendo profesores', (profesoresError as Error)?.message ?? profesoresError)
     }
 
-    const profesoresList = profesores || []
     const profesorIds = profesoresList.map((p: any) => p.id).filter(Boolean)
 
     if (profesorIds.length === 0) {
@@ -105,25 +96,18 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
     }
 
     const usuarioIds = profesoresList.map((p: any) => p.usuario_id).filter(Boolean)
-    const { data: usuarios, error: usuariosError } = await SupabaseDB.supabaseAdmin
-      .from('usuarios')
-      .select('id, nombre, apellido, email')
-      .in('id', usuarioIds)
-
-    if (usuariosError) {
-      console.error('Error obteniendo usuarios de profesores:', usuariosError)
-      throw internal('Error obteniendo usuarios', usuariosError.message)
+    let usuarios
+    try {
+      usuarios = await analyticsRepository.getUsuariosByIds(usuarioIds)
+    } catch (usuariosError) {
+      throw internal('Error obteniendo usuarios', (usuariosError as Error)?.message ?? usuariosError)
     }
 
-    const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('profesor_id, calificacion_promedio, completada')
-      .in('profesor_id', profesorIds)
-      .eq('completada', true)
-
-    if (evaluacionesError) {
-      console.error('Error obteniendo evaluaciones de profesores:', evaluacionesError)
-      throw internal('Error obteniendo evaluaciones', evaluacionesError.message)
+    let evaluaciones
+    try {
+      evaluaciones = await analyticsRepository.getCompletedByProfesorIds(profesorIds)
+    } catch (evaluacionesError) {
+      throw internal('Error obteniendo evaluaciones', (evaluacionesError as Error)?.message ?? evaluacionesError)
     }
 
     res.json(armarResumenCoordinador({
@@ -136,7 +120,6 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
       pageSize,
     }))
   } catch (error) {
-    console.error('Error GET /coordinador/dashboard-summary:', error)
     return sendError(res, error)
   }
 })
@@ -171,35 +154,23 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     const dateEnd = hasValidPeriod ? `${year}-${semester === 1 ? '06-30' : '12-31'}` : '2030-12-31'
     let periodId: number | null = null
     if (hasValidPeriod) {
-      const { data: periodRow } = await SupabaseDB.supabaseAdmin
-        .from('periodos_academicos')
-        .select('id')
-        .eq('ano', year)
-        .eq('semestre', semester)
-        .maybeSingle()
-      periodId = periodRow?.id ? Number(periodRow.id) : null
+      try {
+        const periodRow = await analyticsRepository.findPeriodo(year, semester)
+        periodId = periodRow?.id ? Number(periodRow.id) : null
+      } catch {
+        periodId = null
+      }
     }
 
-    const { data: profesoresActivos, error: profesoresError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('carrera_id', carreraId)
-      .eq('activo', true)
-
-    if (profesoresError) {
-      console.error('Error obteniendo profesores de carrera para reportes:', profesoresError)
-      throw internal('Error obteniendo profesores', profesoresError.message)
+    let profesorIds
+    try {
+      profesorIds = await teachersRepository.listIdsByCareer(carreraId, true)
+    } catch (profesoresError) {
+      throw internal('Error obteniendo profesores', (profesoresError as Error)?.message ?? profesoresError)
     }
 
-    let profesorIds = (profesoresActivos || []).map((p: any) => p.id).filter(Boolean)
     if (profesorIds.length === 0) {
-      // Fallback: algunos coordinadores no tienen docentes marcados como "activo=true".
-      // Para reportes y exportación se toma toda la carrera.
-      const { data: profesoresCarrera } = await SupabaseDB.supabaseAdmin
-        .from('profesores')
-        .select('id')
-        .eq('carrera_id', carreraId)
-      profesorIds = (profesoresCarrera || []).map((p: any) => p.id).filter(Boolean)
+      profesorIds = await teachersRepository.listIdsByCareer(carreraId, false)
     }
     if (profesorIds.length === 0) {
       return res.json({
@@ -223,47 +194,35 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
 
     // 1) Prioridad: periodo_id explícito (ej: periodo_id = 2)
     if (periodId != null) {
-      const { data: evalsByPeriod, error: evalPeriodError } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion')
-        .in('profesor_id', profesorIds)
-        .eq('completada', true)
-        .eq('periodo_id', periodId)
-      if (evalPeriodError) {
-        console.error('Error obteniendo evaluaciones por periodo_id:', evalPeriodError)
+      try {
+        evalsArray = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion',
+          profesorIds,
+          completada: true,
+          periodoId: periodId,
+        })
+      } catch (evalPeriodError: any) {
         throw internal('Error obteniendo evaluaciones por período', evalPeriodError.message)
       }
-      evalsArray = Array.isArray(evalsByPeriod) ? evalsByPeriod : []
       filterSource = 'periodo_id'
     }
 
     // 2) Fallback por fechas si periodo_id no encontró datos o no existe mapeo
     if (evalsArray.length === 0) {
-      const { data: evalsByDate, error: evalDateError } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion')
-        .in('profesor_id', profesorIds)
-        .eq('completada', true)
-        .gte('fecha_creacion', dateStart)
-        .lte('fecha_creacion', dateEnd)
-      if (evalDateError) {
-        console.error('Error obteniendo evaluaciones por fecha:', evalDateError)
+      try {
+        evalsArray = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion',
+          profesorIds,
+          completada: true,
+          gte: dateStart,
+          lte: dateEnd,
+        })
+      } catch (evalDateError: any) {
         throw internal('Error obteniendo evaluaciones por fecha', evalDateError.message)
       }
-      evalsArray = Array.isArray(evalsByDate) ? evalsByDate : []
       filterSource = 'fecha_creacion'
     }
 
-    console.log('📊 [reports-overview] filtros:', {
-      carreraId,
-      period,
-      periodId,
-      dateStart,
-      dateEnd,
-      profesorCount: profesorIds.length,
-      evaluacionesCount: evalsArray.length,
-      filterSource
-    })
     const totalEvaluaciones = evalsArray.length
     const calificacionPromedio = totalEvaluaciones > 0
       ? Number((evalsArray.reduce((sum: number, e: any) => sum + Number(e.calificacion_promedio || 0), 0) / totalEvaluaciones).toFixed(2))
@@ -273,10 +232,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     const estudiantesRespondieron = new Set(evalsArray.map((e: any) => e.estudiante_id).filter(Boolean)).size
 
     const gruposIds = Array.from(new Set(evalsArray.map((e: any) => e.grupo_id).filter(Boolean)))
-    const { data: grupos } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id, numero_grupo')
-      .in('id', gruposIds.length ? gruposIds : [-1])
+    let grupos: any[] = []
+    try {
+      grupos = await analyticsRepository.getGruposByIds(gruposIds, 'id, curso_id, numero_grupo')
+    } catch {
+      grupos = []
+    }
     const gruposArray = Array.isArray(grupos) ? grupos : []
     const cursosEvaluados = new Set(gruposArray.map((g: any) => g.curso_id).filter(Boolean)).size
     const groupToCourseId = new Map<number, number>()
@@ -313,10 +274,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     })
 
     const teacherIds = Array.from(teacherAgg.keys())
-    const { data: teacherRows } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario:usuarios(nombre, apellido)')
-      .in('id', teacherIds.length ? teacherIds : ['-1'])
+    let teacherRows: any[] = []
+    try {
+      teacherRows = await teachersRepository.listActiveWithUsuario(teacherIds.length ? teacherIds : ['-1'])
+    } catch {
+      teacherRows = []
+    }
     const teacherNameById = new Map<string, string>()
     ;(Array.isArray(teacherRows) ? teacherRows : []).forEach((t: any) => {
       const nombre = `${t?.usuario?.nombre || ''} ${t?.usuario?.apellido || ''}`.trim() || `Docente ${t.id}`
@@ -334,10 +297,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
       .sort((a, b) => b.promedio - a.promedio)
 
     const courseIds = Array.from(new Set(gruposArray.map((g: any) => g.curso_id).filter(Boolean)))
-    const { data: courseRows } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id, nombre, codigo')
-      .in('id', courseIds.length ? courseIds : [-1])
+    let courseRows: any[] = []
+    try {
+      courseRows = await academicRepository.listCursosByIds(courseIds, 'id, nombre, codigo')
+    } catch {
+      courseRows = []
+    }
     const courseNameById = new Map<number, string>()
     ;(Array.isArray(courseRows) ? courseRows : []).forEach((c: any) => {
       courseNameById.set(Number(c.id), `${c.codigo ? `${c.codigo} - ` : ''}${c.nombre || `Curso ${c.id}`}`)
@@ -369,19 +334,25 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     // Si el período no tiene respuestas, usar histórico para que el Excel sí liste docentes/grupos.
     let evalsForReportRows = Array.isArray(evalsArray) ? [...evalsArray] : []
     if (evalsForReportRows.length === 0) {
-      const { data: allCareerEvals } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion')
-        .in('profesor_id', profesorIds)
-        .eq('completada', true)
-      evalsForReportRows = Array.isArray(allCareerEvals) ? allCareerEvals : []
+      try {
+        const allCareerEvals = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion',
+          profesorIds,
+          completada: true,
+        })
+        evalsForReportRows = Array.isArray(allCareerEvals) ? allCareerEvals : []
+      } catch {
+        evalsForReportRows = []
+      }
     }
     if (evalsForReportRows.length === 0) {
-      const { data: assignedGroups } = await SupabaseDB.supabaseAdmin
-        .from('asignaciones_profesor')
-        .select('profesor_id, grupo_id, activa')
-        .in('profesor_id', profesorIds)
-        .neq('activa', false)
+      let assignedGroups: any[] = []
+      try {
+        const asignaciones = await academicRepository.listAsignacionesByProfesorIds(profesorIds)
+        assignedGroups = (asignaciones || []).filter((a: any) => a.activa !== false)
+      } catch {
+        assignedGroups = []
+      }
 
       const seenAssignments = new Set<string>()
       const syntheticRows: any[] = []
@@ -404,29 +375,37 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     }
 
     const exportGroupIds = Array.from(new Set(evalsForReportRows.map((e: any) => Number(e.grupo_id)).filter(Boolean)))
-    const { data: exportGroups } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id, numero_grupo')
-      .in('id', exportGroupIds.length ? exportGroupIds : [-1])
+    let exportGroups: any[] = []
+    try {
+      exportGroups = await analyticsRepository.getGruposByIds(exportGroupIds, 'id, curso_id, numero_grupo')
+    } catch {
+      exportGroups = []
+    }
     const exportGroupsArray = Array.isArray(exportGroups) ? exportGroups : []
     const exportGroupById = new Map<number, any>()
     exportGroupsArray.forEach((g: any) => exportGroupById.set(Number(g.id), g))
 
     const exportCourseIds = Array.from(new Set(exportGroupsArray.map((g: any) => Number(g.curso_id)).filter(Boolean)))
-    const { data: exportCourseRows } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id, nombre, codigo')
-      .in('id', exportCourseIds.length ? exportCourseIds : [-1])
+    let exportCourseRows: any[] = []
+    try {
+      exportCourseRows = await academicRepository.listCursosByIds(exportCourseIds, 'id, nombre, codigo')
+    } catch {
+      exportCourseRows = []
+    }
     const exportCourseNameById = new Map<number, string>()
     ;(Array.isArray(exportCourseRows) ? exportCourseRows : []).forEach((c: any) => {
       exportCourseNameById.set(Number(c.id), `${c.codigo ? `${c.codigo} - ` : ''}${c.nombre || `Curso ${c.id}`}`)
     })
 
     const teacherIdsForExport = Array.from(new Set(evalsForReportRows.map((e: any) => String(e.profesor_id)).filter(Boolean)))
-    const { data: teacherRowsForExport } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario:usuarios(nombre, apellido)')
-      .in('id', teacherIdsForExport.length ? teacherIdsForExport : ['-1'])
+    let teacherRowsForExport: any[] = []
+    try {
+      teacherRowsForExport = await teachersRepository.listActiveWithUsuario(
+        teacherIdsForExport.length ? teacherIdsForExport : ['-1']
+      )
+    } catch {
+      teacherRowsForExport = []
+    }
     const teacherNameByIdForExport = new Map<string, string>()
     ;(Array.isArray(teacherRowsForExport) ? teacherRowsForExport : []).forEach((t: any) => {
       const nombre = `${t?.usuario?.nombre || ''} ${t?.usuario?.apellido || ''}`.trim() || `Docente ${t.id}`
@@ -434,10 +413,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     })
 
     const groupIdsForEnroll = Array.from(new Set(evalsForReportRows.map((e: any) => Number(e.grupo_id)).filter(Boolean)))
-    const { data: enrollments } = await SupabaseDB.supabaseAdmin
-      .from('inscripciones')
-      .select('id, grupo_id')
-      .in('grupo_id', groupIdsForEnroll.length ? groupIdsForEnroll : [-1])
+    let enrollments: any[] = []
+    try {
+      enrollments = await academicRepository.listInscripcionesByGrupoIds(groupIdsForEnroll, 'id, grupo_id')
+    } catch {
+      enrollments = []
+    }
     const enrolledByGroup = new Map<number, number>()
     ;(Array.isArray(enrollments) ? enrollments : []).forEach((i: any) => {
       const gid = Number(i.grupo_id)
@@ -489,18 +470,22 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     }
     let responseRows: any[] = []
     for (const chunk of chunkArray(evalIdsForCategory, 150)) {
-      const { data, error } = await SupabaseDB.supabaseAdmin
-        .from('respuestas_evaluacion')
-        .select('evaluacion_id, pregunta_id, respuesta_rating')
-        .in('evaluacion_id', chunk)
-      if (!error) {
+      try {
+        const data = await analyticsRepository.listRespuestasByEvaluacionIds(
+          chunk,
+          'evaluacion_id, pregunta_id, respuesta_rating'
+        )
         responseRows.push(...(Array.isArray(data) ? data : []))
-      } else {
-        const fallback = await SupabaseDB.supabaseAdmin
-          .from('respuestas_evaluacion')
-          .select('evaluacion_id, pregunta_id, valor')
-          .in('evaluacion_id', chunk)
-        responseRows.push(...(Array.isArray(fallback.data) ? fallback.data : []))
+      } catch {
+        try {
+          const fallback = await analyticsRepository.listRespuestasByEvaluacionIds(
+            chunk,
+            'evaluacion_id, pregunta_id, valor'
+          )
+          responseRows.push(...(Array.isArray(fallback) ? fallback : []))
+        } catch {
+          // same as original: ignore fallback errors here
+        }
       }
     }
 
@@ -515,11 +500,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     const questionIds = Array.from(new Set(responseRows.map((r: any) => String(r.pregunta_id)).filter(Boolean)))
     let questionRows: any[] = []
     for (const chunk of chunkArray(questionIds, 200)) {
-      const { data } = await SupabaseDB.supabaseAdmin
-        .from('preguntas_evaluacion')
-        .select('id, categoria_id')
-        .in('id', chunk)
-      questionRows.push(...(Array.isArray(data) ? data : []))
+      try {
+        const data = await analyticsRepository.listPreguntasByIds(chunk, 'id, categoria_id')
+        questionRows.push(...(Array.isArray(data) ? data : []))
+      } catch {
+        // original ignored errors
+      }
     }
     const questionToCategory = new Map<string, string>()
     questionRows.forEach((q: any) => {
@@ -530,11 +516,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     const categoryIds = Array.from(new Set(questionRows.map((q: any) => String(q.categoria_id)).filter(Boolean)))
     let categoryRows: any[] = []
     for (const chunk of chunkArray(categoryIds, 200)) {
-      const { data } = await SupabaseDB.supabaseAdmin
-        .from('categorias_pregunta')
-        .select('id, nombre')
-        .in('id', chunk)
-      categoryRows.push(...(Array.isArray(data) ? data : []))
+      try {
+        const data = await analyticsRepository.listCategoriasByIds(chunk, 'id, nombre')
+        categoryRows.push(...(Array.isArray(data) ? data : []))
+      } catch {
+        // original ignored errors
+      }
     }
     const categoryNameById = new Map<string, string>()
     categoryRows.forEach((c: any) => categoryNameById.set(String(c.id), String(c.nombre || `Categoría ${c.id}`)))
@@ -601,19 +588,21 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
       {
         const idChunks = chunkArray(ids, 150)
         for (const chunk of idChunks) {
-          const { data, error } = await SupabaseDB.supabaseAdmin
-            .from('respuestas_evaluacion')
-            .select('evaluacion_id, pregunta_id, respuesta_rating')
-            .in('evaluacion_id', chunk)
-          if (!error) {
+          try {
+            const data = await analyticsRepository.listRespuestasByEvaluacionIds(
+              chunk,
+              'evaluacion_id, pregunta_id, respuesta_rating'
+            )
             respuestasArray.push(...(Array.isArray(data) ? data : []))
-          } else {
-            const fallback = await SupabaseDB.supabaseAdmin
-              .from('respuestas_evaluacion')
-              .select('evaluacion_id, pregunta_id, valor')
-              .in('evaluacion_id', chunk)
-            if (!fallback.error) {
-              respuestasArray.push(...(Array.isArray(fallback.data) ? fallback.data : []))
+          } catch {
+            try {
+              const fallback = await analyticsRepository.listRespuestasByEvaluacionIds(
+                chunk,
+                'evaluacion_id, pregunta_id, valor'
+              )
+              respuestasArray.push(...(Array.isArray(fallback) ? fallback : []))
+            } catch {
+              // original ignored fallback errors
             }
           }
         }
@@ -624,11 +613,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
 
       let preguntas: any[] = []
       for (const chunk of chunkArray(preguntaIds, 200)) {
-        const { data } = await SupabaseDB.supabaseAdmin
-          .from('preguntas_evaluacion')
-          .select('id, categoria_id')
-          .in('id', chunk)
-        preguntas.push(...(Array.isArray(data) ? data : []))
+        try {
+          const data = await analyticsRepository.listPreguntasByIds(chunk, 'id, categoria_id')
+          preguntas.push(...(Array.isArray(data) ? data : []))
+        } catch {
+          // original ignored errors
+        }
       }
 
       const preguntaToCategoria = new Map<string, string>()
@@ -642,11 +632,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
       )
       let categorias: any[] = []
       for (const chunk of chunkArray(categoriaIds.length ? categoriaIds : ['-1'], 200)) {
-        const { data } = await SupabaseDB.supabaseAdmin
-          .from('categorias_pregunta')
-          .select('id, nombre')
-          .in('id', chunk)
-        categorias.push(...(Array.isArray(data) ? data : []))
+        try {
+          const data = await analyticsRepository.listCategoriasByIds(chunk, 'id, nombre')
+          categorias.push(...(Array.isArray(data) ? data : []))
+        } catch {
+          // original ignored errors
+        }
       }
       const categoriaNameById = new Map<string, string>()
       ;(Array.isArray(categorias) ? categorias : []).forEach((c: any) => {
@@ -682,7 +673,6 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
         prev.teachers += 1
         categoryTeacherMeans.set(categoriaId, prev)
       })
-
       return Array.from(categoryTeacherMeans.entries())
         .map(([categoriaId, values]) => ({
           categoriaId,
@@ -698,17 +688,18 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     // Fallback solicitado: si en el período no hay datos por categoría,
     // usar el promedio histórico de TODAS las evaluaciones de todos los docentes de la carrera.
     if (categoryStats.length === 0) {
-      const { data: allCareerEvaluations } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id')
-        .in('profesor_id', profesorIds)
-        .eq('completada', true)
+      let allCareerEvaluations: any[] = []
+      try {
+        allCareerEvaluations = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id',
+          profesorIds,
+          completada: true,
+        })
+      } catch {
+        allCareerEvaluations = []
+      }
       categoryStats = await buildCategoryStats(Array.isArray(allCareerEvaluations) ? allCareerEvaluations : [])
     }
-    console.log('📊 [reports-overview] category pipeline:', {
-      evaluacionesCount: evalsArray.length,
-      categoryStatsCount: categoryStats.length
-    })
 
     const resolvePeriodWindow = (periodValue: string) => {
       const [yStr, sStr] = periodValue.split('-')
@@ -744,21 +735,24 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
 
     const trend = await Promise.all(trendPeriods.map(async (p) => {
       const window = resolvePeriodWindow(p)
-      const { data } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('calificacion_promedio')
-        .in('profesor_id', profesorIds)
-        .eq('completada', true)
-        .gte('fecha_creacion', window.start)
-        .lte('fecha_creacion', window.end)
-      const arr = Array.isArray(data) ? data : []
+      let arr: any[] = []
+      try {
+        arr = await analyticsRepository.listEvaluaciones({
+          columns: 'calificacion_promedio',
+          profesorIds,
+          completada: true,
+          gte: window.start,
+          lte: window.end,
+        })
+      } catch {
+        arr = []
+      }
       const total = arr.length
       const rating = total > 0
         ? Number((arr.reduce((sum: number, e: any) => sum + Number(e.calificacion_promedio || 0), 0) / total).toFixed(2))
         : 0
       return { period: p, rating, totalEvaluations: total }
     }))
-
     return res.json({
       summary: {
         totalEvaluaciones,
@@ -782,7 +776,6 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
       distribution
     })
   } catch (error) {
-    console.error('Error GET /coordinador/reports-overview:', error)
     return sendError(res, error)
   }
 })
@@ -813,15 +806,13 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     const dateStart = hasValidPeriod ? `${year}-${semester === 1 ? '01' : '07'}-01` : '2020-01-01'
     const dateEnd = hasValidPeriod ? `${year}-${semester === 1 ? '06-30' : '12-31'}` : '2030-12-31'
 
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario:usuarios(nombre, apellido, email)')
-      .eq('id', profesorId)
-      .eq('carrera_id', carreraId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (profesorError) {
+    let profesor: any
+    try {
+      const rows = await teachersRepository.listActiveWithUsuario([profesorId])
+      profesor = (rows || []).find(
+        (p: any) => String(p.id) === String(profesorId) && Number(p.carrera_id) === carreraId
+      ) || null
+    } catch (profesorError: any) {
       throw internal('Error obteniendo docente', profesorError.message)
     }
     if (!profesor) {
@@ -830,37 +821,42 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
 
     let periodId: number | null = null
     if (hasValidPeriod) {
-      const { data: periodRow } = await SupabaseDB.supabaseAdmin
-        .from('periodos_academicos')
-        .select('id')
-        .eq('ano', year)
-        .eq('semestre', semester)
-        .maybeSingle()
-      periodId = periodRow?.id ? Number(periodRow.id) : null
+      try {
+        const periodRow = await analyticsRepository.findPeriodo(year, semester)
+        periodId = periodRow?.id ? Number(periodRow.id) : null
+      } catch {
+        periodId = null
+      }
     }
 
     let evalsArray: any[] = []
     if (periodId != null) {
-      const { data, error } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion')
-        .eq('profesor_id', profesorId)
-        .eq('completada', true)
-        .eq('periodo_id', periodId)
-      if (error) throw internal('Error obteniendo evaluaciones', error.message)
-      evalsArray = Array.isArray(data) ? data : []
+      try {
+        const data = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion',
+          profesorId,
+          completada: true,
+          periodoId: periodId,
+        })
+        evalsArray = Array.isArray(data) ? data : []
+      } catch (error: any) {
+        throw internal('Error obteniendo evaluaciones', error.message)
+      }
     }
 
     if (evalsArray.length === 0) {
-      const { data, error } = await SupabaseDB.supabaseAdmin
-        .from('evaluaciones')
-        .select('id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion')
-        .eq('profesor_id', profesorId)
-        .eq('completada', true)
-        .gte('fecha_creacion', dateStart)
-        .lte('fecha_creacion', dateEnd)
-      if (error) throw internal('Error obteniendo evaluaciones por fecha', error.message)
-      evalsArray = Array.isArray(data) ? data : []
+      try {
+        const data = await analyticsRepository.listEvaluaciones({
+          columns: 'id, profesor_id, calificacion_promedio, grupo_id, estudiante_id, fecha_creacion',
+          profesorId,
+          completada: true,
+          gte: dateStart,
+          lte: dateEnd,
+        })
+        evalsArray = Array.isArray(data) ? data : []
+      } catch (error: any) {
+        throw internal('Error obteniendo evaluaciones por fecha', error.message)
+      }
     }
 
     const totalEvaluaciones = evalsArray.length
@@ -870,18 +866,22 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     const estudiantesEvaluadores = new Set(evalsArray.map((e: any) => e.estudiante_id).filter(Boolean)).size
 
     const grupoIds = Array.from(new Set(evalsArray.map((e: any) => e.grupo_id).filter(Boolean)))
-    const { data: grupos } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id, numero_grupo')
-      .in('id', grupoIds.length ? grupoIds : [-1])
+    let grupos: any[] = []
+    try {
+      grupos = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id, numero_grupo')
+    } catch {
+      grupos = []
+    }
     const grupoToCurso = new Map<number, any>()
     ;(Array.isArray(grupos) ? grupos : []).forEach((g: any) => grupoToCurso.set(Number(g.id), g))
 
     const cursoIds = Array.from(new Set((Array.isArray(grupos) ? grupos : []).map((g: any) => g.curso_id).filter(Boolean)))
-    const { data: cursos } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id, nombre, codigo')
-      .in('id', cursoIds.length ? cursoIds : [-1])
+    let cursos: any[] = []
+    try {
+      cursos = await academicRepository.listCursosByIds(cursoIds, 'id, nombre, codigo')
+    } catch {
+      cursos = []
+    }
     const cursoById = new Map<number, any>()
     ;(Array.isArray(cursos) ? cursos : []).forEach((c: any) => cursoById.set(Number(c.id), c))
 
@@ -914,21 +914,26 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
 
     let responses: any[] = []
     for (const chunk of chunkArray(evalIds, 150)) {
-      const { data, error } = await SupabaseDB.supabaseAdmin
-        .from('respuestas_evaluacion')
-        .select('evaluacion_id, pregunta_id, respuesta_rating')
-        .in('evaluacion_id', chunk)
-      if (!error) responses.push(...(Array.isArray(data) ? data : []))
+      try {
+        const data = await analyticsRepository.listRespuestasByEvaluacionIds(
+          chunk,
+          'evaluacion_id, pregunta_id, respuesta_rating'
+        )
+        responses.push(...(Array.isArray(data) ? data : []))
+      } catch {
+        // original ignored errors
+      }
     }
 
     const questionIds = Array.from(new Set(responses.map((r: any) => String(r.pregunta_id)).filter(Boolean)))
     let questions: any[] = []
     for (const chunk of chunkArray(questionIds, 200)) {
-      const { data } = await SupabaseDB.supabaseAdmin
-        .from('preguntas_evaluacion')
-        .select('id, categoria_id')
-        .in('id', chunk)
-      questions.push(...(Array.isArray(data) ? data : []))
+      try {
+        const data = await analyticsRepository.listPreguntasByIds(chunk, 'id, categoria_id')
+        questions.push(...(Array.isArray(data) ? data : []))
+      } catch {
+        // original ignored errors
+      }
     }
     const questionToCategory = new Map<string, string>()
     questions.forEach((q: any) => {
@@ -939,11 +944,12 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     const categoryIds = Array.from(new Set(questions.map((q: any) => String(q.categoria_id)).filter(Boolean)))
     let categories: any[] = []
     for (const chunk of chunkArray(categoryIds, 200)) {
-      const { data } = await SupabaseDB.supabaseAdmin
-        .from('categorias_pregunta')
-        .select('id, nombre')
-        .in('id', chunk)
-      categories.push(...(Array.isArray(data) ? data : []))
+      try {
+        const data = await analyticsRepository.listCategoriasByIds(chunk, 'id, nombre')
+        categories.push(...(Array.isArray(data) ? data : []))
+      } catch {
+        // original ignored errors
+      }
     }
     const categoryNameById = new Map<string, string>()
     categories.forEach((c: any) => categoryNameById.set(String(c.id), String(c.nombre || `Categoría ${c.id}`)))
@@ -981,7 +987,6 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
       categories: categoriesStats
     })
   } catch (error) {
-    console.error('Error GET /coordinador/profesor-stats/:profesorId:', error)
     return sendError(res, error)
   }
 })

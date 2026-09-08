@@ -1,9 +1,11 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
 import { calcularPromedio, esPeriodoValido, rangoFechasPeriodo, resumenMetricas } from './calificaciones'
+import { analyticsRepository } from './analytics.repository'
+import { teachersRepository } from '../academic/teachers.repository'
+import { academicRepository } from '../academic/academic.repository'
 import {
   badRequest,
   forbidden,
@@ -11,7 +13,6 @@ import {
   notFound,
   sendError,
 } from '../../shared/errors'
-
 
 const router = Router()
 
@@ -21,39 +22,15 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
     const { profesorId } = req.params
     const user = req.user
 
-    console.log('🔍 Backend: Getting stats for profesorId:', profesorId);
-
-    // Verificar que el profesor existe y está activo
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('id', profesorId)
-      .eq('activo', true)
-      .single()
-
-    if (profesorError || !profesor) {
-      console.log('❌ Backend: Profesor not found:', profesorError);
+    const profesor = await teachersRepository.findActiveProfessor(profesorId)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
 
-    console.log('✅ Backend: Profesor found:', profesor);
-
-    // Obtener todas las evaluaciones del profesor (sin joins directos)
-    const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select(`
-        id,
-        calificacion_promedio,
-        fecha_creacion,
-        grupo_id,
-        estudiante_id
-      `)
-      .eq('profesor_id', profesorId)
-
-    console.log('🔍 Backend: Evaluaciones found:', evaluaciones?.length || 0);
-
-    if (evaluacionesError) {
-      console.error('❌ Backend: Error consultando evaluaciones:', evaluacionesError)
+    let evaluaciones
+    try {
+      evaluaciones = await analyticsRepository.getEvaluacionesStats(profesorId)
+    } catch (evaluacionesError) {
       throw internal('Error consultando evaluaciones', evaluacionesError)
     }
 
@@ -64,18 +41,17 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
     // Mapear grupo -> curso y obtener info de curso
     const evalsArrayStats: any[] = Array.isArray(evaluaciones) ? (evaluaciones as any[]) : []
     const gruposIdsStats = Array.from(new Set(evalsArrayStats.map((e: any) => e.grupo_id).filter(Boolean)))
-    const { data: gruposStats } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id, numero_grupo')
-      .in('id', gruposIdsStats.length ? gruposIdsStats : [-1])
+    const gruposStats = await analyticsRepository.getGruposByIds(gruposIdsStats)
     const grupoToCursoStats: any = {}
     ;(Array.isArray(gruposStats) ? gruposStats : []).forEach((g: any) => { grupoToCursoStats[g.id] = g.curso_id })
 
     const cursoIdsStats = Array.from(new Set(((Array.isArray(gruposStats) ? gruposStats : []).map((g: any) => g.curso_id)).filter(Boolean)))
-    const { data: cursosStats } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id,nombre,codigo')
-      .in('id', cursoIdsStats.length ? cursoIdsStats : [-1])
+    let cursosStats: any[] = []
+    try {
+      cursosStats = await academicRepository.listCursosByIds(cursoIdsStats, 'id, nombre, codigo')
+    } catch {
+      cursosStats = []
+    }
     const cursoInfoStats: any = {}
     ;(Array.isArray(cursosStats) ? cursosStats : []).forEach((c: any) => { cursoInfoStats[c.id] = c })
 
@@ -123,7 +99,6 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
       ?.map(evaluacion => {
         const cursoId = grupoToCursoStats[evaluacion.grupo_id]
         const cursoData = cursoInfoStats[cursoId] as any
-        
         return {
           id: evaluacion.id,
           curso: cursoData?.nombre || 'Curso desconocido',
@@ -143,11 +118,8 @@ router.get('/:profesorId/stats', authenticateToken, async (req: any, res) => {
       evaluacionesRecientes
     }
 
-    console.log('✅ Backend: Stats calculated:', stats);
     res.json(stats)
   } catch (error) {
-    console.error('❌ Backend: Error al obtener estadísticas del profesor:', error)
-    console.error('❌ Backend: Error stack:', (error as any)?.stack)
     return sendError(res, error)
   }
 })
@@ -160,27 +132,10 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
     const { period } = req.query // Ejemplo: ?period=2023-1, 2023-2, 2024-1, etc.
     const user = req.user
 
-    console.log('🔍 Backend: Getting historical stats for profesorId:', profesorId, 'period:', period);
+    const profesorDebug = await teachersRepository.findProfessorById(profesorId)
+    const profesor = profesorDebug
 
-    // Debug: Verificar si el profesor existe (con o sin filtro activo)
-    const { data: profesorDebug, error: debugError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, activo, usuario_id')
-      .eq('id', profesorId)
-      .single()
-
-    console.log('🔍 Backend: Debug profesor query result:', { profesorDebug, debugError });
-
-    // Verificar que el profesor existe
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('id', profesorId)
-      .single()
-
-    if (profesorError || !profesor) {
-      console.log('❌ Backend: Profesor not found, returning mock data:', profesorError);
-      
+    if (!profesor) {
       // Construir filtro de fecha para los datos mock
       let mockDateFilter: { gte?: string; lte?: string } = {}
       if (period) {
@@ -189,7 +144,7 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
           mockDateFilter = { gte: rango.start, lte: rango.end }
         }
       }
-      
+
       // Retornar datos de ejemplo si el profesor no existe
       const mockHistoricalStats = {
         period: period || 'all',
@@ -203,18 +158,13 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
           end: mockDateFilter.lte
         } : null,
         isMockData: true,
-        debug: { 
-          profesorId, 
+        debug: {
+          profesorId,
           debugResult: profesorDebug,
-          debugError: debugError 
         }
       };
-      
-      console.log('✅ Backend: Returning mock historical stats:', mockHistoricalStats);
       return res.json(mockHistoricalStats);
     }
-
-    console.log('✅ Backend: Profesor found:', profesor);
 
     // Construir filtro de fecha basado en el período
     let dateFilter: { gte?: string; lte?: string } = {}
@@ -226,27 +176,17 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
       if (rango) {
         dateFilter = { gte: rango.start, lte: rango.end }
       }
-      console.log('🔍 Backend: Date filter:', dateFilter);
     }
 
     // Obtener evaluaciones del profesor con filtro de período
-    const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select(`
-        id,
-        calificacion_promedio,
-        fecha_creacion,
-        grupo_id,
-        estudiante_id
-      `)
-      .eq('profesor_id', profesorId)
-      .gte('fecha_creacion', dateFilter.gte || '2020-01-01')
-      .lte('fecha_creacion', dateFilter.lte || '2030-12-31')
-
-    console.log('🔍 Backend: Evaluaciones found for period:', evaluaciones?.length || 0);
-
-    if (evaluacionesError) {
-      console.error('❌ Backend: Error consultando evaluaciones históricas:', evaluacionesError)
+    let evaluaciones
+    try {
+      evaluaciones = await analyticsRepository.getEvaluacionesHistoricas(
+        profesorId,
+        dateFilter.gte || '2020-01-01',
+        dateFilter.lte || '2030-12-31'
+      )
+    } catch (evaluacionesError) {
       throw internal('Error consultando evaluaciones históricas', evaluacionesError)
     }
 
@@ -262,19 +202,18 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
     // Obtener evaluaciones por curso para este período
     // Mapear grupo_id -> curso_id y luego curso info
     const gruposIds = Array.from(new Set(((evaluaciones as any[]) || []).map((e: any) => e.grupo_id).filter(Boolean)))
-    const { data: gruposInfo } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id, numero_grupo')
-      .in('id', gruposIds.length ? gruposIds : [-1])
+    const gruposInfo = await analyticsRepository.getGruposByIds(gruposIds)
 
     const grupoIdToCursoId: any = {}
     ;(Array.isArray(gruposInfo) ? gruposInfo : []).forEach((g: any) => { grupoIdToCursoId[g.id] = g.curso_id })
 
     const cursoIds = Array.from(new Set(((Array.isArray(gruposInfo) ? gruposInfo : []).map((g: any) => g.curso_id)).filter(Boolean)))
-    const { data: cursosInfo } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id,nombre,codigo')
-      .in('id', cursoIds.length ? cursoIds : [-1])
+    let cursosInfo: any[] = []
+    try {
+      cursosInfo = await academicRepository.listCursosByIds(cursoIds, 'id, nombre, codigo')
+    } catch {
+      cursosInfo = []
+    }
 
     const cursoIdToInfo: any = {}
     ;(cursosInfo || []).forEach((c: any) => { cursoIdToInfo[c.id] = c })
@@ -324,11 +263,8 @@ router.get('/:profesorId/stats/historical', authenticateToken, async (req: any, 
       } : null
     }
 
-    console.log('✅ Backend: Historical stats calculated:', historicalStats);
     res.json(historicalStats)
   } catch (error) {
-    console.error('❌ Backend: Error al obtener estadísticas históricas del profesor:', error)
-    console.error('❌ Backend: Error stack:', (error as any)?.stack)
     return sendError(res, error)
   }
 })
@@ -365,33 +301,39 @@ const evaluationSchema = z.object({
 router.get('/course-rating/:professorId/:courseId', async (req, res) => {
   try {
     const { professorId, courseId } = req.params
-    
-    console.log(`🔍 Obteniendo calificación promedio para profesor ${professorId} en curso ${courseId}`)
-    
+
     // Buscar evaluaciones del profesor en el curso específico
-    const { data: evaluaciones, error: evalError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select(`
-        id,
-        respuestas_evaluacion (
-          pregunta_id,
-          respuesta,
-          preguntas (
-            tipo_pregunta
-          )
-        )
-      `)
-      .eq('profesor_id', professorId)
-      .eq('curso_id', courseId)
-      .eq('estado', 'completada')
-    
-    if (evalError) {
-      console.error('❌ Error obteniendo evaluaciones:', evalError)
+    let evaluaciones: any[]
+    try {
+      try {
+        evaluaciones = await analyticsRepository.listEvaluaciones({
+          columns: 'id, grupo_id, curso_id',
+          profesorId: professorId,
+          completada: true,
+        })
+      } catch {
+        evaluaciones = await analyticsRepository.listEvaluaciones({
+          columns: 'id, grupo_id',
+          profesorId: professorId,
+          completada: true,
+        })
+      }
+    } catch {
       throw internal('Error obteniendo evaluaciones')
     }
-    
-    console.log(`🔍 Evaluaciones encontradas: ${evaluaciones?.length || 0}`)
-    
+
+    const gruposCourseRating = await analyticsRepository.getGruposByIds(
+      Array.from(new Set((evaluaciones || []).map((e: any) => e.grupo_id).filter(Boolean))),
+      'id, curso_id'
+    )
+    const grupoToCursoRating: any = {}
+    ;(Array.isArray(gruposCourseRating) ? gruposCourseRating : []).forEach((g: any) => {
+      grupoToCursoRating[g.id] = g.curso_id
+    })
+    evaluaciones = (evaluaciones || []).filter((e: any) =>
+      String(e.curso_id ?? grupoToCursoRating[e.grupo_id]) === String(courseId)
+    )
+
     if (!evaluaciones || evaluaciones.length === 0) {
       return res.json({
         promedio: null,
@@ -399,32 +341,53 @@ router.get('/course-rating/:professorId/:courseId', async (req, res) => {
         mensaje: 'No hay evaluaciones completadas para este curso'
       })
     }
-    
+
     // Calcular promedio de respuestas numéricas (Likert scale)
     let sumaTotal = 0
     let cantidadRespuestas = 0
-    
-    evaluaciones.forEach(evaluacion => {
-      evaluacion.respuestas_evaluacion?.forEach((respuesta: any) => {
-        if (respuesta.preguntas?.tipo_pregunta === 'likert' && !isNaN(parseInt(respuesta.respuesta))) {
-          sumaTotal += parseInt(respuesta.respuesta)
-          cantidadRespuestas++
-        }
-      })
+
+    const evaluacionIdsRating = evaluaciones.map((e: any) => e.id).filter(Boolean)
+    let respuestasRating: any[] = []
+    try {
+      respuestasRating = await analyticsRepository.listRespuestasByEvaluacionIds(
+        evaluacionIdsRating,
+        'evaluacion_id, pregunta_id, respuesta_rating, respuesta_texto'
+      )
+    } catch {
+      respuestasRating = []
+    }
+    const preguntaIdsRating = Array.from(new Set(respuestasRating.map((r: any) => r.pregunta_id).filter(Boolean)))
+    let preguntasRating: any[] = []
+    try {
+      preguntasRating = await analyticsRepository.listPreguntasByIds(preguntaIdsRating, 'id, tipo_pregunta')
+    } catch {
+      try {
+        preguntasRating = await analyticsRepository.listPreguntasByIds(preguntaIdsRating, 'id')
+      } catch {
+        preguntasRating = []
+      }
+    }
+    const preguntaTipo: any = {}
+    ;(Array.isArray(preguntasRating) ? preguntasRating : []).forEach((p: any) => {
+      preguntaTipo[p.id] = p.tipo_pregunta
     })
-    
+    respuestasRating.forEach((respuesta: any) => {
+      const tipo = preguntaTipo[respuesta.pregunta_id]
+      const valorRaw = respuesta.respuesta ?? respuesta.respuesta_rating ?? respuesta.respuesta_texto
+      if ((tipo === 'likert' || tipo == null) && !isNaN(parseInt(valorRaw))) {
+        sumaTotal += parseInt(valorRaw)
+        cantidadRespuestas++
+      }
+    })
+
     const promedio = cantidadRespuestas > 0 ? (sumaTotal / cantidadRespuestas).toFixed(2) : null
-    
-    console.log(`✅ Calificación promedio calculada: ${promedio} (${cantidadRespuestas} respuestas)`)
-    
+
     res.json({
       promedio: promedio ? parseFloat(promedio) : null,
       total_respuestas: cantidadRespuestas,
       total_evaluaciones: evaluaciones.length
     })
-    
   } catch (error) {
-    console.error('❌ Error en /teachers/course-rating:', error)
     return sendError(res, error)
   }
 })
@@ -440,63 +403,46 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
       throw forbidden('Acceso denegado. Solo decanos pueden acceder a estos resultados.')
     }
 
-    console.log('🔍 Obteniendo resultados para todas las carreras...')
-
     // Obtener todas las carreras activas (excluyendo tronco común)
-    const { data: carreras, error: carrerasError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select(`
-        id,
-        nombre,
-        codigo,
-        activo
-      `)
-      .eq('activa', true)
-      .not('nombre', 'ilike', '%tronco común%')
-      .not('nombre', 'ilike', '%tronco comun%')
-      .eq('activo', true)
-
-    if (carrerasError) {
-      console.error('❌ Error obteniendo carreras:', carrerasError)
-      throw internal('Error obteniendo carreras', carrerasError)
+    let carreras: any[]
+    try {
+      carreras = await academicRepository.listCarreras('id, nombre, codigo, activo, activa')
+    } catch (carrerasError) {
+      try {
+        carreras = await academicRepository.listCarreras('id, nombre, codigo, activa')
+      } catch (fallbackError) {
+        throw internal('Error obteniendo carreras', carrerasError)
+      }
     }
+    carreras = (carreras || []).filter((c: any) => {
+      const nombre = String(c.nombre || '').toLowerCase()
+      if (nombre.includes('tronco común') || nombre.includes('tronco comun')) return false
+      if (c.activa !== undefined && c.activa !== true) return false
+      if (c.activo !== undefined && c.activo !== true) return false
+      return true
+    })
 
     // Obtener estadísticas generales de evaluaciones
-    const { data: evaluacionesGenerales, error: evalError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select(`
-        id,
-        calificacion_promedio,
-        fecha_creacion,
-        grupos:grupos(
-          curso_id,
-          cursos:cursos(
-            carrera_id,
-            carreras:carreras(
-              id,
-              nombre
-            )
-          )
-        )
-      `)
-
-    if (evalError) {
-      console.error('❌ Error obteniendo evaluaciones generales:', evalError)
+    let evaluacionesGenerales: any[]
+    try {
+      evaluacionesGenerales = await analyticsRepository.listEvaluaciones({
+        columns: 'id, calificacion_promedio, fecha_creacion, grupo_id',
+      })
+    } catch (evalError) {
       throw internal('Error obteniendo evaluaciones', evalError)
     }
 
     // Procesar datos por carrera
     const resultadosPorCarrera = carreras.map(carrera => {
       // TODO: Corregir consulta SQL para evitar errores de TypeScript
-      const evaluacionesCarrera: any[] = [] // evaluacionesGenerales?.filter(evaluacion => 
+      const evaluacionesCarrera: any[] = [] // evaluacionesGenerales?.filter(evaluacion =>
         // evaluacion.grupos?.cursos?.carrera_id === carrera.id
       // ) || []
 
       const calificaciones = evaluacionesCarrera.map(evaluacion => evaluacion.calificacion_promedio).filter(c => c !== null)
-      const promedioCarrera = calificaciones.length > 0 
-        ? calificaciones.reduce((sum, cal) => sum + cal, 0) / calificaciones.length 
+      const promedioCarrera = calificaciones.length > 0
+        ? calificaciones.reduce((sum, cal) => sum + cal, 0) / calificaciones.length
         : 0
-
       return {
         carrera_id: carrera.id,
         carrera_nombre: carrera.nombre,
@@ -504,7 +450,7 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
         total_evaluaciones: evaluacionesCarrera.length,
         calificacion_promedio: promedioCarrera,
         profesores_evaluados: 0, // TODO: Corregir consulta SQL
-        ultima_evaluacion: evaluacionesCarrera.length > 0 
+        ultima_evaluacion: evaluacionesCarrera.length > 0
           ? Math.max(...evaluacionesCarrera.map(evaluacion => new Date(evaluacion.fecha_creacion).getTime()))
           : null
       }
@@ -513,8 +459,8 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
     // Estadísticas generales
     const totalEvaluaciones = evaluacionesGenerales?.length || 0
     const calificacionesGenerales = evaluacionesGenerales?.map(evaluacion => evaluacion.calificacion_promedio).filter(c => c !== null) || []
-    const promedioGeneral = calificacionesGenerales.length > 0 
-      ? calificacionesGenerales.reduce((sum, cal) => sum + cal, 0) / calificacionesGenerales.length 
+    const promedioGeneral = calificacionesGenerales.length > 0
+      ? calificacionesGenerales.reduce((sum, cal) => sum + cal, 0) / calificacionesGenerales.length
       : 0
 
     const resultado = {
@@ -529,11 +475,8 @@ router.get('/career-results/all', authenticateToken, async (req: any, res) => {
       fecha_generacion: new Date().toISOString()
     }
 
-    console.log('✅ Resultados globales generados:', resultado.estadisticas_generales)
     res.json(resultado)
-
   } catch (error) {
-    console.error('❌ Error en /teachers/career-results/all:', error)
     return sendError(res, error)
   }
 })
@@ -550,88 +493,70 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
       throw forbidden('Acceso denegado. Solo decanos pueden acceder a estos resultados.')
     }
 
-    console.log(`🔍 Obteniendo resultados para carrera ${careerId}...`)
-
     // Obtener información de la carrera
-    const { data: carrera, error: carreraError } = await SupabaseDB.supabaseAdmin
-      .from('carreras')
-      .select(`
-        id,
-        nombre,
-        codigo,
-            activa,
-        descripcion
-      `)
-      .eq('id', careerId)
-      .single()
-
-    if (carreraError) {
-      console.error('❌ Error obteniendo carrera:', carreraError)
+    let carrera: any
+    try {
+      carrera = await academicRepository.getCarreraById(careerId)
+    } catch (carreraError) {
       throw notFound('Carrera no encontrada', carreraError)
     }
 
-    // Obtener profesores de la carrera
-    const { data: profesores, error: profesoresError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select(`
-        id,
-        usuario_id,
-        codigo_profesor,
-        activa,
-        carrera_id,
-        usuarios:usuarios(
-          id,
-          nombre,
-          apellido,
-          email
-        )
-      `)
-      .eq('activo', true)
+    if (!carrera) {
+      throw notFound('Carrera no encontrada')
+    }
 
-    if (profesoresError) {
-      console.error('❌ Error obteniendo profesores:', profesoresError)
+    // Obtener profesores de la carrera
+    let profesores: any[]
+    try {
+      profesores = await teachersRepository.listByCareerDetailed(careerId)
+    } catch (profesoresError) {
       throw internal('Error obteniendo profesores', profesoresError)
     }
 
     // Obtener evaluaciones de la carrera
-    const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select(`
-        id,
-        calificacion_promedio,
-        fecha_creacion,
-        comentarios,
-        profesor_id,
-        grupos:grupos(
-          curso_id,
-          cursos:cursos(
-            id,
-            nombre,
-            codigo,
-            carrera_id,
-            carreras:carreras(
-              id,
-              nombre
-            )
-          )
-        )
-      `)
-      .eq('grupos.cursos.carrera_id', careerId)
-
-    if (evaluacionesError) {
-      console.error('❌ Error obteniendo evaluaciones:', evaluacionesError)
+    let evaluaciones: any[]
+    try {
+      evaluaciones = await analyticsRepository.listEvaluaciones({
+        columns: 'id, calificacion_promedio, fecha_creacion, comentarios, profesor_id, grupo_id',
+      })
+    } catch (evaluacionesError) {
       throw internal('Error obteniendo evaluaciones', evaluacionesError)
     }
+    const grupoIdsCareer = Array.from(new Set((evaluaciones || []).map((e: any) => e.grupo_id).filter(Boolean)))
+    let gruposCareer: any[] = []
+    try {
+      gruposCareer = await analyticsRepository.getGruposByIds(grupoIdsCareer, 'id, curso_id')
+    } catch {
+      gruposCareer = []
+    }
+    const cursoIdsCareer = Array.from(new Set((gruposCareer || []).map((g: any) => g.curso_id).filter(Boolean)))
+    let cursosCareer: any[] = []
+    try {
+      cursosCareer = await academicRepository.listCursosByIds(cursoIdsCareer, 'id, carrera_id')
+    } catch {
+      cursosCareer = []
+    }
+    const cursosDeCarrera = new Set(
+      (cursosCareer || [])
+        .filter((c: any) => String(c.carrera_id) === String(careerId))
+        .map((c: any) => c.id)
+    )
+    const gruposDeCarrera = new Set(
+      (gruposCareer || [])
+        .filter((g: any) => cursosDeCarrera.has(g.curso_id))
+        .map((g: any) => g.id)
+    )
+    evaluaciones = (evaluaciones || []).filter((e: any) => gruposDeCarrera.has(e.grupo_id))
 
     // Procesar datos por profesor
     const profesoresConResultados = profesores.map(profesor => {
-      const evaluacionesProfesor = evaluaciones?.filter(evaluacion => 
+      const evaluacionesProfesor = evaluaciones?.filter(evaluacion =>
         evaluacion.profesor_id === profesor.id
       ) || []
 
       const calificaciones = evaluacionesProfesor.map(evaluacion => evaluacion.calificacion_promedio).filter(c => c !== null)
-      const promedioProfesor = calificaciones.length > 0 
-        ? calificaciones.reduce((sum, cal) => sum + cal, 0) / calificaciones.length 
+      const promedioProfesor = calificaciones.length > 0
+        ? calificaciones.reduce((sum, cal) => sum + cal, 0) / calificaciones.length
         : 0
 
       // TODO: Corregir consulta SQL para evitar errores de TypeScript
@@ -642,7 +567,6 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
         // calificacion: evaluacion.calificacion_promedio,
         // fecha_evaluacion: evaluacion.fecha_creacion
       // }))
-
       return {
         profesor_id: profesor.id,
         profesor_nombre: 'Profesor', // TODO: Corregir consulta SQL
@@ -650,7 +574,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
         total_evaluaciones: evaluacionesProfesor.length,
         calificacion_promedio: promedioProfesor,
         cursos_evaluados: cursosEvaluados,
-        ultima_evaluacion: evaluacionesProfesor.length > 0 
+        ultima_evaluacion: evaluacionesProfesor.length > 0
           ? Math.max(...evaluacionesProfesor.map(evaluacion => new Date(evaluacion.fecha_creacion).getTime()))
           : null
       }
@@ -659,8 +583,8 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
     // Estadísticas de la carrera
     const totalEvaluaciones = evaluaciones?.length || 0
     const calificacionesGenerales = evaluaciones?.map(evaluacion => evaluacion.calificacion_promedio).filter(c => c !== null) || []
-    const promedioGeneral = calificacionesGenerales.length > 0 
-      ? calificacionesGenerales.reduce((sum, cal) => sum + cal, 0) / calificacionesGenerales.length 
+    const promedioGeneral = calificacionesGenerales.length > 0
+      ? calificacionesGenerales.reduce((sum, cal) => sum + cal, 0) / calificacionesGenerales.length
       : 0
 
     const resultado = {
@@ -683,11 +607,8 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
       fecha_generacion: new Date().toISOString()
     }
 
-    console.log(`✅ Resultados de carrera ${carrera.nombre} generados:`, resultado.estadisticas_carrera)
     res.json(resultado)
-
   } catch (error) {
-    console.error('❌ Error en /teachers/career-results/:careerId:', error)
     return sendError(res, error)
   }
 })
@@ -697,8 +618,6 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 router.get('/student-stats', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    
-    console.log('🔍 Backend: Getting student stats for user:', user.id);
 
     // Verificar que el usuario es un estudiante
     if (user.tipo_usuario !== 'estudiante') {
@@ -706,14 +625,9 @@ router.get('/student-stats', authenticateToken, async (req: any, res) => {
     }
 
     // Obtener el ID del estudiante (si no existe, devolver datos en cero para que el dashboard cargue)
-    const { data: estudiante, error: estudianteError } = await SupabaseDB.supabaseAdmin
-      .from('estudiantes')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
+    const estudiante = await academicRepository.findEstudianteByUsuarioId(user.id)
 
-    if (estudianteError || !estudiante) {
-      console.log('⚠️ Backend: No row in estudiantes for user, returning zero stats:', user.id);
+    if (!estudiante) {
       return res.json({
         evaluacionesCompletadas: 0,
         evaluacionesPendientes: 0,
@@ -723,39 +637,24 @@ router.get('/student-stats', authenticateToken, async (req: any, res) => {
       });
     }
 
-    console.log('✅ Backend: Estudiante found:', estudiante);
-
     // Obtener evaluaciones completadas
-    const { data: evaluacionesCompletadas, error: completadasError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('id, calificacion_promedio')
-      .eq('estudiante_id', estudiante.id)
-      .eq('completada', true)
-
-    if (completadasError) {
-      console.log('❌ Backend: Error getting completed evaluations:', completadasError);
+    let evaluacionesCompletadas: any[] = []
+    try {
+      evaluacionesCompletadas = await analyticsRepository.listEvaluaciones({
+        columns: 'id, calificacion_promedio',
+        estudianteId: estudiante.id,
+        completada: true,
+      })
+    } catch {
+      evaluacionesCompletadas = []
     }
 
     // Obtener materias matriculadas (grupos donde está inscrito)
-    const { data: materiasMatriculadas, error: materiasError } = await SupabaseDB.supabaseAdmin
-      .from('inscripciones')
-      .select(`
-        id,
-        grupo:grupos(
-          id,
-          numero_grupo,
-          curso:cursos(
-            id,
-            nombre,
-            codigo
-          )
-        )
-      `)
-      .eq('estudiante_id', estudiante.id)
-      .eq('activa', true)
-
-    if (materiasError) {
-      console.log('❌ Backend: Error getting enrolled subjects:', materiasError);
+    let materiasMatriculadas: any[] = []
+    try {
+      materiasMatriculadas = await academicRepository.listInscripcionesActivas(estudiante.id)
+    } catch {
+      materiasMatriculadas = []
     }
 
     // Calcular promedio general
@@ -776,25 +675,13 @@ router.get('/student-stats', authenticateToken, async (req: any, res) => {
       evaluacionesPendientes: Math.max(0, evaluacionesPendientesCount), // No puede ser negativo
       materiasMatriculadas: materiasMatriculadasCount,
       promedioGeneral: Number(promedioGeneral.toFixed(2)),
-      progresoGeneral: materiasMatriculadasCount > 0 
+      progresoGeneral: materiasMatriculadasCount > 0
         ? Math.round((evaluacionesCompletadasCount / materiasMatriculadasCount) * 100)
         : 0
     }
 
-    console.log('✅ Backend: Student stats calculated:', {
-      materiasMatriculadasCount,
-      evaluacionesCompletadasCount,
-      evaluacionesPendientesCount,
-      promedioGeneral,
-      progresoGeneral: materiasMatriculadasCount > 0 
-        ? Math.round((evaluacionesCompletadasCount / materiasMatriculadasCount) * 100)
-        : 0,
-      stats
-    });
-
     res.json(stats)
   } catch (error) {
-    console.error('❌ Backend: Error getting student stats:', error)
     return sendError(res, error)
   }
 })
@@ -805,8 +692,6 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
   try {
     const user = req.user
     const { teacherId } = req.params
-    
-    console.log('🔍 Backend: Getting teacher stats for teacher ID:', teacherId);
 
     // Verificar que el usuario es un profesor
     if (user.tipo_usuario !== 'profesor') {
@@ -814,43 +699,27 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
     }
 
     // Obtener el ID del profesor
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('id', teacherId)
-      .single()
-
-    if (profesorError || !profesor) {
-      console.log('❌ Backend: Error finding teacher:', profesorError);
+    const profesor = await teachersRepository.findProfessorById(teacherId)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
 
-    console.log('✅ Backend: Profesor found:', profesor);
-
-    // Obtener evaluaciones completadas del profesor
-    const { data: evaluacionesCompletadas, error: completadasError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('id, calificacion_promedio, grupo_id')
-      .eq('profesor_id', profesor.id)
-      .eq('completada', true)
-
-    if (completadasError) {
-      console.log('❌ Backend: Error getting completed evaluations:', completadasError);
-      throw internal('Error obteniendo evaluaciones completadas', completadasError.message)
+    let evaluacionesCompletadas
+    try {
+      evaluacionesCompletadas = await analyticsRepository.getCompletedForTeacherStats(profesor.id)
+    } catch (completadasError) {
+      throw internal('Error obteniendo evaluaciones completadas', (completadasError as Error)?.message ?? completadasError)
     }
 
     const evaluacionesArray = Array.isArray(evaluacionesCompletadas) ? evaluacionesCompletadas : []
     const grupoIds = Array.from(new Set(evaluacionesArray.map((e: any) => e.grupo_id).filter(Boolean)))
 
     // Resolver curso por cada grupo evaluado para agrupar correctamente por curso
-    const { data: gruposEvaluados, error: gruposError } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id')
-      .in('id', grupoIds.length ? grupoIds : [-1])
-
-    if (gruposError) {
-      console.log('❌ Backend: Error getting groups for evaluations:', gruposError);
-      throw internal('Error obteniendo grupos de evaluaciones', gruposError.message)
+    let gruposEvaluados
+    try {
+      gruposEvaluados = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id')
+    } catch (gruposError) {
+      throw internal('Error obteniendo grupos de evaluaciones', (gruposError as Error)?.message ?? gruposError)
     }
 
     const grupoToCurso = new Map<any, any>()
@@ -863,16 +732,11 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
     )
 
     // Obtener cursos activos impartidos por el profesor para la card de cursos
-    const { data: asignacionesActivas, error: cursosError } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select('curso_id, grupo_id')
-      .eq('profesor_id', profesor.id)
-      // Incluye asignaciones activas y también registros donde "activa" viene nulo
-      // para no perder grupos/cursos válidos por inconsistencias históricas.
-      .neq('activa', false)
-
-    if (cursosError) {
-      console.log('❌ Backend: Error getting teacher courses:', cursosError);
+    let asignacionesActivas: any[]
+    try {
+      const asignaciones = await academicRepository.listAsignacionesByProfesorIds([profesor.id])
+      asignacionesActivas = (asignaciones || []).filter((a: any) => a.activa !== false)
+    } catch (cursosError: any) {
       throw internal('Error obteniendo cursos del profesor', cursosError.message)
     }
 
@@ -880,13 +744,10 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
     const gruposActivosSet = new Set((asignacionesActivas || []).map((a: any) => a.grupo_id).filter(Boolean))
 
     const cursoIdsToFetch = Array.from(new Set([...cursoIdsFromEvals, ...Array.from(cursosActivosSet)]))
-    const { data: cursosInfo, error: cursosInfoError } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id, nombre, codigo')
-      .in('id', cursoIdsToFetch.length ? cursoIdsToFetch : [-1])
-
-    if (cursosInfoError) {
-      console.log('❌ Backend: Error getting courses info:', cursosInfoError);
+    let cursosInfo: any[]
+    try {
+      cursosInfo = await academicRepository.listCursosByIds(cursoIdsToFetch, 'id, nombre, codigo')
+    } catch (cursosInfoError: any) {
       throw internal('Error obteniendo información de cursos', cursosInfoError.message)
     }
 
@@ -937,11 +798,8 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
       evaluacionesPorCurso: evaluacionesPorCurso
     }
 
-    console.log('✅ Backend: Teacher stats calculated:', stats);
-
     res.json(stats)
   } catch (error) {
-    console.error('❌ Backend: Error getting teacher stats:', error)
     return sendError(res, error)
   }
 })
@@ -958,13 +816,8 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
     }
 
     // Obtener ID del profesor por usuario autenticado
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
-
-    if (profesorError || !profesor) {
+    const profesor = await teachersRepository.findByUsuarioId(user.id)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
 
@@ -978,15 +831,15 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
     }
 
     // Evaluaciones del período para este profesor
-    const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('id, calificacion_promedio, fecha_creacion, grupo_id')
-      .eq('profesor_id', profesor.id)
-      .eq('completada', true)
-      .gte('fecha_creacion', dateFilter.gte || '2020-01-01')
-      .lte('fecha_creacion', dateFilter.lte || '2030-12-31')
-
-    if (evaluacionesError) {
+    let evaluaciones
+    try {
+      evaluaciones = await analyticsRepository.getCompletedInPeriod(
+        profesor.id,
+        dateFilter.gte || '2020-01-01',
+        dateFilter.lte || '2030-12-31',
+        'id, calificacion_promedio, fecha_creacion, grupo_id'
+      )
+    } catch (evaluacionesError) {
       throw internal('Error consultando evaluaciones del período', evaluacionesError)
     }
 
@@ -998,18 +851,17 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
     // Obtener info de cursos via grupos
     const evalsArray: any[] = Array.isArray(evaluaciones) ? (evaluaciones as any[]) : []
     const gruposIds = Array.from(new Set(evalsArray.map((e: any) => e.grupo_id).filter(Boolean)))
-    const { data: periodGrupos } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id')
-      .in('id', gruposIds.length ? gruposIds : [-1])
+    const periodGrupos = await analyticsRepository.getGruposByIds(gruposIds, 'id, curso_id')
     const grupoToCurso: any = {}
     ;(Array.isArray(periodGrupos) ? periodGrupos : []).forEach((g: any) => { grupoToCurso[g.id] = g.curso_id })
 
     const periodCursoIds = Array.from(new Set(((Array.isArray(periodGrupos) ? periodGrupos : []).map((g: any) => g.curso_id)).filter(Boolean)))
-    const { data: periodCursos } = await SupabaseDB.supabaseAdmin
-      .from('cursos')
-      .select('id,nombre,codigo')
-      .in('id', periodCursoIds.length ? periodCursoIds : [-1])
+    let periodCursos: any[] = []
+    try {
+      periodCursos = await academicRepository.listCursosByIds(periodCursoIds, 'id, nombre, codigo')
+    } catch {
+      periodCursos = []
+    }
     const periodCursoMap: any = {}
     const periodCursosArray: any[] = Array.isArray(periodCursos) ? periodCursos as any[] : []
     periodCursosArray.forEach((c: any) => { periodCursoMap[c.id] = c })
@@ -1046,11 +898,13 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
     }
 
     // Cursos impartidos activos (no necesariamente filtrados por periodo)
-    const { data: cursosImpartidos } = await SupabaseDB.supabaseAdmin
-      .from('asignaciones_profesor')
-      .select('id')
-      .eq('profesor_id', profesor.id)
-      .eq('activa', true)
+    let cursosImpartidos: any[] = []
+    try {
+      const asignaciones = await academicRepository.listAsignacionesByProfesorIds([profesor.id])
+      cursosImpartidos = (asignaciones || []).filter((a: any) => a.activa === true)
+    } catch {
+      cursosImpartidos = []
+    }
 
     const stats = {
       totalEvaluaciones,
@@ -1059,7 +913,6 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
       evaluacionesPorCurso,
       period: period || 'all'
     }
-
     return res.json(stats)
   } catch (error) {
     return sendError(res, error)
@@ -1079,12 +932,8 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     }
 
     // 1) Profesor
-    const { data: profesor, error: profesorError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id')
-      .eq('usuario_id', user.id)
-      .single()
-    if (profesorError || !profesor) {
+    const profesor = await teachersRepository.findByUsuarioId(user.id)
+    if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
 
@@ -1098,14 +947,14 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     }
 
     // 3) Evaluaciones del período del profesor
-    const { data: evaluaciones, error: evalError } = await SupabaseDB.supabaseAdmin
-      .from('evaluaciones')
-      .select('id, grupo_id, fecha_creacion')
-      .eq('profesor_id', profesor.id)
-      .eq('completada', true)
-      .gte('fecha_creacion', dateFilter.gte || '2020-01-01')
-      .lte('fecha_creacion', dateFilter.lte || '2030-12-31')
-    if (evalError) {
+    let evaluaciones
+    try {
+      evaluaciones = await analyticsRepository.getCompletedInPeriod(
+        profesor.id,
+        dateFilter.gte || '2020-01-01',
+        dateFilter.lte || '2030-12-31'
+      )
+    } catch (evalError) {
       throw internal('Error obteniendo evaluaciones', evalError)
     }
 
@@ -1114,10 +963,7 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     // 3.1) Si viene courseId, filtrar las evaluaciones por curso vía grupo_id -> grupos.curso_id
     if (courseId && evalsArray.length > 0) {
       const grupoIds = Array.from(new Set(evalsArray.map((e: any) => e.grupo_id).filter(Boolean)))
-      const { data: grupos } = await SupabaseDB.supabaseAdmin
-        .from('grupos')
-        .select('id, curso_id')
-        .in('id', grupoIds.length ? grupoIds : [-1])
+      const grupos = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id')
       const grupoToCurso: any = {}
       ;(Array.isArray(grupos) ? grupos : []).forEach((g: any) => { grupoToCurso[g.id] = g.curso_id })
       evalsArray = evalsArray.filter((e: any) => String(grupoToCurso[e.grupo_id]) === String(courseId))
@@ -1132,21 +978,20 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     // Compatibilidad: prioriza respuesta_rating y, si falla por esquema antiguo, intenta con valor.
     let respuestas: any[] = []
     {
-      const { data, error } = await SupabaseDB.supabaseAdmin
-        .from('respuestas_evaluacion')
-        .select('evaluacion_id, pregunta_id, respuesta_rating')
-        .in('evaluacion_id', evaluacionIds)
-      if (!error) {
-        respuestas = Array.isArray(data) ? data : []
-      } else {
-        const fallback = await SupabaseDB.supabaseAdmin
-          .from('respuestas_evaluacion')
-          .select('evaluacion_id, pregunta_id, valor')
-          .in('evaluacion_id', evaluacionIds)
-        if (fallback.error) {
-          throw internal('Error obteniendo respuestas', fallback.error)
+      try {
+        respuestas = await analyticsRepository.listRespuestasByEvaluacionIds(
+          evaluacionIds,
+          'evaluacion_id, pregunta_id, respuesta_rating'
+        )
+      } catch {
+        try {
+          respuestas = await analyticsRepository.listRespuestasByEvaluacionIds(
+            evaluacionIds,
+            'evaluacion_id, pregunta_id, valor'
+          )
+        } catch (fallbackError) {
+          throw internal('Error obteniendo respuestas', fallbackError)
         }
-        respuestas = Array.isArray(fallback.data) ? fallback.data : []
       }
     }
 
@@ -1156,11 +1001,10 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     }
 
     // 5) Mapeo pregunta -> categoria_id
-    const { data: catPreg, error: catPregError } = await SupabaseDB.supabaseAdmin
-      .from('preguntas_evaluacion')
-      .select('id, categoria_id')
-      .in('id', preguntaIds)
-    if (catPregError) {
+    let catPreg: any[]
+    try {
+      catPreg = await analyticsRepository.listPreguntasByIds(preguntaIds, 'id, categoria_id')
+    } catch (catPregError) {
       throw internal('Error obteniendo categorías de preguntas', catPregError)
     }
     const preguntaToCategoria: any = {}
@@ -1168,10 +1012,12 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
 
     // 6) Info de categorías
     const categoriaIds = Array.from(new Set(((catPreg as any[]) || []).map((cp: any) => cp.categoria_id).filter(Boolean)))
-    const { data: categorias } = await SupabaseDB.supabaseAdmin
-      .from('categorias_pregunta')
-      .select('id, nombre')
-      .in('id', categoriaIds.length ? categoriaIds : [-1])
+    let categorias: any[] = []
+    try {
+      categorias = await analyticsRepository.listCategoriasByIds(categoriaIds, 'id, nombre')
+    } catch {
+      categorias = []
+    }
     const categoriaInfo: any = {}
     ;(Array.isArray(categorias) ? categorias : []).forEach((c: any) => { categoriaInfo[c.id] = c.nombre })
 
@@ -1192,7 +1038,6 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
       nombre: categoriaInfo[catId] || `Categoría ${catId}`,
       promedio: acumulado[catId].count > 0 ? Number((acumulado[catId].sum / acumulado[catId].count).toFixed(2)) : 0
     }))
-
     return res.json(result)
   } catch (error) {
     return sendError(res, error)

@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { supabaseAdmin } from '../../config/supabaseClient'
 import crypto from 'crypto'
 import { hashPassword } from '../../utils/passwordSecurity'
 import {
@@ -7,7 +6,8 @@ import {
   internal,
   sendError,
 } from '../../shared/errors'
-
+import { logger } from '../../shared/logger'
+import { authRepository } from './auth.repository'
 
 const router = Router()
 
@@ -49,19 +49,13 @@ router.post('/forgot-password', async (req, res) => {
       throw badRequest('Formato de correo electrónico inválido')
     }
 
-
     // Verificar que el usuario existe
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('usuarios')
-      .select('id, email, nombre, apellido')
-      .eq('email', email)
-      .eq('activo', true)
-      .single()
+    const user = await authRepository.findActiveByEmail(email)
 
-    if (userError || !user) {
+    if (!user) {
       // No revelar si el correo existe
-      return res.status(200).json({ 
-        message: 'Si el correo electrónico existe en nuestro sistema, recibirás un enlace de recuperación' 
+      return res.status(200).json({
+        message: 'Si el correo electrónico existe en nuestro sistema, recibirás un enlace de recuperación'
       })
     }
 
@@ -70,16 +64,14 @@ router.post('/forgot-password', async (req, res) => {
     const expiresAt = generateExpirationDate()
 
     // Guardar token en la base de datos
-    const { error: tokenError } = await supabaseAdmin
-      .from('password_reset_tokens')
-      .insert({
+    try {
+      await authRepository.insertResetToken({
         email: email,
         token: resetToken,
         expires_at: expiresAt,
         used: false
       })
-
-    if (tokenError) {
+    } catch (tokenError) {
       throw internal('Error interno del servidor', tokenError)
     }
 
@@ -97,9 +89,7 @@ router.post('/forgot-password', async (req, res) => {
         resetLink: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/forgot-password?token=${resetToken}&email=${encodeURIComponent(email)}`
       })
     })
-
   } catch (error) {
-    console.error('❌ Error en forgot-password:', error)
     return sendError(res, error)
   }
 })
@@ -114,17 +104,10 @@ router.get('/validate-reset-token/:token', async (req, res) => {
       throw badRequest('El correo electrónico es requerido')
     }
 
-
     // Buscar el token en la base de datos
-    const { data: tokenData, error: tokenError } = await supabaseAdmin
-      .from('password_reset_tokens')
-      .select('*')
-      .eq('token', token)
-      .eq('email', email)
-      .eq('used', false)
-      .single()
+    const tokenData = await authRepository.findUnusedResetToken(token, String(email)) as ResetToken | null
 
-    if (tokenError || !tokenData) {
+    if (!tokenData) {
       throw badRequest('Token inválido o ya utilizado')
     }
 
@@ -136,13 +119,11 @@ router.get('/validate-reset-token/:token', async (req, res) => {
       throw badRequest('El token ha expirado. Solicita uno nuevo.')
     }
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Token válido',
       valid: true
     })
-
   } catch (error) {
-    console.error('❌ Error en validate-reset-token:', error)
     return sendError(res, error)
   }
 })
@@ -186,15 +167,9 @@ router.post('/reset-password', async (req, res) => {
     }
 
     // Buscar y validar el token
-    const { data: tokenData, error: tokenError } = await supabaseAdmin
-      .from('password_reset_tokens')
-      .select('*')
-      .eq('token', token)
-      .eq('email', email)
-      .eq('used', false)
-      .single()
+    const tokenData = await authRepository.findUnusedResetToken(token, email) as ResetToken | null
 
-    if (tokenError || !tokenData) {
+    if (!tokenData) {
       throw badRequest('Token inválido o ya utilizado')
     }
 
@@ -207,50 +182,35 @@ router.post('/reset-password', async (req, res) => {
     }
 
     // Verificar que el usuario existe
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('usuarios')
-      .select('id, email')
-      .eq('email', email)
-      .eq('activo', true)
-      .single()
+    const user = await authRepository.findActiveByEmail(email, 'id, email') as { id: string; email: string } | null
 
-    if (userError || !user) {
+    if (!user) {
       throw badRequest('Usuario no encontrado')
     }
 
     const hashedPassword = await hashPassword(newPassword)
 
     // Actualizar la contraseña del usuario
-    const { error: updateError } = await supabaseAdmin
-      .from('usuarios')
-      .update({ 
+    try {
+      await authRepository.updateUser(user.id, {
         password: hashedPassword,
         updated_at: new Date().toISOString()
       })
-      .eq('id', user.id)
-
-    if (updateError) {
-      console.error('❌ Error al actualizar contraseña:', updateError)
-      throw internal('Error al actualizar la contraseña')
+    } catch (updateError) {
+      throw internal('Error al actualizar la contraseña', updateError)
     }
 
     // Marcar el token como usado
-    const { error: markUsedError } = await supabaseAdmin
-      .from('password_reset_tokens')
-      .update({ used: true })
-      .eq('id', tokenData.id)
+    const markUsedError = await authRepository.markResetTokenUsed(tokenData.id)
 
     if (markUsedError) {
-      console.error('❌ Error al marcar token como usado:', markUsedError)
-      // No es crítico, solo logueamos el error
+      logger.error('Error al marcar token como usado:', markUsedError)
     }
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Contraseña actualizada exitosamente'
     })
-
   } catch (error) {
-    console.error('❌ Error en reset-password:', error)
     return sendError(res, error)
   }
 })
