@@ -21,7 +21,7 @@ export class EvaluationsController {
   static async getQuestionsByCareer(req: Request, res: Response) {
     try {
       const { carreraId } = req.params
-      const carreraIdNumber = carreraId ? parseInt(carreraId) : undefined
+      const carreraIdNumber = carreraId ? Number.parseInt(carreraId) : undefined
       const questions = await evaluationsService.getQuestionsByCareer(carreraIdNumber)
 
       res.json({
@@ -96,7 +96,7 @@ export class EvaluationsController {
       }
 
       const updatedQuestion = await evaluationsService.updateQuestion(
-        parseInt(id),
+        Number.parseInt(id),
         req.body
       )
       res.json({
@@ -116,7 +116,7 @@ export class EvaluationsController {
         throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
       }
 
-      const success = await evaluationsService.deactivateQuestion(parseInt(id))
+      const success = await evaluationsService.deactivateQuestion(Number.parseInt(id))
       if (success) {
         res.json({ success: true, message: 'Pregunta desactivada exitosamente' })
       } else {
@@ -130,14 +130,14 @@ export class EvaluationsController {
   static async getQuestionsByCategoryAndCareer(req: Request, res: Response) {
     try {
       const { categoriaId, carreraId } = req.params
-      const carreraIdNumber = carreraId ? parseInt(carreraId) : undefined
+      const carreraIdNumber = carreraId ? Number.parseInt(carreraId) : undefined
 
       if (!categoriaId) {
         throw badRequest('ID de categoría requerido', 'Se requiere el ID de la categoría')
       }
 
       const questions = await evaluationsService.getQuestionsByCategoryAndCareer(
-        parseInt(categoriaId),
+        Number.parseInt(categoriaId),
         carreraIdNumber
       )
 
