@@ -1,0 +1,68 @@
+export type ResultadoQr =
+  | { ok: false; status: 400 | 404 | 500; error: string }
+  | {
+      ok: true
+      status: 200
+      data: { profesorId: unknown; cursoId: unknown; grupoId: unknown }
+    }
+
+type Relacion<T> = T | T[] | null | undefined
+
+/**
+ * Decide si un token QR se puede usar. Lo llama GET /qr-evaluaciones/:token
+ * después de consultar la fila (o con el resultado vacío).
+ */
+export function resolverEvaluacionQr(params: {
+  token?: string
+  errorBd?: boolean
+  qr?: { activo?: boolean; profesor_id?: unknown; curso_id?: unknown; grupo_id?: unknown } | null
+}): ResultadoQr {
+  if (!params.token) {
+    return { ok: false, status: 400, error: 'Token requerido.' }
+  }
+  if (params.errorBd) {
+    return { ok: false, status: 500, error: 'Error al resolver el token.' }
+  }
+  if (!params.qr || params.qr.activo === false) {
+    return { ok: false, status: 404, error: 'QR inválido o expirado.' }
+  }
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      profesorId: params.qr.profesor_id,
+      cursoId: params.qr.curso_id,
+      grupoId: params.qr.grupo_id,
+    },
+  }
+}
+
+function uno<T>(valor: Relacion<T>): T | undefined {
+  if (Array.isArray(valor)) return valor[0]
+  return valor ?? undefined
+}
+
+function texto(valor: unknown): string {
+  return typeof valor === 'string' ? valor : ''
+}
+
+export function mapearRespuestaQr(row: Record<string, unknown>) {
+  const prof = uno(row.profesor as Relacion<Record<string, unknown>>)
+  const usu = uno(prof?.usuario as Relacion<Record<string, unknown>>)
+  const curso = uno(row.curso as Relacion<Record<string, unknown>>)
+  const grupo = uno(row.grupo as Relacion<Record<string, unknown>>)
+  const profesorNombre = `${texto(usu?.nombre)} ${texto(usu?.apellido)}`.trim()
+  return {
+    profesorId: row.profesor_id,
+    cursoId: row.curso_id,
+    materiaId: row.curso_id,
+    grupoId: row.grupo_id,
+    periodoId: row.periodo_id ?? null,
+    profesorNombre: profesorNombre || null,
+    cursoNombre: (curso?.nombre as string | undefined) ?? null,
+    cursoCodigo: (curso?.codigo as string | undefined) ?? null,
+    grupoNumero: (grupo?.numero_grupo as string | number | undefined) ?? null,
+    grupoHorario: (grupo?.horario as string | undefined) ?? null,
+    grupoAula: (grupo?.aula as string | undefined) ?? null,
+  }
+}

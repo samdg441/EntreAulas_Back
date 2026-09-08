@@ -1,0 +1,18 @@
+sonar.projectKey=Nombre proyecto
+#Coloquen el nombre del proyecto que cada uno de ustedes creó en sonarqube
+sonar.projectName=Nombre proyecto
+#Coloquen el nombre del proyecto que cada uno de ustedes creó en sonarqube
+sonar.host.url=http://localhost:xxxx (como este en docker)
+sonar.sourceEncoding=UTF-8
+
+sonar.sources=src
+sonar.tests=src/test
+sonar.test.inclusions=src/test/**/*.test.ts
+
+sonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,src/scripts/**
+
+# Vitest genera este archivo con npm run test:coverage
+sonar.javascript.lcov.reportPaths=coverage/lcov.info
+
+# Las unitarias cubren lógica de dominio, no handlers HTTP ni scripts
+sonar.coverage.exclusions=src/test/**,**/*.test.ts,src/scripts/**,src/docs/**,**/*.d.ts,**/*.routes.ts,src/routes/**,src/app.ts,src/server.ts

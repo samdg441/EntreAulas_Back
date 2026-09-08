@@ -1,75 +1,52 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import request from 'supertest'
-import { queueFrom } from '../helpers/query-builder'
-import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
+import { describe, expect, it } from 'vitest'
+import { resolverEvaluacionQr } from '../../modules/evaluations/qr-resolucion'
 import qrFixture from '../fixtures/rq18-qr.json'
 
-vi.mock('../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
+class RQ18ValidarQr {
+  C1_sinToken() {
+    const r = resolverEvaluacionQr({})
+    expect(r.status).toBe(400)
+    expect(r.error).toBe(qrFixture.errores.tokenRequerido.error)
+  }
 
-import { app } from '../../app'
-import qrRouter from '../../modules/evaluations/qr-evaluaciones.routes'
+  C2_errorBd() {
+    const r = resolverEvaluacionQr({ token: 't-err', errorBd: true })
+    expect(r.status).toBe(500)
+    expect(r.error).toBe(qrFixture.errores.errorResolver.error)
+  }
 
-function getTokenHandler() {
-  const layer = (
-    qrRouter as unknown as {
-      stack: Array<{
-        route?: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> }
-      }>
-    }
-  ).stack.find((item) => item.route?.path === '/:token' && item.route.methods.get)
-  return layer!.route!.stack[layer!.route!.stack.length - 1].handle
+  C3_inexistenteOInactivo() {
+    const inexistente = resolverEvaluacionQr({ token: 't-invalido', qr: null })
+    const inactivo = resolverEvaluacionQr({ token: 't-off', qr: { activo: false, grupo_id: 1 } })
+    expect(inexistente.status).toBe(404)
+    expect(inactivo.status).toBe(404)
+    expect(inexistente.error).toBe(qrFixture.errores.qrInvalidoOExpirado.error)
+  }
+
+  C4_activo() {
+    const r = resolverEvaluacionQr({
+      token: 't-ok',
+      qr: {
+        activo: true,
+        profesor_id: qrFixture.tokenValido.profesor_id,
+        curso_id: qrFixture.tokenValido.curso_id,
+        grupo_id: qrFixture.tokenValido.grupo_id,
+      },
+    })
+    expect(r.status).toBe(200)
+    expect(r.data).toMatchObject({
+      profesorId: qrFixture.tokenValido.profesor_id,
+      cursoId: qrFixture.tokenValido.curso_id,
+      grupoId: qrFixture.tokenValido.grupo_id,
+    })
+  }
 }
 
-/**
- * RQ18 Backend — Validar QR (grafo)
- * C1 !token→400 | C2 error BD→500 | C3 !row→404 | C4 OK→200
- */
-describe('RQ18 unit — Validar QR vencido o inválido', () => {
-  beforeEach(() => {
-    fromMock.mockReset()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
+const pruebas = new RQ18ValidarQr()
 
-  it('C1: sin token → 400 Token requerido', async () => {
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() }
-    await getTokenHandler()({ params: {} }, res)
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(res.json).toHaveBeenCalledWith(qrFixture.errores.tokenRequerido)
-    expect(fromMock).not.toHaveBeenCalled()
-  })
-
-  it('C2: error de consulta BD → 500', async () => {
-    fromMock.mockImplementation(
-      queueFrom({ qr_evaluaciones: [{ data: null, error: { message: 'db' } }] })
-    )
-    const res = await request(app).get('/api/qr-evaluaciones/t-err')
-    expect(res.status).toBe(500)
-    expect(res.body).toEqual(qrFixture.errores.errorResolver)
-  })
-
-  it('C3: QR inexistente o inactivo → 404', async () => {
-    fromMock.mockImplementation(
-      queueFrom({ qr_evaluaciones: [{ data: null, error: null }] })
-    )
-    const res = await request(app).get('/api/qr-evaluaciones/t-invalido')
-    expect(res.status).toBe(404)
-    expect(res.body).toEqual(qrFixture.errores.qrInvalidoOExpirado)
-  })
-
-  // C3 agrupa "inexistente" y "desactivado": el código no los distingue.
-  // La rama "vencido por fecha" no es alcanzable porque el vencimiento no
-  // existe en el producto — ver DEF-14 en HALLAZGOS.md.
-  it.todo('C3b: QR fuera de su ventana de vigencia → 404 (DEF-14)')
-
-  it('C4: QR activo → 200', async () => {
-    fromMock.mockImplementation(
-      queueFrom({ qr_evaluaciones: [{ data: qrFixture.tokenValido, error: null }] })
-    )
-    const res = await request(app).get('/api/qr-evaluaciones/t-ok')
-    expect(res.status).toBe(200)
-    expect(res.body.profesorId).toBe(qrFixture.tokenValido.profesor_id)
-    expect(res.body.cursoId).toBe(qrFixture.tokenValido.curso_id)
-    expect(res.body.grupoId).toBe(qrFixture.tokenValido.grupo_id)
-  })
+describe('RQ18 — Validar QR vencido o inválido', () => {
+  it('C1: sin token → 400', () => pruebas.C1_sinToken())
+  it('C2: error de BD → 500', () => pruebas.C2_errorBd())
+  it('C3: QR inexistente o inactivo → 404', () => pruebas.C3_inexistenteOInactivo())
+  it('C4: QR activo → 200', () => pruebas.C4_activo())
 })

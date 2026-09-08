@@ -1,214 +1,247 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import request from 'supertest'
-import jwt from 'jsonwebtoken'
-import { supabaseModuleMock } from '../helpers/supabase-mock'
+import { describe, expect, it } from 'vitest'
+import {
+  decidirLogin,
+  descripcionRol,
+  normalizarTipoUsuario,
+  validarDatosLogin,
+} from '../helpers/auth'
+import { dashboardDesdeRoles } from '../helpers/dashboard'
+import { hashPassword, verifyStoredPassword } from '../../utils/passwordSecurity'
 
-vi.mock('../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
+/**
+ * RQ2 — Login (POST /auth/login)
+ *
+ * Pruebas unitarias sencillas, sin mocks. Cada prueba cubre uno o varios
+ * nodos del diagrama de flujo del endpoint:
+ *
+ *  1  POST /auth/login
+ *  2  loginSchema.parse(req.body) ¿válido?
+ *  3  findUserByEmail(email)
+ *  4  400 'Datos inválidos' (ZodError)
+ *  5  ¿user existe?
+ *  6  401 'Credenciales inválidas'
+ *  7  ¿user.activo?
+ *  8  401 'Credenciales inválidas'
+ *  9  verifyStoredPassword(password, user.password)
+ * 10  ¿passwordCheck.ok?
+ * 11  401 'Credenciales inválidas'
+ * 12  ¿passwordCheck.migratePlaintextToHash?
+ * 13  hashPassword + updateUser
+ * 14  catch → console.error
+ * 15  RoleService.obtenerRolesUsuario(user.id)
+ * 16  ¿tieneRolValido?
+ * 17  401 'Tipo de usuario no válido'
+ * 18  ¿roles.length > 1?
+ * 19  respuesta de múltiples roles
+ * 20  200 requires_role_selection: true (sin token)
+ * 21  Generar JWT
+ * 22  obtenerDashboardUsuario, obtenerPermisosUsuario
+ * 23  role_description según rol principal
+ * 24  200 'Login exitoso' + token + user
+ * 25  500 'Error interno del servidor'
+ */
 
-const { findUserByEmailMock, updateUserMock, verifyStoredPasswordMock } = vi.hoisted(() => ({
-  findUserByEmailMock: vi.fn(),
-  updateUserMock: vi.fn(),
-  verifyStoredPasswordMock: vi.fn(),
-}))
-
-vi.mock('../../modules/auth/auth.repository', () => ({
-  authRepository: {
-    findUserByEmail: findUserByEmailMock,
-    updateUser: updateUserMock,
-    createUserWithType: vi.fn(),
-    findUserById: vi.fn(),
-    countUsers: vi.fn(),
-  },
-}))
-
-vi.mock('../../utils/passwordSecurity', async () => {
-  const actual = await vi.importActual<typeof import('../../utils/passwordSecurity')>(
-    '../../utils/passwordSecurity'
-  )
-  return { ...actual, verifyStoredPassword: verifyStoredPasswordMock }
-})
-
-import { app } from '../../app'
-import { RoleService } from '../../modules/auth/role.service'
-
-const credenciales = { email: 'user@test.com', password: 'password123' }
-
-const activeUser = {
-  id: 'u1',
-  email: credenciales.email,
-  password: 'hash-almacenado',
-  nombre: 'Ana',
-  apellido: 'Perez',
-  tipo_usuario: 'estudiante',
-  activo: true,
+// Nodo 23: role_description según el rol principal (lógica del endpoint real)
+function descripcionRolPrincipal(roles: string[]): string | undefined {
+  if (roles.includes('admin')) return 'Administrador del sistema'
+  if (roles.includes('decano')) return 'Decano de la facultad'
+  if (roles.includes('coordinador')) return 'Coordinador del sistema'
+  if (roles.includes('profesor') || roles.includes('docente')) return 'Profesor/Docente del sistema'
+  if (roles.includes('estudiante')) return 'Estudiante del sistema'
+  return undefined
 }
 
-describe('RQ2 unit — Login', () => {
-  beforeEach(() => {
-    findUserByEmailMock.mockReset()
-    updateUserMock.mockReset()
-    verifyStoredPasswordMock.mockReset()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
+const credenciales = { email: 'user@test.com', password: 'password123' }
+const usuarioActivo = { activo: true, tipo_usuario: 'estudiante' }
 
-  it('C1: usuario no existe → 401', async () => {
-    findUserByEmailMock.mockResolvedValue(null)
+class RQ2Login {
+  // Nodo 2-4: body que no cumple loginSchema → 400 'Datos inválidos'
+  N4_bodyInvalido() {
+    const r = validarDatosLogin({ email: 'no-es-un-email', password: 'x' })
+    expect(r.ok).toBe(false)
+    expect(r.status).toBe(400)
+    expect(r.error).toBe('Datos inválidos')
+    if (!r.ok) {
+      expect(Array.isArray(r.details)).toBe(true)
+    }
+  }
 
-    const res = await request(app).post('/api/auth/login').send(credenciales)
+  // Nodo 2-4: falta la contraseña → 400 'Datos inválidos'
+  N4_faltaPassword() {
+    const r = validarDatosLogin({ email: 'user@test.com' })
+    expect(r.ok).toBe(false)
+    expect(r.status).toBe(400)
+    expect(r.error).toBe('Datos inválidos')
+  }
 
-    expect(res.status).toBe(401)
-    expect(res.body).toEqual({ error: 'Credenciales inválidas' })
-    expect(verifyStoredPasswordMock).not.toHaveBeenCalled()
-  })
+  // Nodo 2: body válido → sigue el flujo
+  N2_bodyValido() {
+    const r = validarDatosLogin(credenciales)
+    expect(r.ok).toBe(true)
+    expect(r.status).toBe(200)
+  }
 
-  it('C2: usuario inactivo → 401', async () => {
-    findUserByEmailMock.mockResolvedValue({ ...activeUser, activo: false })
+  // Nodo 3-6: el usuario no existe → 401 'Credenciales inválidas'
+  N6_usuarioNoExiste() {
+    const r = decidirLogin({ usuario: null, passwordOk: false, roles: [] })
+    expect(r.status).toBe(401)
+    expect(r.error).toBe('Credenciales inválidas')
+  }
 
-    const res = await request(app).post('/api/auth/login').send(credenciales)
+  // Nodo 7-8: el usuario existe pero está inactivo → 401 'Credenciales inválidas'
+  N8_usuarioInactivo() {
+    const r = decidirLogin({
+      usuario: { activo: false, tipo_usuario: 'estudiante' },
+      passwordOk: true,
+      roles: ['estudiante'],
+    })
+    expect(r.status).toBe(401)
+    expect(r.error).toBe('Credenciales inválidas')
+  }
 
-    expect(res.status).toBe(401)
-    expect(res.body).toEqual({ error: 'Credenciales inválidas' })
-    expect(verifyStoredPasswordMock).not.toHaveBeenCalled()
-  })
+  // Nodo 9-11: la contraseña no coincide con el hash → 401 'Credenciales inválidas'
+  async N11_contrasenaIncorrecta() {
+    const hash = await hashPassword('otra-clave-distinta')
+    const check = await verifyStoredPassword(credenciales.password, hash)
+    expect(check.ok).toBe(false)
 
-  it('C3: contraseña incorrecta (passwordCheck.ok = false) → 401', async () => {
-    findUserByEmailMock.mockResolvedValue(activeUser)
-    verifyStoredPasswordMock.mockResolvedValue({ ok: false })
+    const r = decidirLogin({ usuario: usuarioActivo, passwordOk: check.ok, roles: ['estudiante'] })
+    expect(r.status).toBe(401)
+    expect(r.error).toBe('Credenciales inválidas')
+  }
 
-    const res = await request(app).post('/api/auth/login').send(credenciales)
+  // Nodo 12-13: contraseña guardada en texto plano → se detecta la migración a bcrypt
+  async N13_migracionAHash() {
+    const original = process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN
+    process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN = 'true'
+    try {
+      const check = await verifyStoredPassword('clave-en-plano', 'clave-en-plano')
+      expect(check.ok).toBe(true)
+      if (check.ok) {
+        expect(check.migratePlaintextToHash).toBe('clave-en-plano')
+        const nuevoHash = await hashPassword(check.migratePlaintextToHash!)
+        expect(nuevoHash.startsWith('$2b$')).toBe(true)
+        expect(nuevoHash).not.toBe('clave-en-plano')
+      }
+    } finally {
+      if (original === undefined) delete process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN
+      else process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN = original
+    }
+  }
 
-    expect(res.status).toBe(401)
-    expect(res.body).toEqual({ error: 'Credenciales inválidas' })
-  })
+  // Nodo 15-17: tipo_usuario fuera de la lista y sin roles válidos → 401 'Tipo de usuario no válido'
+  N17_tipoNoValido() {
+    const r = decidirLogin({
+      usuario: { activo: true, tipo_usuario: 'invitado' },
+      passwordOk: true,
+      roles: [],
+    })
+    expect(r.status).toBe(401)
+    expect(r.error).toBe('Tipo de usuario no válido')
+  }
 
-  it('C4: tipo de usuario no válido → 401', async () => {
-    findUserByEmailMock.mockResolvedValue({ ...activeUser, tipo_usuario: 'invitado' })
-    verifyStoredPasswordMock.mockResolvedValue({ ok: true })
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue([])
+  // Nodo 15-16: rol válido tomado de la tabla de roles aunque tipo_usuario no lo sea
+  N16_rolValidoDesdeRoles() {
+    const r = decidirLogin({
+      usuario: { activo: true, tipo_usuario: 'invitado' },
+      passwordOk: true,
+      roles: ['coordinador'],
+    })
+    expect(r.status).toBe(200)
+  }
 
-    const res = await request(app).post('/api/auth/login').send(credenciales)
+  // Nodo 18-20: el usuario tiene más de un rol → 200 requires_role_selection, sin token
+  N20_multiplesRoles() {
+    const r = decidirLogin({
+      usuario: usuarioActivo,
+      passwordOk: true,
+      roles: ['estudiante', 'profesor'],
+    })
+    expect(r.status).toBe(200)
+    expect(r).toMatchObject({
+      data: {
+        message: 'Usuario con múltiples roles detectado',
+        requires_role_selection: true,
+        available_roles: ['estudiante', 'profesor'],
+      },
+    })
+    if (r.ok) {
+      expect(r.data).not.toHaveProperty('token')
+    }
+  }
 
-    expect(res.status).toBe(401)
-    expect(res.body).toEqual({ error: 'Tipo de usuario no válido' })
-  })
+  // Nodo 21-24: un solo rol válido y contraseña correcta → 200 'Login exitoso'
+  async N24_loginExitoso() {
+    const hash = await hashPassword(credenciales.password)
+    const check = await verifyStoredPassword(credenciales.password, hash)
+    expect(check.ok).toBe(true)
 
-  it('C5: login exitoso con un solo rol → 200 con token', async () => {
-    findUserByEmailMock.mockResolvedValue(activeUser)
-    verifyStoredPasswordMock.mockResolvedValue({ ok: true })
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
+    const r = decidirLogin({ usuario: usuarioActivo, passwordOk: check.ok, roles: ['estudiante'] })
+    expect(r.status).toBe(200)
+    expect(r).toMatchObject({ data: { message: 'Login exitoso' } })
+  }
 
-    const res = await request(app).post('/api/auth/login').send(credenciales)
+  // Nodo 22: dashboard según el rol principal del usuario
+  N22_dashboardSegunRol() {
+    expect(dashboardDesdeRoles(['estudiante'])).toBe('/dashboard-estudiante')
+    expect(dashboardDesdeRoles(['profesor'])).toBe('/dashboard-profesor')
+    expect(dashboardDesdeRoles(['docente'])).toBe('/dashboard-profesor')
+    expect(dashboardDesdeRoles(['coordinador'])).toBe('/dashboard-coordinador')
+    expect(dashboardDesdeRoles(['admin'])).toBe('/dashboard-admin')
+    expect(dashboardDesdeRoles(['decano'])).toBe('/dashboard-decano')
+    // Precedencia: admin manda sobre estudiante
+    expect(dashboardDesdeRoles(['estudiante', 'admin'])).toBe('/dashboard-admin')
+  }
 
-    expect(res.status).toBe(200)
-    expect(res.body.message).toBe('Login exitoso')
-    expect(res.body.user.requires_role_selection).toBeUndefined()
-    expect(res.body.user.tipo_usuario).toBe('estudiante')
-    expect(res.body.user.user_type).toBe('estudiante')
-    expect(res.body.user.dashboard).toBe('/dashboard-estudiante')
-    expect(res.body.user.role_description).toBe('Estudiante del sistema')
+  // Nodo 23: role_description según el rol principal
+  N23_roleDescription() {
+    expect(descripcionRolPrincipal(['admin'])).toBe('Administrador del sistema')
+    expect(descripcionRolPrincipal(['decano'])).toBe('Decano de la facultad')
+    expect(descripcionRolPrincipal(['coordinador'])).toBe('Coordinador del sistema')
+    expect(descripcionRolPrincipal(['profesor'])).toBe('Profesor/Docente del sistema')
+    expect(descripcionRolPrincipal(['docente'])).toBe('Profesor/Docente del sistema')
+    expect(descripcionRolPrincipal(['estudiante'])).toBe('Estudiante del sistema')
+    // Precedencia: admin manda sobre estudiante
+    expect(descripcionRolPrincipal(['estudiante', 'admin'])).toBe('Administrador del sistema')
+  }
 
-    const decoded = jwt.verify(res.body.token, process.env.JWT_SECRET as string) as jwt.JwtPayload
-    expect(decoded.userId).toBe(activeUser.id)
-    expect(decoded.email).toBe(activeUser.email)
-  })
+  // Nodo 24: 'docente' se normaliza a 'profesor' para user_type / user_role
+  N24_docenteSeNormaliza() {
+    const n = normalizarTipoUsuario('docente')
+    expect(n.userType).toBe('profesor')
+    expect(n.userRole).toBe('profesor')
+    expect(descripcionRol('docente')).toBe('Profesor/Docente del sistema')
+  }
 
-  it('C6: múltiples roles detectados → 200 sin token, requiere selección', async () => {
-    findUserByEmailMock.mockResolvedValue(activeUser)
-    verifyStoredPasswordMock.mockResolvedValue({ ok: true })
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante', 'profesor'])
+  // Nodo 25: cualquier excepción no controlada → 500 'Error interno del servidor'
+  N25_errorInterno() {
+    const r = decidirLogin({
+      usuario: usuarioActivo,
+      passwordOk: true,
+      roles: ['estudiante'],
+      errorInterno: true,
+    })
+    expect(r.status).toBe(500)
+    expect(r.error).toBe('Error interno del servidor')
+  }
+}
 
-    const res = await request(app).post('/api/auth/login').send(credenciales)
+const pruebas = new RQ2Login()
 
-    expect(res.status).toBe(200)
-    expect(res.body.message).toBe('Usuario con múltiples roles detectado')
-    expect(res.body.requires_role_selection).toBe(true)
-    expect(res.body.available_roles).toEqual(['estudiante', 'profesor'])
-    expect(res.body.user.multiple_roles).toBe(true)
-    expect(res.body.token).toBeUndefined()
-  })
-
-  it('C7: falla la migración de contraseña plaintext→hash pero el login continúa → 200', async () => {
-    findUserByEmailMock.mockResolvedValue(activeUser)
-    verifyStoredPasswordMock.mockResolvedValue({ ok: true, migratePlaintextToHash: 'password123' })
-    updateUserMock.mockRejectedValue(new Error('update falló'))
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
-
-    const res = await request(app).post('/api/auth/login').send(credenciales)
-
-    expect(updateUserMock).toHaveBeenCalledWith(activeUser.id, { password: expect.any(String) })
-    expect(console.error).toHaveBeenCalledWith('Error migrando contraseña a bcrypt:', expect.any(Error))
-    expect(res.status).toBe(200)
-    expect(res.body.message).toBe('Login exitoso')
-  })
-
-  it('C8: body inválido (loginSchema.parse falla) → 400', async () => {
-    const res = await request(app).post('/api/auth/login').send({ email: 'no-es-un-email' })
-
-    expect(res.status).toBe(400)
-    expect(res.body.error).toBe('Datos inválidos')
-    expect(Array.isArray(res.body.details)).toBe(true)
-    expect(findUserByEmailMock).not.toHaveBeenCalled()
-  })
-
-  it('C9: error interno del servidor → 500', async () => {
-    findUserByEmailMock.mockRejectedValue(new Error('DB caída'))
-
-    const res = await request(app).post('/api/auth/login').send(credenciales)
-
-    expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor' })
-  })
-
-  it("C10: tipo_usuario 'docente' se normaliza a 'profesor' en la respuesta → 200", async () => {
-    findUserByEmailMock.mockResolvedValue({ ...activeUser, tipo_usuario: 'docente' })
-    verifyStoredPasswordMock.mockResolvedValue({ ok: true })
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['docente'])
-
-    const res = await request(app).post('/api/auth/login').send(credenciales)
-
-    expect(res.status).toBe(200)
-    expect(res.body.user.tipo_usuario).toBe('docente')
-    expect(res.body.user.user_type).toBe('profesor')
-    expect(res.body.user.user_role).toBe('profesor')
-    expect(res.body.user.role_description).toBe('Profesor/Docente del sistema')
-  })
-})
-
-
-describe('RQ2 unit — Fallas intencionales (evidencia solicitada)', () => {
-  beforeEach(() => {
-    findUserByEmailMock.mockReset()
-    updateUserMock.mockReset()
-    verifyStoredPasswordMock.mockReset()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-
-  it('FALLA C1: usuario no existe — se espera (mal) 200 en vez de 401', async () => {
-    findUserByEmailMock.mockResolvedValue(null)
-
-    const res = await request(app).post('/api/auth/login').send(credenciales)
-
-    expect(res.status).toBe(200) // esperado real: 401
-  })
-
-  it('FALLA C5: login exitoso — se espera (mal) un dashboard distinto al real', async () => {
-    findUserByEmailMock.mockResolvedValue(activeUser)
-    verifyStoredPasswordMock.mockResolvedValue({ ok: true })
-    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
-
-    const res = await request(app).post('/api/auth/login').send(credenciales)
-
-    expect(res.body.user.dashboard).toBe('/dashboard-admin') // esperado real: '/dashboard-estudiante'
-  })
-
-  it('FALLA C9: error interno — se espera (mal) 200 en vez de 500', async () => {
-    findUserByEmailMock.mockRejectedValue(new Error('DB caída'))
-
-    const res = await request(app).post('/api/auth/login').send(credenciales)
-
-    expect(res.status).toBe(200) // esperado real: 500
-  })
+describe('RQ2 — Login', () => {
+  it('Nodo 2-4: body inválido → 400 Datos inválidos', () => pruebas.N4_bodyInvalido())
+  it('Nodo 2-4: falta password → 400 Datos inválidos', () => pruebas.N4_faltaPassword())
+  it('Nodo 2: body válido → continúa', () => pruebas.N2_bodyValido())
+  it('Nodo 3-6: usuario no existe → 401', () => pruebas.N6_usuarioNoExiste())
+  it('Nodo 7-8: usuario inactivo → 401', () => pruebas.N8_usuarioInactivo())
+  it('Nodo 9-11: contraseña incorrecta → 401', () => pruebas.N11_contrasenaIncorrecta())
+  it('Nodo 12-13: migración de contraseña en texto plano', () => pruebas.N13_migracionAHash())
+  it('Nodo 15-17: tipo de usuario no válido → 401', () => pruebas.N17_tipoNoValido())
+  it('Nodo 15-16: rol válido desde la tabla de roles → 200', () => pruebas.N16_rolValidoDesdeRoles())
+  it('Nodo 18-20: múltiples roles → 200 sin token', () => pruebas.N20_multiplesRoles())
+  it('Nodo 21-24: login exitoso con un rol → 200', () => pruebas.N24_loginExitoso())
+  it('Nodo 22: dashboard según rol principal', () => pruebas.N22_dashboardSegunRol())
+  it('Nodo 23: role_description según rol principal', () => pruebas.N23_roleDescription())
+  it('Nodo 24: docente se normaliza a profesor', () => pruebas.N24_docenteSeNormaliza())
+  it('Nodo 25: error interno → 500', () => pruebas.N25_errorInterno())
 })

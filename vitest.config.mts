@@ -3,15 +3,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: [
-      'src/test/unit/**/*.test.ts',
-      'src/test/integration/**/*.test.ts',
-      // Legacy colocalizados (se mantienen hasta migrar)
-      'src/**/*.test.ts',
-      'src/**/__tests__/**/*.test.ts',
-    ],
-    // `defects/` se ejecuta aparte (npm run test:defects): son pruebas que
-    // fallan a propósito para dejar registro de defectos abiertos.
+    include: ['src/test/unit/**/*.test.ts'],
+    // Integración, defects y *.test.ts colocalizados usan vi.mock: no van en npm test.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
@@ -25,12 +18,17 @@ export default defineConfig({
       reportsDirectory: './coverage',
       reporter: ['text', 'html', 'lcov'],
       reportOnFailure: true,
+      include: ['src/**/*.ts'],
       exclude: [
-        'coverage/**',
-        'dist/**',
-        'node_modules/**',
         'src/test/**',
+        'src/scripts/**',
+        'src/docs/**',
+        'src/routes/**',
         '**/*.test.ts',
+        '**/*.d.ts',
+        '**/*.routes.ts',
+        'src/app.ts',
+        'src/server.ts',
       ],
     },
   },

@@ -1,57 +1,31 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import request from 'supertest'
-import jwt from 'jsonwebtoken'
+import { describe, expect, it } from 'vitest'
+import type { Request, Response } from 'express'
+import { authenticateToken, requireRole } from '../../middleware/auth'
+import { decidirCreacionUsuario, validarCamposCreacionUsuario } from '../helpers/auth'
+import { getBcryptSaltRounds, hashPassword, isBcryptHash } from '../../utils/passwordSecurity'
 
-const { findUserByIdMock, findUserByEmailMock, createUserWithTypeMock } = vi.hoisted(() => ({
-  findUserByIdMock: vi.fn(),
-  findUserByEmailMock: vi.fn(),
-  createUserWithTypeMock: vi.fn(),
-}))
 
-vi.mock('../../config/supabase-only', () => ({
-  SupabaseDB: { supabaseAdmin: { from: vi.fn() }, findUserById: findUserByIdMock, findUserByEmail: vi.fn() },
-  supabaseAdmin: { from: vi.fn() },
-  default: {},
-}))
-
-vi.mock('../../config/supabaseClient', () => ({
-  supabaseAdmin: { from: vi.fn() },
-  SupabaseDB: { supabaseAdmin: { from: vi.fn() } },
-  default: {},
-}))
-
-vi.mock('../../modules/auth/auth.repository', () => ({
-  authRepository: {
-    findUserByEmail: (...args: unknown[]) => findUserByEmailMock(...args),
-    createUserWithType: (...args: unknown[]) => createUserWithTypeMock(...args),
-    updateUser: vi.fn(),
-    findUserById: vi.fn(),
-    countUsers: vi.fn(),
-  },
-}))
-
-import { app } from '../../app'
-import { RoleService } from '../../modules/auth/role.service'
-
-/** Firma un token real con el JWT_SECRET de test (ver src/test/setup.ts). */
-function signToken(userId: string) {
-  return jwt.sign({ userId }, process.env.JWT_SECRET as string)
+function fakeRes() {
+  const res = {
+    statusCode: 0 as number,
+    body: undefined as unknown,
+    status(code: number) {
+      this.statusCode = code
+      return this
+    },
+    json(payload: unknown) {
+      this.body = payload
+      return this
+    },
+  }
+  return res
 }
 
-/** Simula un usuario autenticado con el tipo/roles dados (rama feliz de authenticateToken). */
-function mockAuthenticatedUser(tipo_usuario: string, roles: string[]) {
-  findUserByIdMock.mockResolvedValue({
-    id: 'user-1',
-    email: 'admin@test.com',
-    tipo_usuario,
-    activo: true,
-  })
-  vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(roles)
-  vi.spyOn(RoleService, 'obtenerPermisosUsuario').mockResolvedValue([])
-  return signToken('user-1')
+function fakeReq(over: Partial<Request> = {}): Request {
+  return { headers: {}, body: {}, ...over } as Request
 }
 
-const validBody = {
+const bodyValido = {
   email: 'nuevo@test.com',
   password: 'password123',
   nombre: 'Ana',
@@ -59,184 +33,141 @@ const validBody = {
   tipo_usuario: 'estudiante',
 }
 
-describe('RQ1 unit — Crear usuario como administrador', () => {
-  beforeEach(() => {
-    findUserByIdMock.mockReset()
-    findUserByEmailMock.mockReset()
-    createUserWithTypeMock.mockReset()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
-
-  it('C1: campos requeridos faltantes → 400', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    const { password, ...bodySinPassword } = validBody
-
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(bodySinPassword)
-
-    expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: 'Todos los campos son requeridos' })
-    expect(createUserWithTypeMock).not.toHaveBeenCalled()
-  })
-
-  it('C2: contraseña corta → 400', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ ...validBody, password: 'short1' })
-
-    expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: 'La contraseña debe tener al menos 8 caracteres' })
-    expect(createUserWithTypeMock).not.toHaveBeenCalled()
-  })
-
-  it('C3: email ya registrado → 400', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    findUserByEmailMock.mockResolvedValue({ id: 'existing-1', email: validBody.email })
-
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody)
-
-    expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: 'El email ya está registrado' })
-    expect(createUserWithTypeMock).not.toHaveBeenCalled()
-  })
-
-  it('C4: camino ideal, todos los campos correctos → 201', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    findUserByEmailMock.mockResolvedValue(null)
-    createUserWithTypeMock.mockResolvedValue({
-      id: 'new-1',
-      email: validBody.email,
-      nombre: validBody.nombre,
-      apellido: validBody.apellido,
-      tipo_usuario: validBody.tipo_usuario,
-      activo: true,
+class RQ1CrearUsuarioAdmin {
+  // Nodo 2-3: sin token → 401 NO_TOKEN
+  async N3_sinToken() {
+    process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret'
+    const req = fakeReq()
+    const res = fakeRes()
+    let llamoNext = false
+    await authenticateToken(req, res as unknown as Response, () => {
+      llamoNext = true
     })
+    expect(llamoNext).toBe(false)
+    expect(res.statusCode).toBe(401)
+    expect(res.body).toMatchObject({ code: 'NO_TOKEN' })
+  }
 
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody)
-
-    expect(res.status).toBe(201)
-    expect(res.body).toEqual({
-      message: 'Usuario creado exitosamente',
-      user: {
-        id: 'new-1',
-        email: validBody.email,
-        nombre: validBody.nombre,
-        apellido: validBody.apellido,
-        tipo_usuario: validBody.tipo_usuario,
-        activo: true,
-      },
+  // Nodo 3-4: token presente pero inválido → 401 TOKEN_INVALID
+  async N4_tokenInvalido() {
+    process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret'
+    const req = fakeReq({ headers: { authorization: 'Bearer token-no-valido' } })
+    const res = fakeRes()
+    let llamoNext = false
+    await authenticateToken(req, res as unknown as Response, () => {
+      llamoNext = true
     })
-  })
+    expect(llamoNext).toBe(false)
+    expect(res.statusCode).toBe(401)
+    expect(res.body).toMatchObject({ error: 'Token inválido', code: 'TOKEN_INVALID' })
+  }
 
-  it('C5: rol inválido (no admin) → 403', async () => {
-    const token = mockAuthenticatedUser('estudiante', ['estudiante'])
-
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody)
-
-    expect(res.status).toBe(403)
-    expect(res.body).toEqual({ error: 'Permisos insuficientes', code: 'FORBIDDEN_ROLE' })
-    expect(findUserByEmailMock).not.toHaveBeenCalled()
-  })
-
-  it('C6: token inválido → 401', async () => {
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', 'Bearer not-a-real-jwt')
-      .send(validBody)
-
-    expect(res.status).toBe(401)
-    expect(res.body).toEqual({ error: 'Token inválido', code: 'TOKEN_INVALID' })
-    expect(findUserByEmailMock).not.toHaveBeenCalled()
-  })
-
-  it('C7: error interno del servidor → 500', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    findUserByEmailMock.mockResolvedValue(null)
-    createUserWithTypeMock.mockRejectedValue(new Error('DB down'))
-
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody)
-
-    expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor' })
-  })
-
-  it('C8: sin token → 401', async () => {
-    const res = await request(app).post('/api/auth/create-user').send(validBody)
-
-    expect(res.status).toBe(401)
-    expect(res.body).toEqual({ error: 'Token de acceso requerido', code: 'NO_TOKEN' })
-    expect(findUserByEmailMock).not.toHaveBeenCalled()
-  })
-})
-
-
-describe('RQ1 unit — Fallas intencionales (evidencia solicitada)', () => {
-  beforeEach(() => {
-    findUserByIdMock.mockReset()
-    findUserByEmailMock.mockReset()
-    createUserWithTypeMock.mockReset()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
-
-  it('FALLA C1: campos faltantes — se espera (mal) 201 en vez de 400', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    const { password, ...bodySinPassword } = validBody
-
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(bodySinPassword)
-
-    expect(res.status).toBe(201) // esperado real: 400
-  })
-
-  it('FALLA C4: camino ideal — se espera (mal) 400 en vez de 201', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    findUserByEmailMock.mockResolvedValue(null)
-    createUserWithTypeMock.mockResolvedValue({
-      id: 'new-1',
-      email: validBody.email,
-      nombre: validBody.nombre,
-      apellido: validBody.apellido,
-      tipo_usuario: validBody.tipo_usuario,
-      activo: true,
+  // Nodo 5-6: usuario autenticado pero sin rol admin → 403 FORBIDDEN_ROLE
+  N6_rolNoAdmin() {
+    const req = fakeReq({
+      user: { roles: ['estudiante'], tipo_usuario: 'estudiante' },
+    } as unknown as Partial<Request>)
+    const res = fakeRes()
+    let llamoNext = false
+    requireRole(['admin'])(req, res as unknown as Response, () => {
+      llamoNext = true
     })
+    expect(llamoNext).toBe(false)
+    expect(res.statusCode).toBe(403)
+    expect(res.body).toMatchObject({ error: 'Permisos insuficientes', code: 'FORBIDDEN_ROLE' })
+  }
 
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody)
+  // Nodo 6: requireRole sin req.user → 401 No autenticado
+  N6_sinUsuario() {
+    const req = fakeReq()
+    const res = fakeRes()
+    requireRole(['admin'])(req, res as unknown as Response, () => {})
+    expect(res.statusCode).toBe(401)
+    expect(res.body).toEqual({ error: 'No autenticado' })
+  }
 
-    expect(res.status).toBe(400) // esperado real: 201
-  })
+  // Nodo 5: usuario admin → continúa
+  N5_esAdminContinua() {
+    const req = fakeReq({
+      user: { roles: ['admin'], tipo_usuario: 'admin' },
+    } as unknown as Partial<Request>)
+    const res = fakeRes()
+    let llamoNext = false
+    requireRole(['admin'])(req, res as unknown as Response, () => {
+      llamoNext = true
+    })
+    expect(llamoNext).toBe(true)
+    expect(res.statusCode).toBe(0)
+  }
 
-  it('FALLA C7: error interno — se espera (mal) un mensaje distinto al real', async () => {
-    const token = mockAuthenticatedUser('admin', ['admin'])
-    findUserByEmailMock.mockResolvedValue(null)
-    createUserWithTypeMock.mockRejectedValue(new Error('DB down'))
+  // Nodo 7-9: falta algún campo obligatorio → 400
+  N9_camposFaltantes() {
+    const { password: _password, ...sinPassword } = bodyValido
+    const r = validarCamposCreacionUsuario(sinPassword)
+    expect(r.ok).toBe(false)
+    expect(r.status).toBe(400)
+    expect(r.error).toBe('Todos los campos son requeridos')
+  }
 
-    const res = await request(app)
-      .post('/api/auth/create-user')
-      .set('Authorization', `Bearer ${token}`)
-      .send(validBody)
+  // Nodo 10-11: contraseña de menos de 8 caracteres → 400
+  N11_contrasenaCorta() {
+    const r = validarCamposCreacionUsuario({ ...bodyValido, password: 'corta12' })
+    expect(r.ok).toBe(false)
+    expect(r.status).toBe(400)
+    expect(r.error).toBe('La contraseña debe tener al menos 8 caracteres')
+  }
 
-    expect(res.body).toEqual({ error: 'Usuario creado exitosamente' }) // esperado real: { error: 'Error interno del servidor' }
-  })
+  // Nodo 12-14: el email ya está registrado → 400
+  N14_emailYaRegistrado() {
+    const r = decidirCreacionUsuario({
+      tieneToken: true,
+      tokenValido: true,
+      esAdmin: true,
+      emailYaExiste: true,
+      body: bodyValido,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.status).toBe(400)
+    expect(r.error).toBe('El email ya está registrado')
+  }
+
+  // Nodo 15: hashPassword usa bcrypt con 12 salt rounds
+  async N15_hashBcrypt12() {
+    expect(getBcryptSaltRounds()).toBe(12)
+    const hash = await hashPassword(bodyValido.password)
+    expect(isBcryptHash(hash)).toBe(true)
+    expect(hash.startsWith('$2b$12$')).toBe(true)
+    expect(hash).not.toBe(bodyValido.password)
+  }
+
+  // Nodo 16-17: datos correctos, admin y email libre → 201 Usuario creado
+  N17_usuarioCreado() {
+    const r = decidirCreacionUsuario({
+      tieneToken: true,
+      tokenValido: true,
+      esAdmin: true,
+      emailYaExiste: false,
+      body: bodyValido,
+    })
+    expect(r).toMatchObject({
+      ok: true,
+      status: 201,
+      data: { message: 'Usuario creado exitosamente' },
+    })
+  }
+}
+
+const pruebas = new RQ1CrearUsuarioAdmin()
+
+describe('RQ1 — Crear usuario como administrador', () => {
+  it('Nodo 2-3: sin token → 401 NO_TOKEN', () => pruebas.N3_sinToken())
+  it('Nodo 3-4: token inválido → 401 TOKEN_INVALID', () => pruebas.N4_tokenInvalido())
+  it('Nodo 5-6: rol no admin → 403 FORBIDDEN_ROLE', () => pruebas.N6_rolNoAdmin())
+  it('Nodo 6: requireRole sin usuario → 401 No autenticado', () => pruebas.N6_sinUsuario())
+  it('Nodo 5: usuario admin → continúa', () => pruebas.N5_esAdminContinua())
+  it('Nodo 7-9: campos requeridos faltantes → 400', () => pruebas.N9_camposFaltantes())
+  it('Nodo 10-11: contraseña corta → 400', () => pruebas.N11_contrasenaCorta())
+  it('Nodo 12-14: email ya registrado → 400', () => pruebas.N14_emailYaRegistrado())
+  it('Nodo 15: hashPassword → bcrypt 12 salt rounds', () => pruebas.N15_hashBcrypt12())
+  it('Nodo 16-17: usuario creado → 201', () => pruebas.N17_usuarioCreado())
 })

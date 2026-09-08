@@ -3,6 +3,7 @@ import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { listGruposConProfesorByCareer } from '../academic/grupos-con-profesor.service'
+import { armarResumenCoordinador, esCoordinador, parsearPaginacion } from './coordinador-resumen'
 
 const router = Router()
 
@@ -46,7 +47,7 @@ router.get(
 router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
   try {
     const user = req.user
-    if (!user?.roles?.includes('coordinador') && user?.tipo_usuario !== 'coordinador') {
+    if (!esCoordinador(user)) {
       return res.status(403).json({ error: 'Solo coordinadores pueden acceder a esta información.' })
     }
 
@@ -59,8 +60,7 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
     }
 
     const carreraId = Number(coordinador.carrera_id)
-    const page = Math.max(1, Number(req.query?.page || 1))
-    const pageSize = Math.min(50, Math.max(1, Number(req.query?.pageSize || 8)))
+    const { page, pageSize } = parsearPaginacion(req.query || {})
     const search = String(req.query?.search || '').trim().toLowerCase()
 
     const { data: cursos, error: cursosError } = await SupabaseDB.supabaseAdmin
@@ -88,21 +88,18 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
     }
 
     const profesoresList = profesores || []
-    const totalProfesores = profesoresList.length
     const profesorIds = profesoresList.map((p: any) => p.id).filter(Boolean)
 
     if (profesorIds.length === 0) {
-      return res.json({
-        stats: {
-          totalProfesores: 0,
-          totalCursos,
-          promedioEvaluaciones: 0,
-          profesoresEnRiesgo: 0,
-          totalEvaluaciones: 0
-        },
-        teachers: [],
-        pagination: { page, pageSize, total: 0, totalPages: 0 }
-      })
+      return res.json(armarResumenCoordinador({
+        profesores: [],
+        usuarios: [],
+        evaluaciones: [],
+        totalCursos,
+        search,
+        page,
+        pageSize,
+      }))
     }
 
     const usuarioIds = profesoresList.map((p: any) => p.usuario_id).filter(Boolean)
@@ -116,11 +113,6 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
       return res.status(500).json({ error: 'Error obteniendo usuarios', details: usuariosError.message })
     }
 
-    const usuarioById = new Map<string, any>()
-    ;(usuarios || []).forEach((u: any) => {
-      usuarioById.set(String(u.id), u)
-    })
-
     const { data: evaluaciones, error: evaluacionesError } = await SupabaseDB.supabaseAdmin
       .from('evaluaciones')
       .select('profesor_id, calificacion_promedio, completada')
@@ -132,75 +124,15 @@ router.get('/dashboard-summary', authenticateToken, async (req: any, res) => {
       return res.status(500).json({ error: 'Error obteniendo evaluaciones', details: evaluacionesError.message })
     }
 
-    const aggByProfesor = new Map<string, { total: number; suma: number }>()
-    let totalEvaluaciones = 0
-    let sumaGlobal = 0
-    ;(evaluaciones || []).forEach((e: any) => {
-      const pid = String(e.profesor_id || '')
-      const cal = Number(e.calificacion_promedio || 0)
-      if (!pid || !Number.isFinite(cal) || cal <= 0) return
-      const prev = aggByProfesor.get(pid) || { total: 0, suma: 0 }
-      prev.total += 1
-      prev.suma += cal
-      aggByProfesor.set(pid, prev)
-
-      totalEvaluaciones += 1
-      sumaGlobal += cal
-    })
-
-    const merged = profesoresList.map((p: any) => {
-      const u = usuarioById.get(String(p.usuario_id))
-      const agg = aggByProfesor.get(String(p.id)) || { total: 0, suma: 0 }
-      const promedio = agg.total > 0 ? Number((agg.suma / agg.total).toFixed(2)) : 0
-      const nombreCompleto = `${u?.nombre || ''} ${u?.apellido || ''}`.trim() || 'Docente'
-      return {
-        profesorId: p.id,
-        nombre: nombreCompleto,
-        email: u?.email || '',
-        totalEvaluaciones: agg.total,
-        promedio
-      }
-    })
-
-    const filtered = !search
-      ? merged
-      : merged.filter((t: any) =>
-          `${t.nombre} ${t.email}`.toLowerCase().includes(search)
-        )
-
-    filtered.sort((a: any, b: any) => {
-      if (a.promedio === 0 && b.promedio !== 0) return 1
-      if (a.promedio !== 0 && b.promedio === 0) return -1
-      if (a.promedio !== b.promedio) return a.promedio - b.promedio
-      return String(a.nombre).localeCompare(String(b.nombre), 'es')
-    })
-
-    const total = filtered.length
-    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
-    const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages)
-    const from = (safePage - 1) * pageSize
-    const to = from + pageSize
-    const paged = filtered.slice(from, to)
-
-    const profesoresEnRiesgo = merged.filter((t: any) => t.totalEvaluaciones > 0 && t.promedio < 4).length
-    const promedioEvaluaciones = totalEvaluaciones > 0 ? Number((sumaGlobal / totalEvaluaciones).toFixed(2)) : 0
-
-    res.json({
-      stats: {
-        totalProfesores,
-        totalCursos,
-        promedioEvaluaciones,
-        profesoresEnRiesgo,
-        totalEvaluaciones
-      },
-      teachers: paged,
-      pagination: {
-        page: safePage,
-        pageSize,
-        total,
-        totalPages
-      }
-    })
+    res.json(armarResumenCoordinador({
+      profesores: profesoresList,
+      usuarios: usuarios || [],
+      evaluaciones: evaluaciones || [],
+      totalCursos,
+      search,
+      page,
+      pageSize,
+    }))
   } catch (error) {
     console.error('Error GET /coordinador/dashboard-summary:', error)
     res.status(500).json({ error: 'Error interno del servidor' })

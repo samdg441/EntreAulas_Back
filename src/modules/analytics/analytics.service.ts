@@ -1,14 +1,11 @@
 import { AnalyticsRepository, analyticsRepository } from './analytics.repository'
+import { calcularPromedio } from './calificaciones'
 
 export class AnalyticsService {
   constructor(private readonly repo: AnalyticsRepository = analyticsRepository) {}
 
   computeAverage(ratings: Array<number | string | null | undefined>): number {
-    const valid = ratings
-      .map((r) => Number(r))
-      .filter((r) => Number.isFinite(r))
-    if (valid.length === 0) return 0
-    return valid.reduce((a, b) => a + b, 0) / valid.length
+    return calcularPromedio(ratings)
   }
 
   async getProfessorAverage(profesorId: string): Promise<{
