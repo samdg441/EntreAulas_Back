@@ -31,7 +31,7 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
-const VALID_USER_TYPES = ['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano']
+const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
 
 
 async function migrarPasswordSiHaceFalta(
@@ -49,8 +49,8 @@ async function migrarPasswordSiHaceFalta(
 
 function tieneRolValido(tipoUsuario: string, roles: string[]): boolean {
   return (
-    VALID_USER_TYPES.includes(tipoUsuario) ||
-    roles.some((rol) => VALID_USER_TYPES.includes(rol))
+    VALID_USER_TYPES.has(tipoUsuario) ||
+    roles.some((rol) => VALID_USER_TYPES.has(rol))
   )
 }
 
