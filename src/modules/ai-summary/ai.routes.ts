@@ -3,6 +3,7 @@ import { authenticateToken, requireRole } from '../../middleware/auth'
 import { AiService } from './ai.service'
 import { teachersRepository } from '../academic/teachers.repository'
 import { analyticsRepository } from '../analytics/analytics.repository'
+import { partesPeriodo, rangoFechasPeriodo } from '../analytics/calificaciones'
 import {
   badRequest,
   forbidden,
@@ -164,25 +165,22 @@ router.get('/summarize/by-professor', authenticateToken, requireRole(['docente',
     // Si periodo_id es formato YYYY-X, aplicar rango de fechas para robustez.
     // También se intenta resolver periodo_id numérico para compatibilidad.
     if (periodo_id) {
-      const periodoStr = String(periodo_id)
-      if (periodoStr.includes('-')) {
-        const [year, sem] = periodoStr.split('-')
-        const startDate = `${year}-${sem === '1' ? '01' : '07'}-01`
-        const endDate = `${year}-${sem === '1' ? '06-30' : '12-31'}`
-        filters.periodo_gte = startDate
-        filters.periodo_lte = endDate
-
-        // Formato YYYY-X, buscar periodo_id desde la base de datos
-
+      const partes = partesPeriodo(periodo_id)
+      if (partes) {
+        const rango = rangoFechasPeriodo(String(periodo_id))
+        if (rango) {
+          filters.periodo_gte = rango.start
+          filters.periodo_lte = rango.end
+        }
         try {
-          const periodos = await analyticsRepository.findPeriodo(year, sem)
+          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
           if (periodos?.id) {
             filters.periodo_id = periodos.id
           }
         } catch {
           // original ignored periodo errors
         }
-      } else {
+      } else if (!String(periodo_id).includes('-')) {
         filters.periodo_id = Number(periodo_id)
       }
     }
@@ -276,22 +274,21 @@ router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador'
     let periodoIdNum: number | undefined = undefined
     let periodoDateRange: { gte: string; lte: string } | null = null
     if (periodo_id) {
-      const periodoStr = String(periodo_id)
-      if (periodoStr.includes('-')) {
-        const [year, sem] = periodoStr.split('-')
-        periodoDateRange = {
-          gte: `${year}-${sem === '1' ? '01' : '07'}-01`,
-          lte: `${year}-${sem === '1' ? '06-30' : '12-31'}`
+      const partes = partesPeriodo(periodo_id)
+      if (partes) {
+        const rango = rangoFechasPeriodo(String(periodo_id))
+        if (rango) {
+          periodoDateRange = { gte: rango.start, lte: rango.end }
         }
         try {
-          const periodos = await analyticsRepository.findPeriodo(year, sem)
+          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
           if (periodos?.id) {
             periodoIdNum = periodos.id
           }
         } catch {
           // original ignored periodo errors
         }
-      } else {
+      } else if (!String(periodo_id).includes('-')) {
         periodoIdNum = Number(periodo_id)
       }
     }
@@ -516,18 +513,17 @@ router.get('/summarize/by-faculty', authenticateToken, requireRole(['decano', 'a
     // Paso 1: Convertir periodo_id si viene en formato YYYY-X
     let periodoIdNum: number | undefined = undefined
     if (periodo_id) {
-      const periodoStr = String(periodo_id)
-      if (periodoStr.includes('-')) {
-        const [year, sem] = periodoStr.split('-')
+      const partes = partesPeriodo(periodo_id)
+      if (partes) {
         try {
-          const periodos = await analyticsRepository.findPeriodo(Number(year), Number(sem))
+          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
           if (periodos?.id) {
             periodoIdNum = periodos.id
           }
         } catch {
           // original ignored periodo errors
         }
-      } else {
+      } else if (!String(periodo_id).includes('-')) {
         periodoIdNum = Number(periodo_id)
       }
     }

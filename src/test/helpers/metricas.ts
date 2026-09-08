@@ -1,3 +1,7 @@
+import { rangoFechasPeriodo as rangoFechas } from '../../modules/analytics/calificaciones'
+
+export { esPeriodoValido } from '../../modules/analytics/calificaciones'
+
 export function esProfesor(tipoUsuario?: string): boolean {
   return tipoUsuario === 'profesor'
 }
@@ -17,16 +21,8 @@ export function calcularPromedio(calificaciones: Array<number | null | undefined
   return lista.reduce((suma, n) => suma + n, 0) / lista.length
 }
 
-export function esPeriodoValido(period: string): boolean {
-  return /^\d{4}-[12]$/.test(String(period).trim())
-}
-
 export function rangoFechasPeriodo(period: string): { start: string; end: string } {
-  const [year, semester] = String(period).split('-')
-  return {
-    start: `${year}-${semester === '1' ? '01' : '07'}-01`,
-    end: `${year}-${semester === '1' ? '06-30' : '12-31'}`,
-  }
+  return rangoFechas(period) ?? { start: '', end: '' }
 }
 
 export function filtrarEvaluacionesPorPeriodo<T extends { fecha_creacion: string }>(

@@ -6,6 +6,7 @@ import { teachersRepository } from '../academic/teachers.repository'
 import { academicRepository } from '../academic/academic.repository'
 import { analyticsRepository } from './analytics.repository'
 import { armarResumenCoordinador, esCoordinador, parsearPaginacion } from './coordinador-resumen'
+import { partesPeriodo, rangoFechasPeriodoOTodo } from './calificaciones'
 import {
   badRequest,
   forbidden,
@@ -146,16 +147,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
 
     const carreraId = Number(coordinador.carrera_id)
     const period = String(req.query?.period || '').trim()
-    const [periodYearStr, periodSemesterStr] = period.split('-')
-    const year = Number(periodYearStr)
-    const semester = Number(periodSemesterStr)
-    const hasValidPeriod = Number.isFinite(year) && Number.isFinite(semester) && (semester === 1 || semester === 2)
-    const dateStart = hasValidPeriod ? `${year}-${semester === 1 ? '01' : '07'}-01` : '2020-01-01'
-    const dateEnd = hasValidPeriod ? `${year}-${semester === 1 ? '06-30' : '12-31'}` : '2030-12-31'
+    const partes = partesPeriodo(period)
+    const { start: dateStart, end: dateEnd } = rangoFechasPeriodoOTodo(period)
     let periodId: number | null = null
-    if (hasValidPeriod) {
+    if (partes) {
       try {
-        const periodRow = await analyticsRepository.findPeriodo(year, semester)
+        const periodRow = await analyticsRepository.findPeriodo(partes.year, partes.semester)
         periodId = periodRow?.id ? Number(periodRow.id) : null
       } catch {
         periodId = null
@@ -701,26 +698,15 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
       categoryStats = await buildCategoryStats(Array.isArray(allCareerEvaluations) ? allCareerEvaluations : [])
     }
 
-    const resolvePeriodWindow = (periodValue: string) => {
-      const [yStr, sStr] = periodValue.split('-')
-      const y = Number(yStr)
-      const s = Number(sStr)
-      if (!Number.isFinite(y) || !Number.isFinite(s) || (s !== 1 && s !== 2)) {
-        return { start: '2020-01-01', end: '2030-12-31' }
-      }
-      return {
-        start: `${y}-${s === 1 ? '01' : '07'}-01`,
-        end: `${y}-${s === 1 ? '06-30' : '12-31'}`
-      }
-    }
+    const resolvePeriodWindow = (periodValue: string) => rangoFechasPeriodoOTodo(periodValue)
 
     const trendPeriods: string[] = []
     const minTrendYear = 2025
     const minTrendSemester = 1
-    if (hasValidPeriod) {
+    if (partes) {
       let y = minTrendYear
       let s = minTrendSemester
-      while (y < year || (y === year && s <= semester)) {
+      while (y < partes.year || (y === partes.year && s <= partes.semester)) {
         trendPeriods.push(`${y}-${s}`)
         if (s === 1) {
           s = 2
@@ -799,12 +785,8 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     const carreraId = Number(coordinador.carrera_id)
     const profesorId = String(req.params.profesorId)
     const period = String(req.query?.period || '').trim()
-    const [yearStr, semesterStr] = period.split('-')
-    const year = Number(yearStr)
-    const semester = Number(semesterStr)
-    const hasValidPeriod = Number.isFinite(year) && Number.isFinite(semester) && (semester === 1 || semester === 2)
-    const dateStart = hasValidPeriod ? `${year}-${semester === 1 ? '01' : '07'}-01` : '2020-01-01'
-    const dateEnd = hasValidPeriod ? `${year}-${semester === 1 ? '06-30' : '12-31'}` : '2030-12-31'
+    const partes = partesPeriodo(period)
+    const { start: dateStart, end: dateEnd } = rangoFechasPeriodoOTodo(period)
 
     let profesor: any
     try {
@@ -820,9 +802,9 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     }
 
     let periodId: number | null = null
-    if (hasValidPeriod) {
+    if (partes) {
       try {
-        const periodRow = await analyticsRepository.findPeriodo(year, semester)
+        const periodRow = await analyticsRepository.findPeriodo(partes.year, partes.semester)
         periodId = periodRow?.id ? Number(periodRow.id) : null
       } catch {
         periodId = null

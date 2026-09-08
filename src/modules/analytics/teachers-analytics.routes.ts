@@ -824,10 +824,8 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
     // Rango de fechas del período
     let dateFilter: { gte?: string; lte?: string } = {}
     if (period) {
-      const [year, semester] = String(period).split('-')
-      const startDate = `${year}-${semester === '1' ? '01' : '07'}-01`
-      const endDate = `${year}-${semester === '1' ? '06-30' : '12-31'}`
-      dateFilter = { gte: startDate, lte: endDate }
+      const rango = rangoFechasPeriodo(String(period))
+      if (rango) dateFilter = { gte: rango.start, lte: rango.end }
     }
 
     // Evaluaciones del período para este profesor
@@ -940,10 +938,8 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
     // 2) Rango de fechas del período
     let dateFilter: { gte?: string; lte?: string } = {}
     if (period) {
-      const [year, semester] = String(period).split('-')
-      const startDate = `${year}-${semester === '1' ? '01' : '07'}-01`
-      const endDate = `${year}-${semester === '1' ? '06-30' : '12-31'}`
-      dateFilter = { gte: startDate, lte: endDate }
+      const rango = rangoFechasPeriodo(String(period))
+      if (rango) dateFilter = { gte: rango.start, lte: rango.end }
     }
 
     // 3) Evaluaciones del período del profesor
