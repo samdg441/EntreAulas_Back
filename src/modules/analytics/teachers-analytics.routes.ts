@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
-import { EvaluationRequest, EvaluationResponse } from '../../types/evaluationTypes'
 import { calcularPromedio, esPeriodoValido, rangoFechasPeriodo, resumenMetricas } from './calificaciones'
 
 const router = Router()

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken } from '../../middleware/auth'
 import jwt from 'jsonwebtoken'
-import { EvaluationRequest, EvaluationResponse } from '../../types/evaluationTypes'
+
 
 const router = Router()
 
@@ -13,7 +13,7 @@ const teacherIdSchema = z.union([
   z
     .string()
     .regex(/^\d+$/, 'ID de profesor inválido')
-    .refine((s) => parseInt(s, 10) > 0, 'ID de profesor inválido'),
+    .refine((s) => Number.parseInt(s, 10) > 0, 'ID de profesor inválido'),
 ])
 
 const evaluationSchema = z.object({
@@ -22,7 +22,7 @@ const evaluationSchema = z.object({
     z.string().uuid('ID de curso inválido (UUID)'),
     z
       .string()
-      .transform((val) => parseInt(val, 10))
+      .transform((val) => Number.parseInt(val, 10))
       .pipe(z.number().int().positive('ID de curso inválido (número)')),
   ]),
   groupId: z.string().optional(),
@@ -425,7 +425,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
       .from('asignaciones_profesor')
       .select('id, profesor_id, curso_id, grupo_id, activa')
       .eq('profesor_id', profesorId)
-      .eq('curso_id', isNaN(numericCourseId) ? courseId : numericCourseId)
+      .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
       .eq('activa', true)
     if (asignsErr) {
       console.error('❌ Backend: Error consultando asignaciones_profesor:', asignsErr)
@@ -460,7 +460,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
         const { data: gruposPorUsuario, error: gruposUsuarioErr } = await SupabaseDB.supabaseAdmin
           .from('grupos')
           .select('id, numero_grupo, horario, aula, curso_id, profesor_id')
-          .eq('curso_id', isNaN(numericCourseId) ? courseId : numericCourseId)
+          .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
           .eq('profesor_id', profRow.usuario_id)
         if (!gruposUsuarioErr && gruposPorUsuario?.length) {
           console.log('✅ Encontrados grupos usando usuario_id del profesor')
@@ -474,7 +474,7 @@ router.get('/:profesorId/courses/:courseId/groups', authenticateToken, async (re
       const { data: gruposPorCurso, error: gruposCursoError } = await SupabaseDB.supabaseAdmin
         .from('grupos')
         .select('id, numero_grupo, horario, aula, curso_id')
-        .eq('curso_id', isNaN(numericCourseId) ? courseId : numericCourseId)
+        .eq('curso_id', Number.isNaN(numericCourseId) ? courseId : numericCourseId)
       if (gruposCursoError) {
         console.error('❌ Backend: Error consultando grupos por curso:', gruposCursoError)
         return res.status(500).json({ error: 'Error consultando grupos del curso', details: gruposCursoError })
@@ -509,7 +509,7 @@ router.post('/evaluations', authenticateToken, async (req: any, res) => {
     } = validatedData
 
     // Asegurar que courseId sea un número para las consultas de BD
-    const numericCourseId = typeof courseId === 'string' ? parseInt(courseId, 10) : courseId
+    const numericCourseId = typeof courseId === 'string' ? Number.parseInt(courseId, 10) : courseId
 
     console.log('🔍 Backend: Saving evaluation:', {
       teacherId,
@@ -797,7 +797,7 @@ router.get('/evaluation-questions/:courseId', authenticateToken, async (req: any
     console.log('✅ Backend: Questions found for course:', curso.nombre, 'Career ID:', carreraId, 'Count:', questionsFormatted.length);
 
     res.json({
-      courseId: parseInt(courseId),
+      courseId: Number.parseInt(courseId),
       courseCode: curso.codigo,
       courseName: curso.nombre,
       carreraId: carreraId != null ? Number(carreraId) : null,
@@ -934,7 +934,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
       .order('orden', { ascending: true });
 
     if (careerId && careerId !== 'null') {
-      query = query.eq('id_carrera', parseInt(careerId));
+      query = query.eq('id_carrera', Number.parseInt(careerId));
     } else {
       query = query.is('id_carrera', null);
     }
@@ -1000,7 +1000,7 @@ router.get('/survey-by-career/:careerId', authenticateToken, async (req: any, re
     console.log('✅ Backend: Survey questions found for career:', careerId, 'Count:', questionsFormatted.length);
 
     res.json({
-      careerId: careerId ? parseInt(careerId) : null,
+      careerId: careerId ? Number.parseInt(careerId) : null,
       career: carreraInfo,
       questions: questionsFormatted
     })
