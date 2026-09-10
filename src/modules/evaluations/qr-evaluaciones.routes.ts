@@ -1,12 +1,10 @@
 import { Router } from 'express'
-import { randomUUID } from 'crypto'
-import { randomUUID } from 'crypto' 
-import { SupabaseDB } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { RoleService } from '../auth/role.service'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
 import { academicRepository } from '../academic/academic.repository'
 import { qrRepository } from './qr.repository'
+import { generarQrsBatch } from './qr-batch'
 import { mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
 import {
   AppError,
@@ -28,164 +26,11 @@ const router = Router()
  */
 router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), async (req: any, res) => {
   try {
-    const user = req.user
-
-    const { grupoIds } = req.body || {}
-    if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
-      throw badRequest('Se requiere grupoIds (array de IDs de grupo).')
-    }
-
-    const ids = grupoIds.map((id: any) => Number(id)).filter((n: number) => Number.isFinite(n))
-    if (ids.length === 0) {
-      throw badRequest('grupoIds debe contener números válidos.')
-    }
-
-    const isCoordinador = user?.roles?.includes('coordinador') || user?.tipo_usuario === 'coordinador'
-    let carreraId: number | null = null
-    if (isCoordinador) {
-      const coordinador = await RoleService.obtenerCoordinadorPorUsuario(user.id)
-      if (!coordinador?.carrera_id) {
-        throw forbidden('Coordinador sin carrera asignada o no encontrado.')
-      }
-      carreraId = Number(coordinador.carrera_id)
-    }
-
-    // Grupos con curso_id (+ posibles columnas de profesor/asignación según esquema)
-    let gruposList: any[] = []
-    const { data: grupos, error: gruposError } = await SupabaseDB.supabaseAdmin
-      .from('grupos')
-      .select('id, curso_id, profesor_id, asignacion_profesor_id')
-      .in('id', ids)
-
-    // Fallback si el esquema no tiene profesor_id / asignacion_profesor_id
-    if (gruposError && (gruposError.code === '42703' || String(gruposError?.message || '').includes('column'))) {
-      const respFallback = await SupabaseDB.supabaseAdmin
-        .from('grupos')
-        .select('id, curso_id')
-        .in('id', ids)
-      if (respFallback.error) {
-        console.error('Error grupos en batch (fallback):', respFallback.error)
-        return res.status(500).json({ error: 'Error obteniendo grupos', details: respFallback.error.message })
-      }
-      gruposList = respFallback.data || []
-    } else if (gruposError) {
-      console.error('Error grupos en batch:', gruposError)
-      return res.status(500).json({ error: 'Error obteniendo grupos', details: gruposError.message })
-    } else {
-      gruposList = grupos || []
-    }
-    const grupoById = new Map(gruposList.map((g: any) => [g.id, g]))
-
-    // Seguridad: si el request viene de un coordinador, solo permitir grupos de su carrera
-    let allowedCursoIds: Set<number> | null = null
-    if (carreraId != null && gruposList.length > 0) {
-      const cursoIds = Array.from(new Set(gruposList.map((g: any) => Number(g.curso_id)).filter((n: number) => Number.isFinite(n))))
-      let cursosOk: any[] = []
-      try {
-        cursosOk = await academicRepository.listCursosActivosInCareer(carreraId, cursoIds)
-      } catch (cursosErr: any) {
-        throw internal('Error verificando cursos', cursosErr?.message)
-      }
-
-      allowedCursoIds = new Set((cursosOk || []).map((c: any) => Number(c.id)))
-    }
-
-    // Asignaciones profesor por grupo (tabla preferida) con fallback a cursos_profesor
-    let asignaciones: any[] = []
-    try {
-      asignaciones = await academicRepository.listAsignacionesActivasByGrupoIds(ids)
-    } catch {
-      try {
-        asignaciones = await academicRepository.listAsignacionesByGrupoIds(ids)
-      } catch (asigError: any) {
-        throw internal('Error obteniendo asignaciones', asigError?.message)
-      }
-    }
-
-    const asignacionByGrupoId = new Map<number, any>()
-    ;(asignaciones || []).forEach((a: any) => {
-      asignacionByGrupoId.set(Number(a.grupo_id), a)
-    })
-
-    // Idempotencia: si ya existe un QR activo para un grupo_id, reutilizar ese token.
-    let existentes: any[] = []
-    try {
-      existentes = await qrRepository.listActivosByGrupoIds(ids)
-    } catch (existentesErr: any) {
-      throw internal('Error verificando QRs existentes', existentesErr?.message)
-    }
-
-    const existingByGrupoId = new Map<number, any>()
-    ;(existentes || []).forEach((r: any) => {
-      existingByGrupoId.set(Number(r.grupo_id), r)
-    })
-
-    const created: { grupoId: number; token: string }[] = []
-    const skipped: { grupoId: number; reason: string }[] = []
-    const periodoId = req.body?.periodo_id != null ? Number(req.body.periodo_id) : null
-
-    for (const grupoId of ids) {
-      const grupo = grupoById.get(grupoId)
-      if (!grupo) continue
-
-      if (allowedCursoIds) {
-        const cursoIdGrupo = Number((grupo as any).curso_id)
-        if (!allowedCursoIds.has(cursoIdGrupo)) {
-          skipped.push({ grupoId, reason: 'El grupo no pertenece a tu carrera.' })
-          continue
-        }
-      }
-
-      const existing = existingByGrupoId.get(grupoId)
-      if (existing?.token && existing?.profesor_id) {
-        created.push({ grupoId, token: existing.token })
-        continue
-      }
-
-      const asig = asignacionByGrupoId.get(grupoId)
-      // Resolver profesorId: asignación por grupo > grupo.profesor_id > asignacion_profesor_id
-      let profesorId = asig?.profesor_id ?? (grupo as any)?.profesor_id ?? null
-      const cursoId = Number(grupo.curso_id ?? asig?.curso_id ?? 0)
-      if (!cursoId) continue
-
-      // Si el esquema tiene asignacion_profesor_id, intentar resolverlo
-      if (!profesorId && (grupo as any)?.asignacion_profesor_id) {
-        try {
-          const asgRow = await academicRepository.findAsignacionByGrupo(grupoId)
-          if (asgRow?.profesor_id) {
-            profesorId = asgRow.profesor_id
-          }
-        } catch {
-          // mismo comportamiento: si falla la resolución, se sigue sin profesorId
-        }
-      }
-
-      if (!profesorId) {
-        skipped.push({ grupoId, reason: 'No se pudo resolver profesor_id para este grupo (sin asignación).' })
-        continue
-      }
-
-      const token = randomUUID()
-
-      const row: any = {
-        token,
-        profesor_id: profesorId,
-        curso_id: cursoId,
-        grupo_id: grupoId,
-        activo: true
-      }
-      if (periodoId != null && Number.isFinite(periodoId)) {
-        row.periodo_id = periodoId
-      }
-
-      try {
-        await qrRepository.insert(row)
-      } catch {
-        continue
-      }
-      created.push({ grupoId, token })
-    }
-
+    const { created, skipped } = await generarQrsBatch(
+      req.user,
+      req.body?.grupoIds,
+      req.body?.periodo_id
+    )
     res.status(201).json({ created, skipped })
   } catch (error) {
     return sendError(res, error)
