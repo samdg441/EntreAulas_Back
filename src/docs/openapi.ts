@@ -38,6 +38,56 @@ export const openApiSpec = {
         },
       },
     },
+    '/api/auth/forgot-password': {
+      post: {
+        security: [],
+        summary: 'Solicitar recuperación de contraseña',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: { email: { type: 'string', format: 'email' } },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Mensaje genérico (no revela si el correo existe)' },
+          '400': { description: 'Correo inválido' },
+          '503': { description: 'SMTP no configurado' },
+        },
+      },
+    },
+    '/api/auth/reset-password': {
+      post: {
+        security: [],
+        summary: 'Restablecer contraseña con token de recuperación',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token', 'email', 'newPassword', 'confirmPassword'],
+                properties: {
+                  token: { type: 'string' },
+                  email: { type: 'string', format: 'email' },
+                  newPassword: { type: 'string' },
+                  confirmPassword: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Contraseña actualizada' },
+          '400': { description: 'Token inválido/expirado o contraseña débil' },
+        },
+      },
+    },
     '/api/auth/login': {
       post: {
         security: [],
