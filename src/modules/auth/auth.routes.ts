@@ -8,6 +8,12 @@ import {
   verifyStoredPassword
 } from '../../utils/passwordSecurity'
 import { dashboardDesdeRolSeleccionado } from './dashboard'
+import {
+  badRequest,
+  notFound,
+  sendError,
+  unauthorized,
+} from '../../shared/errors'
 
 const router = Router()
 
@@ -31,16 +37,90 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
+const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
+
+
+async function migrarPasswordSiHaceFalta(
+  userId: string,
+  passwordCheck: { migratePlaintextToHash?: string }
+): Promise<void> {
+  if (!passwordCheck.migratePlaintextToHash) return
+  try {
+    const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
+    await authRepository.updateUser(userId, { password: hashedPassword })
+  } catch (updateError) {
+    console.error('Error migrando contraseña a bcrypt:', updateError)
+  }
+}
+
+function tieneRolValido(tipoUsuario: string, roles: string[]): boolean {
+  return (
+    VALID_USER_TYPES.has(tipoUsuario) ||
+    roles.some((rol) => VALID_USER_TYPES.has(rol))
+  )
+}
+
+// Normaliza 'docente' a 'profesor' para compatibilidad con el frontend.
+function normalizarTipoUsuario(tipoUsuario: string): string {
+  return tipoUsuario === 'docente' ? 'profesor' : tipoUsuario
+}
+
+function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
+  if (roles.includes('admin')) return 'Administrador del sistema'
+  if (roles.includes('decano')) return 'Decano de la facultad'
+  if (roles.includes('coordinador')) return 'Coordinador del sistema'
+  if (roles.includes('profesor') || roles.includes('docente')) return 'Profesor/Docente del sistema'
+  if (roles.includes('estudiante')) return 'Estudiante del sistema'
+  return roles.length > 1
+    ? `Usuario con múltiples roles: ${roles.join(', ')}`
+    : `Usuario con rol: ${roles[0] || tipoUsuario}`
+}
+
+async function obtenerCoordinadorInfo(
+  roles: string[],
+  userId: string
+): Promise<{ carrera_id: unknown } | null> {
+  if (!roles.includes('coordinador')) return null
+  try {
+    const { RoleService } = await import('./role.service')
+    const info = await RoleService.obtenerCoordinadorPorUsuario(userId)
+    return info ? { carrera_id: info.carrera_id ?? null } : null
+  } catch (e) {
+    console.warn('Error obteniendo info del coordinador:', e)
+    return null
+  }
+}
+
+async function obtenerDecanoInfo(
+  roles: string[],
+  userId: string
+): Promise<Record<string, unknown> | null> {
+  if (!roles.includes('decano')) return null
+  try {
+    const { RoleService } = await import('./role.service')
+    const info = await RoleService.obtenerDecanoPorUsuario(userId)
+    if (!info) return null
+    return {
+      facultad_id: info.facultad_id ?? null,
+      facultad_nombre: info.facultades?.nombre ?? null,
+      fecha_nombramiento: info.fecha_nombramiento
+    }
+  } catch (e) {
+    console.warn('Error obteniendo info del decano:', e)
+    return null
+  }
+}
+
 // POST /auth/register
 router.post('/register', async (req, res) => {
   try {
     const validatedData = registerSchema.parse(req.body)
-    
+
     // Verificar si el usuario ya existe
     const existingUser = await authRepository.findUserByEmail(validatedData.email)
 
     if (existingUser) {
-      return res.status(400).json({ error: 'El email ya está registrado' })
+      throw badRequest('El email ya está registrado')
     }
 
     const hashedPassword = await hashPassword(validatedData.password)
@@ -81,10 +161,9 @@ router.post('/register', async (req, res) => {
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors })
+      return sendError(res, badRequest('Datos inválidos', error.errors))
     }
-    console.error('Error en registro:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -96,11 +175,11 @@ router.post('/login', async (req, res) => {
     const user = await authRepository.findUserByEmail(validatedData.email)
 
     if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
     if (!user.activo) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
     const passwordCheck = await verifyStoredPassword(
@@ -109,27 +188,15 @@ router.post('/login', async (req, res) => {
     )
 
     if (!passwordCheck.ok) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
-    if (passwordCheck.migratePlaintextToHash) {
-      try {
-        const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-        await authRepository.updateUser(user.id, { password: hashedPassword })
-      } catch (updateError) {
-        console.error('Error migrando contraseña a bcrypt:', updateError)
-      }
-    }
+    await migrarPasswordSiHaceFalta(user.id, passwordCheck)
 
     const { RoleService } = await import('./role.service')
     const roles = await RoleService.obtenerRolesUsuario(user.id)
 
-    const validUserTypes = ['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano']
-    const tieneRolValido =
-      validUserTypes.includes(user.tipo_usuario) ||
-      roles.some((rol) => validUserTypes.includes(rol))
-
-    if (!tieneRolValido) {
+    if (!tieneRolValido(user.tipo_usuario, roles)) {
       return res.status(401).json({ error: 'Tipo de usuario no válido' })
     }
 
@@ -161,52 +228,19 @@ router.post('/login', async (req, res) => {
     const dashboard = await RoleService.obtenerDashboardUsuario(user.id)
     const permisos = await RoleService.obtenerPermisosUsuario(user.id)
 
-    let coordinadorInfo: any = null
-    try {
-      if (roles.includes('coordinador')) {
-        const info = await RoleService.obtenerCoordinadorPorUsuario(user.id)
-        if (info) {
-          coordinadorInfo = { carrera_id: info.carrera_id ?? null }
-        }
-      }
-    } catch (e) {
-      console.warn('Error obteniendo info del coordinador:', e)
-    }
+    const coordinadorInfo = await obtenerCoordinadorInfo(roles, user.id)
+    const decanoInfo = await obtenerDecanoInfo(roles, user.id)
 
-    let decanoInfo: any = null
-    try {
-      if (roles.includes('decano')) {
-        const info = await RoleService.obtenerDecanoPorUsuario(user.id)
-        if (info) {
-          decanoInfo = {
-            facultad_id: info.facultad_id ?? null,
-            facultad_nombre: info.facultades?.nombre ?? null,
-            fecha_nombramiento: info.fecha_nombramiento
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Error obteniendo info del decano:', e)
-    }
-
-    // Determinar el tipo de usuario para la respuesta
-    let userTypeDisplay = user.tipo_usuario
-    let userRole = user.tipo_usuario
-    
     // Normalizar 'docente' a 'profesor' para compatibilidad
-    if (user.tipo_usuario === 'docente') {
-      userTypeDisplay = 'profesor'
-      userRole = 'profesor'
-    }
+    const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
+    const userRole = userTypeDisplay
 
     // Información adicional según los roles del usuario
-    let additionalInfo: any = {
+    const additionalInfo: any = {
       dashboard: dashboard,
       permissions: permisos,
       roles: roles,
-      role_description: roles.length > 1 ? 
-        `Usuario con múltiples roles: ${roles.join(', ')}` : 
-        `Usuario con rol: ${roles[0] || user.tipo_usuario}`
+      role_description: describirRolPrincipal(roles, user.tipo_usuario)
     }
 
     if (coordinadorInfo) {
@@ -215,19 +249,6 @@ router.post('/login', async (req, res) => {
 
     if (decanoInfo) {
       additionalInfo.decano = decanoInfo
-    }
-    
-    // Información específica por rol principal
-    if (roles.includes('admin')) {
-      additionalInfo.role_description = 'Administrador del sistema'
-    } else if (roles.includes('decano')) {
-      additionalInfo.role_description = 'Decano de la facultad'
-    } else if (roles.includes('coordinador')) {
-      additionalInfo.role_description = 'Coordinador del sistema'
-    } else if (roles.includes('profesor') || roles.includes('docente')) {
-      additionalInfo.role_description = 'Profesor/Docente del sistema'
-    } else if (roles.includes('estudiante')) {
-      additionalInfo.role_description = 'Estudiante del sistema'
     }
 
     res.json({
@@ -246,10 +267,9 @@ router.post('/login', async (req, res) => {
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors })
+      return sendError(res, badRequest('Datos inválidos', error.errors))
     }
-    console.error('Error en login:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -261,39 +281,32 @@ router.post('/login-with-role', async (req, res) => {
     const user = await authRepository.findUserByEmail(email)
 
     if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
     if (!user.activo) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
     const passwordCheck = await verifyStoredPassword(password, user.password)
 
     if (!passwordCheck.ok) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
-    if (passwordCheck.migratePlaintextToHash) {
-      try {
-        const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-        await authRepository.updateUser(user.id, { password: hashedPassword })
-      } catch (updateError) {
-        console.error('Error migrando contraseña a bcrypt:', updateError)
-      }
-    }
+    await migrarPasswordSiHaceFalta(user.id, passwordCheck)
 
     const { RoleService } = await import('./role.service')
     const roles = await RoleService.obtenerRolesUsuario(user.id)
 
     if (!roles.includes(selectedRole)) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      throw unauthorized('Credenciales inválidas')
     }
 
     // Generar token JWT
     const token = jwt.sign(
-      { 
-        userId: user.id, 
+      {
+        userId: user.id,
         email: user.email,
         selectedRole: selectedRole
       },
@@ -316,10 +329,8 @@ router.post('/login-with-role', async (req, res) => {
         dashboard: dashboard
       }
     })
-
   } catch (error) {
-    console.error('Error en login con rol:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 
@@ -327,12 +338,12 @@ router.post('/login-with-role', async (req, res) => {
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ error: 'No autenticado' })
+      throw unauthorized('No autenticado')
     }
 
     const u = await authRepository.findUserById(req.user.id)
     if (!u) {
-      return res.status(404).json({ error: 'Usuario no encontrado' })
+      throw notFound('Usuario no encontrado')
     }
 
     res.json({
@@ -347,8 +358,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
       permisos: req.user.permisos
     })
   } catch (e) {
-    console.error('GET /auth/profile:', e)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, e)
   }
 })
 
@@ -358,7 +368,7 @@ router.get('/me', async (req, res) => {
     // Obtener el token del header Authorization
     const authHeader = req.headers.authorization
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Token de autorización requerido' })
+      throw unauthorized('Token de autorización requerido')
     }
 
     const token = authHeader.substring(7) // Remover 'Bearer '
@@ -370,13 +380,13 @@ router.get('/me', async (req, res) => {
     const user = await authRepository.findUserByEmail(decoded.email)
 
     if (!user || !user.activo) {
-      return res.status(401).json({ error: 'Usuario no encontrado o inactivo' })
+      throw unauthorized('Usuario no encontrado o inactivo')
     }
 
     // Determinar el tipo de usuario para la respuesta
     let userTypeDisplay = user.tipo_usuario
     let userRole = user.tipo_usuario
-    
+
     // Normalizar 'docente' a 'profesor' para compatibilidad
     if (user.tipo_usuario === 'docente') {
       userTypeDisplay = 'profesor'
@@ -385,7 +395,7 @@ router.get('/me', async (req, res) => {
 
     // Información adicional según el tipo de usuario
     let additionalInfo = {}
-    
+
     switch (user.tipo_usuario) {
       case 'estudiante':
         additionalInfo = {
@@ -432,25 +442,24 @@ router.get('/me', async (req, res) => {
       ...additionalInfo
     })
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ error: 'Token inválido' })
-    }
     if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({ error: 'Token expirado' })
+      return sendError(res, unauthorized('Token expirado'))
     }
-    console.error('Error en /auth/me:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    if (error instanceof jwt.JsonWebTokenError) {
+      return sendError(res, unauthorized('Token inválido'))
+    }
+    return sendError(res, error)
   }
 })
 
 // POST /auth/create-user - Crear usuario con hash automático (solo administradores)
 router.post('/create-user', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    const { 
-      email, 
-      password, 
-      nombre, 
-      apellido, 
+    const {
+      email,
+      password,
+      nombre,
+      apellido,
       tipo_usuario,
       // Campos opcionales para profesores
       codigo_profesor,
@@ -460,24 +469,22 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       carrera_id,
       semestre
     } = req.body
-    
+
     if (!email || !password || !nombre || !apellido || !tipo_usuario) {
-      return res.status(400).json({ error: 'Todos los campos son requeridos' })
+      throw badRequest('Todos los campos son requeridos')
     }
 
     if (typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({
-        error: 'La contraseña debe tener al menos 8 caracteres'
-      })
+      throw badRequest('La contraseña debe tener al menos 8 caracteres')
     }
 
     const existingUser = await authRepository.findUserByEmail(email)
     if (existingUser) {
-      return res.status(400).json({ error: 'El email ya está registrado' })
+      throw badRequest('El email ya está registrado')
     }
 
     const hashedPassword = await hashPassword(password)
-    
+
     // Crear usuario con inserción automática en tabla específica
     const user = await authRepository.createUserWithType({
       email,
@@ -493,7 +500,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       carrera_id,
       semestre
     })
-    
+
     res.status(201).json({
       message: 'Usuario creado exitosamente',
       user: {
@@ -506,8 +513,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       }
     })
   } catch (error) {
-    console.error('Error creando usuario:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendError(res, error)
   }
 })
 

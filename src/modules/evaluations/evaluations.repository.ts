@@ -207,6 +207,40 @@ export class EvaluationsRepository {
     if (error) throw error
     return data
   }
+
+  async listCategorias() {
+    const { data, error } = await supabaseAdmin
+      .from('categorias_pregunta')
+      .select('id, nombre, descripcion, orden')
+      .order('orden', { ascending: true })
+    if (error) throw error
+    return data || []
+  }
+
+  async getActiveQuestionsByCareer(carreraId?: number | null) {
+    let query = supabaseAdmin
+      .from('preguntas_evaluacion')
+      .select(`
+        id,
+        texto_pregunta,
+        tipo_pregunta,
+        opciones,
+        orden,
+        categoria:categorias_pregunta(nombre)
+      `)
+      .eq('activa', true)
+      .order('orden', { ascending: true })
+
+    if (carreraId) {
+      query = query.eq('id_carrera', carreraId)
+    } else {
+      query = query.is('id_carrera', null)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return data || []
+  }
 }
 
 export const evaluationsRepository = new EvaluationsRepository()

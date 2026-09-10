@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { esPeriodoValido, rangoFechasPeriodo, resumenHistorico } from '../../modules/analytics/calificaciones'
+import { esPeriodoValido, partesPeriodo, rangoFechasPeriodo, resumenHistorico } from '../../modules/analytics/calificaciones'
 import { EVALUACIONES_MEZCLADAS, PERIODOS_INVALIDOS, PERIODOS_VALIDOS } from '../fixtures/casos-datos'
 
 class RQ23EstadisticasHistoricas {
@@ -40,6 +40,10 @@ class RQ23EstadisticasHistoricas {
   C7_periodoInvalido() {
     for (const p of PERIODOS_VALIDOS) expect(esPeriodoValido(p)).toBe(true)
     for (const p of PERIODOS_INVALIDOS) expect(esPeriodoValido(p)).toBe(false)
+    expect(partesPeriodo('2026-1')).toEqual({ year: 2026, semester: 1 })
+    expect(partesPeriodo('2026-2')).toEqual({ year: 2026, semester: 2 })
+    expect(partesPeriodo('DROP-TABLE')).toBeNull()
+    expect(partesPeriodo('2026-9')).toBeNull()
   }
 
   C8_notasFueraDeEscalaNoCuentan() {
