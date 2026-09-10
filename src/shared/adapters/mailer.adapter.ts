@@ -15,19 +15,15 @@ export interface MailerPort {
   sendMail(opts: MailOptions): Promise<void>
 }
 
-function env(name: string): string {
-  return String(process.env[name] || '').trim()
-}
-
 class NodemailerAdapter implements MailerPort {
   private getTransporter() {
     return nodemailer.createTransport({
-      host: env('SMTP_HOST'),
-      port: Number(env('SMTP_PORT') || '587'),
-      secure: env('SMTP_SECURE') === 'true',
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === 'true',
       auth: {
-        user: env('SMTP_USER'),
-        pass: env('SMTP_PASS'),
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     })
   }
@@ -35,7 +31,7 @@ class NodemailerAdapter implements MailerPort {
   async sendMail(opts: MailOptions): Promise<void> {
     const transporter = this.getTransporter()
     await transporter.sendMail({
-      from: env('SMTP_FROM'),
+      from: process.env.SMTP_FROM,
       to: opts.to,
       subject: opts.subject,
       text: opts.text,
@@ -52,12 +48,12 @@ export async function sendMail(opts: MailOptions): Promise<void> {
 
 export function getTransporter() {
   return nodemailer.createTransport({
-    host: env('SMTP_HOST'),
-    port: Number(env('SMTP_PORT') || '587'),
-    secure: env('SMTP_SECURE') === 'true',
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
-      user: env('SMTP_USER'),
-      pass: env('SMTP_PASS'),
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   })
 }
