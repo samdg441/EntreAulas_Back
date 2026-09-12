@@ -4,6 +4,7 @@ import { teachersRepository } from '../academic/teachers.repository'
 import { academicRepository } from '../academic/academic.repository'
 import { analyticsRepository } from './analytics.repository'
 import { armarResumenCoordinador, parsearPaginacion } from './coordinador-resumen'
+import { armarFilasReporte } from './reporte-exportacion'
 import { partesPeriodo, rangoFechasPeriodoOTodo } from './calificaciones'
 import { badRequest, internal, notFound } from '../../shared/errors'
 
@@ -593,30 +594,12 @@ export class CoordinadorService {
       catAggByRow.set(rowKey, byCat)
     })
 
-    const reportRows = Array.from(rowAgg.entries())
-      .map(([key, base]) => {
-        const row: any = {
-          DOCENTE: teacherNameByIdForExport.get(base.profesorId) || `Docente ${base.profesorId}`,
-          ASIGNATURA: base.cursoNombre,
-          GRUPO: base.grupo,
-          ESTUDIANTES: base.estudiantes,
-          ESTUDIANTES_EVALUADORES: base.evaluadoresSet.size,
-        }
-        const byCat = catAggByRow.get(key) || new Map<string, { sum: number; count: number }>()
-        byCat.forEach((values, catId) => {
-          const catName = (categoryNameById.get(catId) || `Categoria_${catId}`).toUpperCase().replace(/\s+/g, '_')
-          row[catName] = values.count > 0 ? Number((values.sum / values.count).toFixed(2)) : null
-        })
-        row.PROMEDIO = base.countPromedio > 0 ? Number((base.sumPromedio / base.countPromedio).toFixed(2)) : null
-        return row
-      })
-      .sort((a, b) => {
-        const byTeacher = String(a.DOCENTE).localeCompare(String(b.DOCENTE), 'es')
-        if (byTeacher !== 0) return byTeacher
-        const byCourse = String(a.ASIGNATURA).localeCompare(String(b.ASIGNATURA), 'es')
-        if (byCourse !== 0) return byCourse
-        return String(a.GRUPO).localeCompare(String(b.GRUPO), 'es')
-      })
+    const reportRows = armarFilasReporte(
+      rowAgg,
+      catAggByRow,
+      categoryNameById,
+      teacherNameByIdForExport
+    )
 
     let categoryStats = await buildCategoryStats(evalsArray)
     if (categoryStats.length === 0) {
