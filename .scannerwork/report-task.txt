@@ -2,5 +2,5 @@ projectKey=EntreAulas-Back_Refactor
 serverUrl=http://localhost:9000
 serverVersion=26.9.0.129388
 dashboardUrl=http://localhost:9000/dashboard?id=EntreAulas-Back_Refactor
-ceTaskId=d225688a-c20c-4dad-80fc-0f2c7790197a
-ceTaskUrl=http://localhost:9000/api/ce/task?id=d225688a-c20c-4dad-80fc-0f2c7790197a
+ceTaskId=6e4aa3dc-7845-4ceb-b604-b4a1502e0525
+ceTaskUrl=http://localhost:9000/api/ce/task?id=6e4aa3dc-7845-4ceb-b604-b4a1502e0525
