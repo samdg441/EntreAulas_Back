@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { esPeriodoValido, partesPeriodo, rangoFechasPeriodo, resumenHistorico } from '../../modules/analytics/calificaciones'
+import {
+  esPeriodoValido,
+  partesPeriodo,
+  rangoFechasPeriodo,
+  rangoFechasPeriodoOTodo,
+  resumenHistorico,
+} from '../../modules/analytics/calificaciones'
 import { EVALUACIONES_MEZCLADAS, PERIODOS_INVALIDOS, PERIODOS_VALIDOS } from '../fixtures/casos-datos'
 
 class RQ23EstadisticasHistoricas {
@@ -46,6 +52,24 @@ class RQ23EstadisticasHistoricas {
     expect(partesPeriodo('2026-9')).toBeNull()
     expect(partesPeriodo({})).toBeNull()
     expect(partesPeriodo(undefined)).toBeNull()
+    expect(partesPeriodo(['2026-1'])).toEqual({ year: 2026, semester: 1 })
+    expect(partesPeriodo(20261)).toBeNull()
+    expect(partesPeriodo([1])).toBeNull()
+  }
+
+  C9_rangoOTodo() {
+    expect(rangoFechasPeriodoOTodo('2026-2')).toEqual({ start: '2026-07-01', end: '2026-12-31' })
+    expect(rangoFechasPeriodoOTodo({})).toEqual({ start: '2020-01-01', end: '2030-12-31' })
+    expect(rangoFechasPeriodoOTodo('no-vale')).toEqual({ start: '2020-01-01', end: '2030-12-31' })
+  }
+
+  C10_historicoPeriodoInvalido() {
+    const r = resumenHistorico(
+      [{ calificacion_promedio: 4, fecha_creacion: '2026-03-01' }],
+      'abc'
+    )
+    expect(r.totalEvaluaciones).toBe(0)
+    expect(r.dateRange).toEqual({ start: '', end: '' })
   }
 
   C8_notasFueraDeEscalaNoCuentan() {
@@ -68,4 +92,6 @@ describe('RQ23 — Consultar estadísticas históricas', () => {
   it('C6b: 2026-2 cubre julio-diciembre', () => pruebas.C6b_rangoSegundoSemestre())
   it('C7: período mal formado no es válido', () => pruebas.C7_periodoInvalido())
   it('C8: notas fuera de 1–5 no entran al histórico', () => pruebas.C8_notasFueraDeEscalaNoCuentan())
+  it('C9: periodo inválido usa rango “todo”', () => pruebas.C9_rangoOTodo())
+  it('C10: histórico con periodo inválido → vacío', () => pruebas.C10_historicoPeriodoInvalido())
 })

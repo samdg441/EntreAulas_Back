@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { calcularPromedio, calificacionEnEscala, esProfesor } from '../../modules/analytics/calificaciones'
+import {
+  calcularPromedio,
+  calificacionEnEscala,
+  esProfesor,
+  resumenMetricas,
+} from '../../modules/analytics/calificaciones'
 import { NOTAS_COMUNES, NOTAS_INVALIDAS } from '../fixtures/casos-datos'
 
 class RQ22MetricasEvaluacion {
@@ -11,6 +16,8 @@ class RQ22MetricasEvaluacion {
 
   C1b_siEsProfesor() {
     expect(esProfesor('profesor')).toBe(true)
+    expect(esProfesor('docente')).toBe(true)
+    expect(esProfesor(undefined)).toBe(false)
   }
 
   C4_calculaPromedio() {
@@ -29,6 +36,19 @@ class RQ22MetricasEvaluacion {
     }
     expect(calcularPromedio([-2, 0, 99, null])).toBe(0)
     expect(calcularPromedio([4, 99, -1])).toBe(4)
+    expect(calificacionEnEscala('4')).toBe(4)
+  }
+
+  C7_resumenMetricas() {
+    expect(resumenMetricas([])).toEqual({ calificacionPromedio: 0, totalEvaluaciones: 0 })
+    expect(resumenMetricas([{ calificacion_promedio: 4 }, { calificacion_promedio: 5 }])).toEqual({
+      calificacionPromedio: 4.5,
+      totalEvaluaciones: 2,
+    })
+    expect(resumenMetricas([{ calificacion_promedio: 99 }])).toEqual({
+      calificacionPromedio: 0,
+      totalEvaluaciones: 0,
+    })
   }
 }
 
@@ -40,4 +60,5 @@ describe('RQ22 — Calcular métricas de evaluación', () => {
   it('C4: promedio con valores comunes 1–5', () => pruebas.C4_calculaPromedio())
   it('C5: sin evaluaciones → 0', () => pruebas.C5_sinEvaluaciones())
   it('C6: negativos, 0, 99 y no numéricos no entran', () => pruebas.C6_valoresInvalidosNoEntran())
+  it('C7: resumenMetricas redondea y descarta inválidas', () => pruebas.C7_resumenMetricas())
 })

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { dashboardDesdeRolSeleccionado, dashboardParaUsuario } from '../../modules/auth/dashboard'
+import {
+  dashboardDesdeRolSeleccionado,
+  dashboardDesdeRoles,
+  dashboardDesdeTipoUsuario,
+  dashboardParaUsuario,
+} from '../../modules/auth/dashboard'
 
 class RQ19RedirigirDashboard {
   C1_sinRolNiTipo() {
@@ -24,16 +29,29 @@ class RQ19RedirigirDashboard {
   }
 
   C6_estudiante() {
-    expect(dashboardParaUsuario(['Estudiante'])).toBe('/dashboard-estudiante')
+    expect(dashboardParaUsuario(['estudiante'])).toBe('/dashboard-estudiante')
   }
 
   C7_usaTipoUsuario() {
     expect(dashboardParaUsuario([], 'coordinador')).toBe('/dashboard-coordinador')
+    expect(dashboardDesdeTipoUsuario(null)).toBe('/dashboard')
+    expect(dashboardDesdeTipoUsuario(undefined)).toBe('/dashboard')
   }
 
   C8_tipoDesconocido() {
     expect(dashboardParaUsuario([], 'desconocido')).toBe('/dashboard')
     expect(dashboardDesdeRolSeleccionado('otro')).toBe('/dashboard')
+  }
+
+  C9_prioridadAdmin() {
+    expect(dashboardDesdeRoles(['estudiante', 'admin'])).toBe('/dashboard-admin')
+    expect(dashboardDesdeRoles([])).toBeNull()
+  }
+
+  C10_rolSeleccionado() {
+    expect(dashboardDesdeRolSeleccionado('profesor')).toBe('/dashboard-profesor')
+    expect(dashboardDesdeRolSeleccionado('docente')).toBe('/dashboard-profesor')
+    expect(dashboardDesdeRolSeleccionado('estudiante')).toBe('/dashboard-estudiante')
   }
 }
 
@@ -48,4 +66,6 @@ describe('RQ19 — Redirigir al dashboard según el rol', () => {
   it('C6: estudiante → /dashboard-estudiante', () => pruebas.C6_estudiante())
   it('C7: sin roles usa tipo_usuario', () => pruebas.C7_usaTipoUsuario())
   it('C8: tipo desconocido → /dashboard', () => pruebas.C8_tipoDesconocido())
+  it('C9: admin gana si hay varios roles', () => pruebas.C9_prioridadAdmin())
+  it('C10: rol seleccionado en el login', () => pruebas.C10_rolSeleccionado())
 })
