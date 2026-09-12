@@ -1,6 +1,6 @@
-projectKey=EntreAulas-backend
+projectKey=EntreAulas-Back_Refactor
 serverUrl=http://localhost:9000
 serverVersion=26.9.0.129388
-dashboardUrl=http://localhost:9000/dashboard?id=EntreAulas-backend
-ceTaskId=e0542b48-03ee-4f94-b054-0fc0bc5ea13f
-ceTaskUrl=http://localhost:9000/api/ce/task?id=e0542b48-03ee-4f94-b054-0fc0bc5ea13f
+dashboardUrl=http://localhost:9000/dashboard?id=EntreAulas-Back_Refactor
+ceTaskId=a8fb565e-6cd4-44ab-976b-d3574837a18f
+ceTaskUrl=http://localhost:9000/api/ce/task?id=a8fb565e-6cd4-44ab-976b-d3574837a18f

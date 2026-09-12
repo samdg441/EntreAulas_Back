@@ -44,6 +44,8 @@ class RQ23EstadisticasHistoricas {
     expect(partesPeriodo('2026-2')).toEqual({ year: 2026, semester: 2 })
     expect(partesPeriodo('DROP-TABLE')).toBeNull()
     expect(partesPeriodo('2026-9')).toBeNull()
+    expect(partesPeriodo({})).toBeNull()
+    expect(partesPeriodo(undefined)).toBeNull()
   }
 
   C8_notasFueraDeEscalaNoCuentan() {
