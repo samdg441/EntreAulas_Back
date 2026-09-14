@@ -32,7 +32,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
     const user = await SupabaseDB.findUserById(decoded.userId)
 
-    if (!user || !user.activo) {
+    if (!user?.activo) {
       return res.status(401).json({ error: 'Usuario no válido o inactivo', code: 'USER_INVALID' })
     }
 
@@ -70,8 +70,8 @@ export const requireRole = (roles: string[]) => {
     }
 
     // Verificar si el usuario tiene alguno de los roles requeridos
-    const tieneRol = req.user.roles?.some(rol => roles.includes(rol)) || 
-                    roles.includes(req.user.tipo_usuario)
+    const tieneRol = req.user.roles?.some(rol => roles.includes(rol)) ||
+                    roles.includes(req.user?.tipo_usuario)
 
     if (!tieneRol) {
       return res.status(403).json({

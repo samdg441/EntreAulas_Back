@@ -65,7 +65,7 @@ export function parseGrupoIds(grupoIds: unknown): number[] {
   if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
     throw badRequest('Se requiere grupoIds (array de IDs de grupo).')
   }
-  const ids = grupoIds.map((id) => Number(id)).filter((n) => Number.isFinite(n))
+  const ids = grupoIds.map(Number).filter((n) => Number.isFinite(n))
   if (ids.length === 0) {
     throw badRequest('grupoIds debe contener números válidos.')
   }

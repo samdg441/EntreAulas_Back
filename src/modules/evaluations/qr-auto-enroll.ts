@@ -18,7 +18,7 @@ export async function autoEnrollPorQr(
   token: unknown,
   user: { id?: string; tipo_usuario?: string } | null | undefined
 ): Promise<ResultadoAutoEnroll> {
-  if (!token) throw badRequest('Token requerido.')
+  if (typeof token !== 'string' || !token) throw badRequest('Token requerido.')
   if (!esEstudiante(user)) {
     throw forbidden('Solo los estudiantes pueden matricularse por QR.')
   }
@@ -28,14 +28,14 @@ export async function autoEnrollPorQr(
     throw notFound('No se encontró registro de estudiante para este usuario.')
   }
 
-  const grupoId = await grupoIdDesdeQr(String(token))
+  const grupoId = await grupoIdDesdeQr(token)
   return aplicarInscripcion(estudiante.id, grupoId)
 }
 
 function esEstudiante(
   user: { id?: string; tipo_usuario?: string } | null | undefined
 ): user is { id: string; tipo_usuario: string } {
-  return Boolean(user?.id) && user.tipo_usuario === 'estudiante'
+  return Boolean(user?.id) && user?.tipo_usuario === 'estudiante'
 }
 
 async function grupoIdDesdeQr(token: string): Promise<number> {

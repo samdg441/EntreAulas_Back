@@ -26,7 +26,7 @@ export async function compartirQrsPorEmail(
   const carreraId = await carreraIdSiCoordinador(user)
   const rows = await filasParaShare(ids, carreraId)
   const links = rows.map((row) => linkDesdeFila(row, appBaseUrl()))
-  await enviarCorreoQr(email, mailSubject, String(body?.message || ''), links)
+  await enviarCorreoQr(email, mailSubject, texto(body?.message), links)
   return { email, totalLinks: links.length }
 }
 
@@ -36,8 +36,14 @@ export function errorEnvioCorreo(error: unknown) {
   return internal('Error enviando el correo', msg)
 }
 
+function texto(valor: unknown): string {
+  if (typeof valor === 'string') return valor.trim()
+  if (typeof valor === 'number' && Number.isFinite(valor)) return String(valor)
+  return ''
+}
+
 function correoDestino(to: unknown) {
-  const email = String(to || '').trim()
+  const email = texto(to)
   if (!email || !EMAIL_REGEX.test(email)) {
     throw badRequest('Correo de destino inválido.')
   }
@@ -45,7 +51,7 @@ function correoDestino(to: unknown) {
 }
 
 function asuntoCorreo(subject: unknown) {
-  const mailSubject = String(subject || '').trim()
+  const mailSubject = texto(subject)
   if (!mailSubject) throw badRequest('El asunto es requerido.')
   return mailSubject
 }
@@ -101,13 +107,13 @@ function linkDesdeFila(row: Record<string, unknown>, baseUrl: string): LinkQr {
   const profesor = uno(row.profesor as Relacion<Record<string, unknown>>)
   const usuario = uno(profesor?.usuario as Relacion<Record<string, unknown>>)
   const profesorNombre =
-    `${String(usuario?.nombre || '')} ${String(usuario?.apellido || '')}`.trim() || 'Docente'
+    `${texto(usuario?.nombre)} ${texto(usuario?.apellido)}`.trim() || 'Docente'
   return {
     grupoId: Number(row.grupo_id),
-    url: `${baseUrl}/qr-evaluacion?token=${encodeURIComponent(String(row.token))}`,
-    cursoNombre: String(curso?.nombre || 'Curso'),
-    cursoCodigo: String(curso?.codigo || ''),
-    grupoNumero: String(grupo?.numero_grupo ?? row.grupo_id),
+    url: `${baseUrl}/qr-evaluacion?token=${encodeURIComponent(texto(row.token))}`,
+    cursoNombre: texto(curso?.nombre) || 'Curso',
+    cursoCodigo: texto(curso?.codigo),
+    grupoNumero: texto(grupo?.numero_grupo) || texto(row.grupo_id),
     profesorNombre,
   }
 }
