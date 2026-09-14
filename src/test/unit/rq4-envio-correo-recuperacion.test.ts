@@ -27,7 +27,7 @@ interface EstadoSmtp {
   buffer: string
 }
 
-function procesarComandoSmtp(linea: string, socket: net.Socket, estado: EstadoSmtp): void {
+function procesarComandoSmtp(linea: string, socket: net.Socket, estado: EstadoSmtp, mensajes: string[]): void {
   const cmd = linea.slice(0, 4).toUpperCase()
   if (cmd === 'EHLO' || cmd === 'HELO') socket.write('250 buzon-test\r\n')
   else if (cmd === 'DATA') {
@@ -36,7 +36,12 @@ function procesarComandoSmtp(linea: string, socket: net.Socket, estado: EstadoSm
   } else if (cmd === 'QUIT') {
     socket.write('221 adios\r\n')
     socket.end()
-  } else socket.write('250 OK\r\n')
+  } else {
+    if (cmd === 'MAIL' || cmd === 'RCPT') {
+      mensajes.push(linea.toLowerCase())
+    }
+    socket.write('250 OK\r\n')
+  }
 }
 
 function procesarChunkSmtp(chunk: Buffer, socket: net.Socket, mensajes: string[], estado: EstadoSmtp): void {
@@ -44,7 +49,10 @@ function procesarChunkSmtp(chunk: Buffer, socket: net.Socket, mensajes: string[]
   if (estado.enData) {
     estado.buffer += texto
     if (estado.buffer.includes('\r\n.\r\n')) {
-      mensajes.push(estado.buffer)
+      const decodificado = estado.buffer
+        .replace(/=\r\n/g, '')
+        .replace(/=([0-9A-F]{2})/g, (_m, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+      mensajes.push(decodificado)
       estado.enData = false
       estado.buffer = ''
       socket.write('250 mensaje aceptado\r\n')
@@ -52,7 +60,7 @@ function procesarChunkSmtp(chunk: Buffer, socket: net.Socket, mensajes: string[]
     return
   }
   for (const linea of texto.split('\r\n').filter(Boolean)) {
-    procesarComandoSmtp(linea, socket, estado)
+    procesarComandoSmtp(linea, socket, estado, mensajes)
   }
 }
 

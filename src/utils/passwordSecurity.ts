@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt'
 
 /** Coste de bcrypt (10–12 recomendado; más alto = más seguro y más lento). */
 export function getBcryptSaltRounds(): number {
-  const n = parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10)
+  const n = Number.parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10)
   if (Number.isNaN(n) || n < 10) return 12
   if (n > 14) return 14
   return n

@@ -200,7 +200,7 @@ router.get('/me', async (req, res) => {
   try {
     // Obtener el token del header Authorization
     const authHeader = req.headers.authorization
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw unauthorized('Token de autorización requerido')
     }
 
@@ -212,7 +212,7 @@ router.get('/me', async (req, res) => {
     // Buscar el usuario en la base de datos
     const user = await authRepository.findUserByEmail(decoded.email)
 
-    if (!user || !user.activo) {
+    if (!user?.activo) {
       throw unauthorized('Usuario no encontrado o inactivo')
     }
 

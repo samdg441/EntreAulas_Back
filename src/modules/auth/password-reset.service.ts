@@ -1,4 +1,4 @@
-import crypto from 'crypto'
+import crypto from 'node:crypto'
 import { authRepository } from './auth.repository'
 import { badRequest } from '../../shared/errors'
 

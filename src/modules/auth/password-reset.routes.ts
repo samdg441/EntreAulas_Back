@@ -3,10 +3,10 @@ import { hashPassword } from '../../utils/passwordSecurity'
 import {
   badRequest,
   internal,
-  sendError,
   asyncHandler
 } from '../../shared/errors'
 import { logger } from '../../shared/logger'
+import { sendMail } from '../../shared/adapters/mailer.adapter'
 import { authRepository } from './auth.repository'
 import {
   buscarTokenDeResetValido,
@@ -16,6 +16,34 @@ import {
 } from './password-reset.service'
 
 const router = Router()
+
+function appBaseUrl(): string {
+  return String(process.env.FRONTEND_URL || 'http://localhost:5173')
+}
+
+function smtpConfigured(): boolean {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM)
+}
+
+async function enviarCorreoRecuperacion(email: string, resetLink: string): Promise<void> {
+  if (!smtpConfigured()) return
+
+  try {
+    await sendMail({
+      to: email,
+      subject: 'Recuperación de contraseña - EntreAulas',
+      text:
+        'Solicitaste recuperar tu contraseña. Usa el siguiente enlace (válido por 1 hora) ' +
+        `para continuar:\n\n${resetLink}`,
+      html:
+        '<p>Solicitaste recuperar tu contraseña. Usa el siguiente enlace ' +
+        `(válido por 1 hora) para continuar:</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+      encoding: '7bit'
+    })
+  } catch (mailError) {
+    logger.error('Error enviando correo de recuperación:', mailError)
+  }
+}
 
 // Endpoint para solicitar reset de contraseña
 router.post('/forgot-password', asyncHandler(async (req, res) => {
@@ -58,7 +86,9 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
     throw internal('Error interno del servidor', tokenError)
   }
 
-  // TODO: enviar correo con enlace (nodemailer); nunca devolver el token en JSON en producción.
+  // Enviar correo con enlace de recuperación; nunca devolver el token en JSON en producción.
+  const resetLink = `${appBaseUrl()}/forgot-password?token=${resetToken}&email=${encodeURIComponent(email)}`
+  await enviarCorreoRecuperacion(email, resetLink)
 
   const debugReset =
     process.env.PASSWORD_RESET_DEBUG_RESPONSE === 'true' &&
@@ -69,7 +99,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
       'Si el correo electrónico existe en nuestro sistema, recibirás un enlace de recuperación',
     ...(debugReset && {
       resetToken,
-      resetLink: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/forgot-password?token=${resetToken}&email=${encodeURIComponent(email)}`
+      resetLink
     })
   })
 }))
@@ -79,11 +109,11 @@ router.get('/validate-reset-token/:token', asyncHandler(async (req, res) => {
   const { token } = req.params
   const { email } = req.query
 
-  if (!email) {
+  if (!email || typeof email !== 'string') {
     throw badRequest('El correo electrónico es requerido')
   }
 
-  await buscarTokenDeResetValido(token, String(email))
+  await buscarTokenDeResetValido(token, email)
 
   res.status(200).json({
     message: 'Token válido',
