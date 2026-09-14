@@ -1,6 +1,0 @@
-projectKey=EntreAulas_Back
-serverUrl=http://localhost:9000
-serverVersion=26.9.0.129388
-dashboardUrl=http://localhost:9000/dashboard?id=EntreAulas_Back
-ceTaskId=85e74d9e-5b2d-4eb3-986e-67ba1512cdf9
-ceTaskUrl=http://localhost:9000/api/ce/task?id=85e74d9e-5b2d-4eb3-986e-67ba1512cdf9
