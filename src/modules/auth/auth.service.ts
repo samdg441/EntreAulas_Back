@@ -42,7 +42,7 @@ export function normalizarTipoUsuario(tipoUsuario: string): string {
   return tipoUsuario === 'docente' ? 'profesor' : tipoUsuario
 }
 
-function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
+export function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
   if (roles.includes('admin')) return 'Administrador del sistema'
   if (roles.includes('decano')) return 'Decano de la facultad'
   if (roles.includes('coordinador')) return 'Coordinador del sistema'
