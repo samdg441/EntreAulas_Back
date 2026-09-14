@@ -72,7 +72,7 @@ export function parseGrupoIds(grupoIds: unknown): number[] {
   return ids
 }
 
-async function carreraIdSiCoordinador(user: {
+export async function carreraIdSiCoordinador(user: {
   id?: string
   roles?: string[]
   tipo_usuario?: string
