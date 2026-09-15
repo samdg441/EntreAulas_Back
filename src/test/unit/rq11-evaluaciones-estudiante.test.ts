@@ -251,5 +251,42 @@ describe('RQ11 unit — teachers-analytics.routes', () => {
       .get('/api/teachers/7/stats')
       .set('Authorization', `Bearer ${tokenProfesor2}`)
     expect(fail.status).toBe(500)
+
+    const tokenDecano2 = mockAuthenticatedUser({
+      id: 'user-decano',
+      email: 'decano@test.com',
+      tipo_usuario: 'decano',
+      roles: ['decano'],
+    })
+    vi.spyOn(teachersAnalyticsService, 'getCareerResultsByCareer').mockRejectedValue(new Error('db'))
+    const careerFail = await request(app)
+      .get('/api/teachers/career-results/1')
+      .set('Authorization', `Bearer ${tokenDecano2}`)
+    expect(careerFail.status).toBe(500)
+
+    const tokenProfesor3 = mockAuthenticatedUser(profesorUser)
+    vi.spyOn(teachersAnalyticsService, 'getPeriodStats').mockRejectedValue(new Error('db'))
+    const periodFail = await request(app)
+      .get('/api/teachers/period-stats?period=2026-1')
+      .set('Authorization', `Bearer ${tokenProfesor3}`)
+    expect(periodFail.status).toBe(500)
+
+    mockAuthenticatedUser({
+      id: 'user-decano',
+      email: 'decano@test.com',
+      tipo_usuario: 'decano',
+      roles: ['decano'],
+    })
+    const catsForbidden = await request(app)
+      .get('/api/teachers/period-category-stats?period=2026-1')
+      .set('Authorization', `Bearer ${tokenDecano2}`)
+    expect(catsForbidden.status).toBe(403)
+
+    mockAuthenticatedUser(profesorUser)
+    vi.spyOn(teachersAnalyticsService, 'getPeriodCategoryStats').mockRejectedValue(new Error('db'))
+    const catsFail = await request(app)
+      .get('/api/teachers/period-category-stats?period=2026-1&courseId=3')
+      .set('Authorization', `Bearer ${tokenProfesor3}`)
+    expect(catsFail.status).toBe(500)
   })
 })
