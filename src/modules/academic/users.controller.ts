@@ -19,6 +19,76 @@ const ALLOWED_USER_TYPES = [
   'decano',
 ] as const
 
+type AllowedUserType = (typeof ALLOWED_USER_TYPES)[number]
+
+export function isAllowedUserType(value: string): value is AllowedUserType {
+  return (ALLOWED_USER_TYPES as readonly string[]).includes(value)
+}
+
+export function assignTrimmedField(
+  updates: Record<string, unknown>,
+  field: string,
+  value: unknown,
+  transform: (trimmed: string) => string = (trimmed) => trimmed,
+) {
+  if (typeof value !== 'string') return
+  const trimmed = value.trim()
+  if (!trimmed) return
+  updates[field] = transform(trimmed)
+}
+
+export function applyUserType(updates: Record<string, unknown>, tipo_usuario: unknown) {
+  if (typeof tipo_usuario !== 'string') return
+  if (!isAllowedUserType(tipo_usuario)) {
+    throw badRequest('tipo_usuario inválido')
+  }
+  updates.tipo_usuario = tipo_usuario
+}
+
+export async function applyPassword(updates: Record<string, unknown>, password: unknown) {
+  if (typeof password !== 'string' || password.length === 0) return
+  if (password.length < 8) {
+    throw badRequest('La contraseña debe tener al menos 8 caracteres')
+  }
+  updates.password = await hashPassword(password)
+}
+
+export async function collectUserUpdates(body: Record<string, unknown> | undefined) {
+  const { email, nombre, apellido, tipo_usuario, activo, password } = body ?? {}
+  const updates: Record<string, unknown> = {}
+
+  assignTrimmedField(updates, 'email', email, (value) => value.toLowerCase())
+  assignTrimmedField(updates, 'nombre', nombre)
+  assignTrimmedField(updates, 'apellido', apellido)
+  applyUserType(updates, tipo_usuario)
+
+  if (typeof activo === 'boolean') {
+    updates.activo = activo
+  }
+
+  await applyPassword(updates, password)
+  return updates
+}
+
+export function assertHasUpdates(updates: Record<string, unknown>) {
+  if (Object.keys(updates).length === 0) {
+    throw badRequest('No hay campos para actualizar')
+  }
+}
+
+export function ensureEmailIsAvailable(
+  userId: string,
+  currentEmail: string,
+  nextEmail: unknown,
+  conflict: { id: string } | null | undefined,
+) {
+  if (typeof nextEmail !== 'string' || nextEmail === currentEmail) return
+  if (conflict?.id === userId) return
+  if (conflict) {
+    throw badRequest('El email ya está registrado')
+  }
+}
+
 export class UsersController {
   static async listUsers(_req: Request, res: Response) {
     try {
@@ -32,8 +102,6 @@ export class UsersController {
   static async updateUser(req: Request, res: Response) {
     try {
       const { id } = req.params
-      const { email, nombre, apellido, tipo_usuario, activo, password } = req.body || {}
-
       if (!id) {
         throw badRequest('ID de usuario requerido')
       }
@@ -43,36 +111,15 @@ export class UsersController {
         throw notFound('Usuario no encontrado')
       }
 
-      const updates: Record<string, unknown> = {}
-      if (typeof email === 'string' && email.trim()) updates.email = email.trim().toLowerCase()
-      if (typeof nombre === 'string' && nombre.trim()) updates.nombre = nombre.trim()
-      if (typeof apellido === 'string' && apellido.trim()) updates.apellido = apellido.trim()
-      if (typeof tipo_usuario === 'string') {
-        if (!ALLOWED_USER_TYPES.includes(tipo_usuario as (typeof ALLOWED_USER_TYPES)[number])) {
-          throw badRequest('tipo_usuario inválido')
-        }
-        updates.tipo_usuario = tipo_usuario
-      }
-      if (typeof activo === 'boolean') updates.activo = activo
+      const updates = await collectUserUpdates(req.body)
+      assertHasUpdates(updates)
 
-      if (typeof password === 'string' && password.length > 0) {
-        if (password.length < 8) {
-          throw badRequest('La contraseña debe tener al menos 8 caracteres')
-        }
-        updates.password = await hashPassword(password)
-      }
-
-      if (Object.keys(updates).length === 0) {
-        throw badRequest('No hay campos para actualizar')
-      }
-
-      if (updates.email && updates.email !== existing.email) {
-        const conflict = await authRepository.findUserByEmail(String(updates.email))
-        if (conflict && conflict.id !== id) {
-          throw badRequest('El email ya está registrado')
-        }
-      }
-
+      const nextEmail = updates.email
+      const conflict =
+        typeof nextEmail === 'string'
+          ? await authRepository.findUserByEmail(nextEmail)
+          : null
+      ensureEmailIsAvailable(id, existing.email, nextEmail, conflict)
       const user = await academicService.updateUser(id, updates as any)
       res.json({
         message: 'Usuario actualizado',

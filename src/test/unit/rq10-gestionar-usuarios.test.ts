@@ -8,12 +8,22 @@ const {
   createUserWithTypeMock,
   updateUserMock,
   deactivateUserMock,
+  listUsersSummaryMock,
+  getAcademicStructureMock,
+  getDashboardStatsMock,
+  getGruposMock,
+  updateAuthUserMock,
 } = vi.hoisted(() => ({
   findUserByIdMock: vi.fn(),
   findUserByEmailMock: vi.fn(),
   createUserWithTypeMock: vi.fn(),
   updateUserMock: vi.fn(),
   deactivateUserMock: vi.fn(),
+  listUsersSummaryMock: vi.fn(),
+  getAcademicStructureMock: vi.fn(),
+  getDashboardStatsMock: vi.fn(),
+  getGruposMock: vi.fn(),
+  updateAuthUserMock: vi.fn(),
 }))
 
 vi.mock('../../config/supabase-only', () => ({
@@ -36,7 +46,7 @@ vi.mock('../../modules/auth/auth.repository', () => ({
   authRepository: {
     findUserByEmail: (...args: unknown[]) => findUserByEmailMock(...args),
     createUserWithType: (...args: unknown[]) => createUserWithTypeMock(...args),
-    updateUser: vi.fn(),
+    updateUser: (...args: unknown[]) => updateAuthUserMock(...args),
     findUserById: (...args: unknown[]) => findUserByIdMock(...args),
     countUsers: vi.fn(),
   },
@@ -46,16 +56,17 @@ vi.mock('../../modules/academic/academic.service', () => ({
   academicService: {
     updateUser: (...args: unknown[]) => updateUserMock(...args),
     deactivateUser: (...args: unknown[]) => deactivateUserMock(...args),
-    listUsersSummary: vi.fn(),
-    getAcademicStructure: vi.fn(),
-    getDashboardStats: vi.fn(),
-    getGruposConProfesorByCareer: vi.fn(),
+    listUsersSummary: (...args: unknown[]) => listUsersSummaryMock(...args),
+    getAcademicStructure: (...args: unknown[]) => getAcademicStructureMock(...args),
+    getDashboardStats: (...args: unknown[]) => getDashboardStatsMock(...args),
+    getGruposConProfesorByCareer: (...args: unknown[]) => getGruposMock(...args),
   },
   AcademicService: class {},
 }))
 
 import { app } from '../../app'
 import { RoleService } from '../../modules/auth/role.service'
+import { hashPassword } from '../../utils/passwordSecurity'
 
 function signToken(userId: string) {
   return jwt.sign({ userId }, process.env.JWT_SECRET as string)
@@ -117,6 +128,11 @@ describe('RQ10 unit — Gestionar usuarios (admin)', () => {
     createUserWithTypeMock.mockReset()
     updateUserMock.mockReset()
     deactivateUserMock.mockReset()
+    listUsersSummaryMock.mockReset()
+    getAcademicStructureMock.mockReset()
+    getDashboardStatsMock.mockReset()
+    getGruposMock.mockReset()
+    updateAuthUserMock.mockReset()
     vi.restoreAllMocks()
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
@@ -273,5 +289,308 @@ describe('RQ10 unit — Gestionar usuarios (admin)', () => {
       })
       expect(deactivateUserMock).toHaveBeenCalledWith(otherUser.id)
     })
+  })
+})
+
+const loginUser = {
+  id: 'login-1',
+  email: 'login@test.com',
+  nombre: 'Ana',
+  apellido: 'Perez',
+  tipo_usuario: 'estudiante',
+  activo: true,
+}
+
+describe('RQ10 unit — auth.routes y listados de usuarios', () => {
+  beforeEach(() => {
+    findUserByIdMock.mockReset()
+    findUserByEmailMock.mockReset()
+    createUserWithTypeMock.mockReset()
+    updateUserMock.mockReset()
+    deactivateUserMock.mockReset()
+    listUsersSummaryMock.mockReset()
+    getAcademicStructureMock.mockReset()
+    getDashboardStatsMock.mockReset()
+    getGruposMock.mockReset()
+    updateAuthUserMock.mockReset()
+    vi.restoreAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  it('POST /auth/register valida, rechaza duplicado y crea usuario', async () => {
+    const invalido = await request(app).post('/api/auth/register').send({ email: 'no-es-email' })
+    expect(invalido.status).toBe(400)
+
+    findUserByEmailMock.mockResolvedValue({ id: 'ya' })
+    const duplicado = await request(app).post('/api/auth/register').send({
+      email: 'nuevo@test.com',
+      nombre: 'Luis',
+      apellido: 'Gomez',
+      tipo_usuario: 'estudiante',
+      password: 'password123',
+    })
+    expect(duplicado.status).toBe(400)
+
+    findUserByEmailMock.mockResolvedValue(null)
+    createUserWithTypeMock.mockResolvedValue({
+      id: 'new-1',
+      email: 'nuevo@test.com',
+      nombre: 'Luis',
+      apellido: 'Gomez',
+      tipo_usuario: 'estudiante',
+    })
+    const ok = await request(app).post('/api/auth/register').send({
+      email: 'nuevo@test.com',
+      nombre: 'Luis',
+      apellido: 'Gomez',
+      tipo_usuario: 'estudiante',
+      password: 'password123',
+      codigo_estudiante: 'E1',
+      carrera_id: 1,
+      semestre: '3',
+    })
+    expect(ok.status).toBe(201)
+    expect(ok.body.token).toBeTruthy()
+    expect(ok.body.user.email).toBe('nuevo@test.com')
+  })
+
+  it('POST /auth/login cubre credenciales, roles y dashboards', async () => {
+    const hashed = await hashPassword('password123')
+    const body = { email: loginUser.email, password: 'password123' }
+
+    const zod = await request(app).post('/api/auth/login').send({ email: 'x' })
+    expect(zod.status).toBe(400)
+
+    findUserByEmailMock.mockResolvedValue(null)
+    expect((await request(app).post('/api/auth/login').send(body)).status).toBe(401)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, activo: false, password: hashed })
+    expect((await request(app).post('/api/auth/login').send(body)).status).toBe(401)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, password: hashed })
+    const malaClave = await request(app)
+      .post('/api/auth/login')
+      .send({ email: loginUser.email, password: 'otra-clave-1' })
+    expect(malaClave.status).toBe(401)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, tipo_usuario: 'desconocido', password: hashed })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue([])
+    const tipoInvalido = await request(app).post('/api/auth/login').send(body)
+    expect(tipoInvalido.status).toBe(401)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, password: hashed })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['profesor', 'coordinador'])
+    const multi = await request(app).post('/api/auth/login').send(body)
+    expect(multi.status).toBe(200)
+    expect(multi.body.requires_role_selection).toBe(true)
+
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
+    vi.spyOn(RoleService, 'obtenerDashboardUsuario').mockResolvedValue('/dashboard-estudiante')
+    vi.spyOn(RoleService, 'obtenerPermisosUsuario').mockResolvedValue(['view_evaluations'])
+    const ok = await request(app).post('/api/auth/login').send(body)
+    expect(ok.status).toBe(200)
+    expect(ok.body.token).toBeTruthy()
+    expect(ok.body.user.dashboard).toBe('/dashboard-estudiante')
+
+    findUserByEmailMock.mockResolvedValue({
+      ...loginUser,
+      tipo_usuario: 'docente',
+      password: hashed,
+    })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['visitante'])
+    vi.spyOn(RoleService, 'obtenerDashboardUsuario').mockResolvedValue('/dashboard-profesor')
+    vi.spyOn(RoleService, 'obtenerPermisosUsuario').mockResolvedValue([])
+    const docente = await request(app).post('/api/auth/login').send(body)
+    expect(docente.status).toBe(200)
+    expect(docente.body.user.user_type).toBe('profesor')
+
+    findUserByEmailMock.mockResolvedValue({
+      ...loginUser,
+      tipo_usuario: 'coordinador',
+      password: hashed,
+    })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['coordinador'])
+    vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue({
+      carrera_id: 3,
+    } as never)
+    vi.spyOn(RoleService, 'obtenerDecanoPorUsuario').mockResolvedValue(null)
+    const coord = await request(app).post('/api/auth/login').send(body)
+    expect(coord.status).toBe(200)
+    expect(coord.body.user.coordinador).toEqual({ carrera_id: 3 })
+
+    findUserByEmailMock.mockResolvedValue({
+      ...loginUser,
+      tipo_usuario: 'decano',
+      password: hashed,
+    })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['decano'])
+    vi.spyOn(RoleService, 'obtenerDecanoPorUsuario').mockResolvedValue({
+      facultad_id: 2,
+      facultades: { nombre: 'Ingeniería' },
+      fecha_nombramiento: '2026-01-01',
+    } as never)
+    const decano = await request(app).post('/api/auth/login').send(body)
+    expect(decano.status).toBe(200)
+    expect(decano.body.user.decano.facultad_nombre).toBe('Ingeniería')
+
+    findUserByEmailMock.mockResolvedValue({
+      ...loginUser,
+      tipo_usuario: 'admin',
+      password: hashed,
+    })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['admin'])
+    const admin = await request(app).post('/api/auth/login').send(body)
+    expect(admin.status).toBe(200)
+    expect(admin.body.user.role_description).toMatch(/Administrador/)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, password: 'password123' })
+    const prevPlain = process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN
+    process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN = 'true'
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
+    const migrado = await request(app).post('/api/auth/login').send(body)
+    process.env.ALLOW_LEGACY_PLAINTEXT_LOGIN = prevPlain
+    expect(migrado.status).toBe(200)
+    expect(updateAuthUserMock).toHaveBeenCalled()
+
+    vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockRejectedValue(new Error('fail'))
+    vi.spyOn(RoleService, 'obtenerDecanoPorUsuario').mockRejectedValue(new Error('fail'))
+    findUserByEmailMock.mockResolvedValue({
+      ...loginUser,
+      tipo_usuario: 'coordinador',
+      password: hashed,
+    })
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['coordinador'])
+    const catchInfo = await request(app).post('/api/auth/login').send(body)
+    expect(catchInfo.status).toBe(200)
+  })
+
+  it('POST /auth/login-with-role valida usuario, clave y rol', async () => {
+    const hashed = await hashPassword('password123')
+    const payload = { email: loginUser.email, password: 'password123', selectedRole: 'estudiante' }
+
+    findUserByEmailMock.mockResolvedValue(null)
+    expect((await request(app).post('/api/auth/login-with-role').send(payload)).status).toBe(401)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, activo: false, password: hashed })
+    expect((await request(app).post('/api/auth/login-with-role').send(payload)).status).toBe(401)
+
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, password: hashed })
+    expect(
+      (
+        await request(app)
+          .post('/api/auth/login-with-role')
+          .send({ ...payload, password: 'otra-clave-1' })
+      ).status,
+    ).toBe(401)
+
+    vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(['estudiante'])
+    findUserByEmailMock.mockResolvedValue({ ...loginUser, password: hashed })
+    const rolAjeno = await request(app)
+      .post('/api/auth/login-with-role')
+      .send({ ...payload, selectedRole: 'admin' })
+    expect(rolAjeno.status).toBe(401)
+
+    const ok = await request(app).post('/api/auth/login-with-role').send(payload)
+    expect(ok.status).toBe(200)
+    expect(ok.body.user.selected_role).toBe('estudiante')
+    expect(ok.body.token).toBeTruthy()
+  })
+
+  it('GET /auth/me y /auth/profile cubren token y tipos de usuario', async () => {
+    const sin = await request(app).get('/api/auth/me')
+    expect(sin.status).toBe(401)
+
+    const malo = await request(app).get('/api/auth/me').set('Authorization', 'Bearer no-es-jwt')
+    expect(malo.status).toBe(401)
+
+    const expirado = jwt.sign({ email: loginUser.email }, process.env.JWT_SECRET as string, {
+      expiresIn: '-10s',
+    })
+    const exp = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${expirado}`)
+    expect(exp.status).toBe(401)
+
+    const tokenMe = jwt.sign({ email: loginUser.email }, process.env.JWT_SECRET as string)
+    findUserByEmailMock.mockResolvedValue(null)
+    expect((await request(app).get('/api/auth/me').set('Authorization', `Bearer ${tokenMe}`)).status).toBe(
+      401,
+    )
+
+    for (const tipo of ['estudiante', 'profesor', 'docente', 'coordinador', 'admin'] as const) {
+      findUserByEmailMock.mockResolvedValue({ ...loginUser, tipo_usuario: tipo })
+      const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${tokenMe}`)
+      expect(res.status).toBe(200)
+      expect(res.body.tipo_usuario).toBe(tipo)
+    }
+
+    const tokenPerfil = mockAuthenticatedUser('admin', ['admin'])
+    let llamadas = 0
+    findUserByIdMock.mockImplementation(async () => {
+      llamadas += 1
+      if (llamadas === 1) return { ...adminRecord, tipo_usuario: 'admin' }
+      return null
+    })
+    const noUser = await request(app)
+      .get('/api/auth/profile')
+      .set('Authorization', `Bearer ${tokenPerfil}`)
+    expect(noUser.status).toBe(404)
+
+    const tokenOk = mockAuthenticatedUser('admin', ['admin'])
+    const perfil = await request(app)
+      .get('/api/auth/profile')
+      .set('Authorization', `Bearer ${tokenOk}`)
+    expect(perfil.status).toBe(200)
+    expect(perfil.body.email).toBe('admin@test.com')
+  })
+
+  it('GET /api/users lista, stats, estructura y grupos', async () => {
+    const token = mockAuthenticatedUser('admin', ['admin'])
+    listUsersSummaryMock.mockResolvedValue([{ id: 'u1' }])
+    getDashboardStatsMock.mockResolvedValue({ total: 1 })
+    getAcademicStructureMock.mockResolvedValue([{ id: 1 }])
+    getGruposMock.mockResolvedValue([{ id: 9 }])
+
+    const lista = await request(app).get('/api/users').set('Authorization', `Bearer ${token}`)
+    expect(lista.status).toBe(200)
+    expect(lista.body.users).toEqual([{ id: 'u1' }])
+
+    const stats = await request(app).get('/api/users/stats').set('Authorization', `Bearer ${token}`)
+    expect(stats.status).toBe(200)
+    expect(stats.body.total).toBe(1)
+
+    const estructura = await request(app)
+      .get('/api/users/academic-structure')
+      .set('Authorization', `Bearer ${token}`)
+    expect(estructura.status).toBe(200)
+    expect(estructura.body.facultades).toEqual([{ id: 1 }])
+
+    const grupos = await request(app)
+      .get('/api/users/grupos-by-career/4')
+      .set('Authorization', `Bearer ${token}`)
+    expect(grupos.status).toBe(200)
+    expect(grupos.body).toEqual([{ id: 9 }])
+    expect(getGruposMock).toHaveBeenCalledWith(4)
+
+    const invalido = await request(app)
+      .get('/api/users/grupos-by-career/no-num')
+      .set('Authorization', `Bearer ${token}`)
+    expect(invalido.status).toBe(400)
+
+    listUsersSummaryMock.mockRejectedValue(new Error('db'))
+    getDashboardStatsMock.mockRejectedValue(new Error('db'))
+    getAcademicStructureMock.mockRejectedValue(new Error('db'))
+    getGruposMock.mockRejectedValue(new Error('db'))
+    expect((await request(app).get('/api/users').set('Authorization', `Bearer ${token}`)).status).toBe(500)
+    expect((await request(app).get('/api/users/stats').set('Authorization', `Bearer ${token}`)).status).toBe(
+      500,
+    )
+    expect(
+      (await request(app).get('/api/users/academic-structure').set('Authorization', `Bearer ${token}`))
+        .status,
+    ).toBe(500)
+    expect(
+      (await request(app).get('/api/users/grupos-by-career/1').set('Authorization', `Bearer ${token}`))
+        .status,
+    ).toBe(500)
   })
 })

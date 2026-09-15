@@ -10,6 +10,7 @@ vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
 
 import { app } from '../../app'
 import { RoleService } from '../../modules/auth/role.service'
+import { teachersAnalyticsService } from '../../modules/analytics/teachers-analytics.service'
 
 const findUserById = supabaseModuleMock.SupabaseDB.findUserById as ReturnType<typeof vi.fn>
 
@@ -92,10 +93,7 @@ describe('RQ11 unit — Evaluaciones del estudiante (student-stats)', () => {
 
     it('C4 (1-2-3-4-6-8-9-11-12-13-14-16): perfil existe y la consulta lanza → 500', async () => {
       const token = mockAuthenticatedUser(estudianteUser)
-      fromMock.mockImplementation((table: string) => {
-        if (table === 'estudiantes') {
-          return createQueryBuilder({ data: { id: 'est-1' }, error: null })
-        }
+      fromMock.mockImplementation(() => {
         throw new Error('fallo de consulta')
       })
 
@@ -161,5 +159,97 @@ describe('RQ11 unit — Evaluaciones del estudiante (student-stats)', () => {
         progresoGeneral: 67,
       })
     })
+  })
+})
+
+describe('RQ11 unit — teachers-analytics.routes', () => {
+  beforeEach(() => {
+    findUserById.mockReset()
+    vi.restoreAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('stats, historical, course-rating, career-results, teacher y period', async () => {
+    vi.spyOn(teachersAnalyticsService, 'getStats').mockResolvedValue({ ok: 'stats' } as never)
+    vi.spyOn(teachersAnalyticsService, 'getHistorical').mockResolvedValue({ ok: 'hist' } as never)
+    vi.spyOn(teachersAnalyticsService, 'getCourseRating').mockResolvedValue({ ok: 'rating' } as never)
+    vi.spyOn(teachersAnalyticsService, 'getCareerResultsAll').mockResolvedValue({ ok: 'all' } as never)
+    vi.spyOn(teachersAnalyticsService, 'getCareerResultsByCareer').mockResolvedValue({
+      ok: 'career',
+    } as never)
+    vi.spyOn(teachersAnalyticsService, 'getTeacherStats').mockResolvedValue({ ok: 'teacher' } as never)
+    vi.spyOn(teachersAnalyticsService, 'getPeriodStats').mockResolvedValue({ ok: 'period' } as never)
+    vi.spyOn(teachersAnalyticsService, 'getPeriodCategoryStats').mockResolvedValue({
+      ok: 'cat',
+    } as never)
+
+    const tokenProfesor = mockAuthenticatedUser(profesorUser)
+    const stats = await request(app)
+      .get('/api/teachers/7/stats')
+      .set('Authorization', `Bearer ${tokenProfesor}`)
+    expect(stats.status).toBe(200)
+    expect(stats.body.ok).toBe('stats')
+
+    const hist = await request(app)
+      .get('/api/teachers/7/stats/historical?period=2026-1')
+      .set('Authorization', `Bearer ${tokenProfesor}`)
+    expect(hist.status).toBe(200)
+
+    const rating = await request(app).get('/api/teachers/course-rating/7/3')
+    expect(rating.status).toBe(200)
+
+    const tokenAdmin = mockAuthenticatedUser({
+      id: 'user-admin',
+      email: 'admin@test.com',
+      tipo_usuario: 'admin',
+      roles: ['admin'],
+    })
+    const noDecano = await request(app)
+      .get('/api/teachers/career-results/all')
+      .set('Authorization', `Bearer ${tokenAdmin}`)
+    expect(noDecano.status).toBe(403)
+
+    const tokenDecano = mockAuthenticatedUser({
+      id: 'user-decano',
+      email: 'decano@test.com',
+      tipo_usuario: 'decano',
+      roles: ['decano'],
+    })
+    const allCareers = await request(app)
+      .get('/api/teachers/career-results/all')
+      .set('Authorization', `Bearer ${tokenDecano}`)
+    expect(allCareers.status).toBe(200)
+
+    const oneCareer = await request(app)
+      .get('/api/teachers/career-results/1')
+      .set('Authorization', `Bearer ${tokenDecano}`)
+    expect(oneCareer.status).toBe(200)
+
+    const noProfesor = await request(app)
+      .get('/api/teachers/teacher-stats/7')
+      .set('Authorization', `Bearer ${tokenDecano}`)
+    expect(noProfesor.status).toBe(403)
+
+    const tokenProfesor2 = mockAuthenticatedUser(profesorUser)
+    const teacherStats = await request(app)
+      .get('/api/teachers/teacher-stats/7')
+      .set('Authorization', `Bearer ${tokenProfesor2}`)
+    expect(teacherStats.status).toBe(200)
+
+    const period = await request(app)
+      .get('/api/teachers/period-stats?period=2026-1')
+      .set('Authorization', `Bearer ${tokenProfesor2}`)
+    expect(period.status).toBe(200)
+
+    const cats = await request(app)
+      .get('/api/teachers/period-category-stats?period=2026-1&courseId=3')
+      .set('Authorization', `Bearer ${tokenProfesor2}`)
+    expect(cats.status).toBe(200)
+
+    vi.spyOn(teachersAnalyticsService, 'getStats').mockRejectedValue(new Error('db'))
+    const fail = await request(app)
+      .get('/api/teachers/7/stats')
+      .set('Authorization', `Bearer ${tokenProfesor2}`)
+    expect(fail.status).toBe(500)
   })
 })
