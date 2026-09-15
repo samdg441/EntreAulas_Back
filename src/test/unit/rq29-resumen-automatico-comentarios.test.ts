@@ -9,6 +9,7 @@ import {
   rolPuedeResumir,
   ROLES_RESUMEN_IA,
 } from '../helpers/resumen-ia'
+import { RQ29AiRoutesHelpers } from '../helpers/resumen-ia-filtros'
 
 /**
  * RQ29 — Generar resumen automático de comentarios
@@ -161,8 +162,10 @@ class RQ29ResumenAutomaticoComentarios {
     const directo = AiService.summarizeFromRatings(ratings, 'profesor')
     expect(directo.analysisSource).toBe('quantitative_fallback')
     expect(directo.topics.length).toBeGreaterThan(0)
-    expect(directo.summary).toMatch(/respuestas cuantitativas/)
+    expect(directo.summary).toMatch(/respuestas cuantitativas del docente/)
     expect(directo.summary).toMatch(/4\./)
+    expect(AiService.summarizeFromRatings(ratings, 'coordinador').summary).toMatch(/de los docentes de la carrera/)
+    expect(AiService.summarizeFromRatings(ratings, 'decano').summary).toMatch(/de los docentes de la facultad/)
 
     const r = decidirResumenByProfessor({
       autenticado: true,
@@ -187,6 +190,9 @@ class RQ29ResumenAutomaticoComentarios {
 
     const invalidos = AiService.summarizeFromRatings([0, 99, NaN], 'profesor')
     expect(invalidos.summary).toMatch(/válidas/)
+    expect(AiService.summarizeFromRatings([1, 1, 2], 'profesor').summary).toMatch(/mejora importantes/)
+    expect(AiService.summarizeFromRatings([3, 3, 3], 'profesor').summary).toMatch(/intermedia/)
+    expect(AiService.summarizeFromRatings([4, 4, 3.8], 'profesor').summary).toMatch(/oportunidades/)
   }
 
   N17_geminiProduceResumen() {
@@ -293,4 +299,17 @@ describe('RQ29 — Generar resumen automático de comentarios', () => {
   it('FALLA N8: estudiante — se espera (mal) resumen', () => pruebas.FALLA_N8_estudianteSeEsperaResumen())
   it('FALLA N13: sin datos — se espera (mal) temas', () => pruebas.FALLA_N13_sinDatosSeEsperaTemas())
   it('FALLA N16: sin Gemini — se espera (mal) vacío', () => pruebas.FALLA_N16_sinGeminiSeEsperaVacio())
+})
+
+const rutas = new RQ29AiRoutesHelpers()
+
+describe('RQ29 — helpers de ai.routes (sin mocks de repositorio)', () => {
+  it('asPrimitiveString y hasValue cubren primitivos y vacíos', () => rutas.primitivosYVacios())
+  it('textoAbiertoValido y extractValidOpenTexts filtran textos cortos', () => rutas.textosAbiertos())
+  it('buildEvalOpts aplica rango, periodo_id y grupo', () => rutas.evalOpts())
+  it('requireQueryProfesorId y assertProfessorSelfAccess validan acceso', () => rutas.accesoProfesor())
+  it('filtros de periodo y grupo (numérico, YYYY-X no válido y vacío)', () => rutas.filtrosPeriodoYGrupo())
+  it('SQL de debug de profesor y carrera', () => rutas.sqlDebug())
+  it('chunkArray, nombres, acoso y bajo desempeño', () => rutas.acosoYDesempeno())
+  it('extractFacultyOpenTexts filtra textos de facultad', () => rutas.textosFacultad())
 })

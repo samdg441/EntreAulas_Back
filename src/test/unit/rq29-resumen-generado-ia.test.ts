@@ -193,5 +193,155 @@ describe('RQ29 unit — Resumen generado con IA', () => {
       expect(res.body.analysisSource).toBe('open_text')
       expect(geminiSummarize).toHaveBeenCalled()
     })
+
+    it('POST /summarize valida texts y un profesor no consulta a otro', async () => {
+      const token = mockAuthenticatedUser(adminUser)
+      const vacio = await request(app)
+        .post('/api/ai/summarize')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ texts: [] })
+      expect(vacio.status).toBe(400)
+
+      const ok = await request(app)
+        .post('/api/ai/summarize')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ texts: ['El profesor explica con claridad y es puntual en clase'] })
+      expect(ok.status).toBe(200)
+      expect(ok.body.summary).toBeTruthy()
+
+      const tokenProfesor = mockAuthenticatedUser(profesorUser)
+      fromMock.mockImplementation(queueSinTextos({ evaluaciones: [] }))
+      const ajeno = await request(app)
+        .get('/api/ai/summarize/by-professor?profesor_id=otro-usuario')
+        .set('Authorization', `Bearer ${tokenProfesor}`)
+      expect(ajeno.status).toBe(403)
+
+      fromMock.mockImplementation(queueSinTextos({ evaluaciones: [] }))
+      const conFiltros = await request(app)
+        .get(`${url}&periodo_id=2026-1&grupo_id=3`)
+        .set('Authorization', `Bearer ${token}`)
+      expect(conFiltros.status).toBe(200)
+
+      fromMock.mockImplementation(queueSinTextos({ evaluaciones: [] }))
+      const numerico = await request(app)
+        .get(`${url}&periodo_id=12`)
+        .set('Authorization', `Bearer ${token}`)
+      expect(numerico.status).toBe(200)
+
+      const sinId = await request(app)
+        .get('/api/ai/summarize/by-professor')
+        .set('Authorization', `Bearer ${token}`)
+      expect(sinId.status).toBe(400)
+    })
+
+    it('GET /summarize/by-faculty cubre vacío, periodo y textos', async () => {
+      const tokenEst = mockAuthenticatedUser(estudianteUser)
+      const forbidden = await request(app)
+        .get('/api/ai/summarize/by-faculty')
+        .set('Authorization', `Bearer ${tokenEst}`)
+      expect(forbidden.status).toBe(403)
+
+      const token = mockAuthenticatedUser(adminUser)
+      fromMock.mockImplementation(queueFrom({ evaluaciones: [{ data: [], error: null }] }))
+      const vacio = await request(app)
+        .get('/api/ai/summarize/by-faculty')
+        .set('Authorization', `Bearer ${token}`)
+      expect(vacio.status).toBe(200)
+      expect(vacio.body.textsCount).toBe(0)
+      expect(vacio.body.summary).toMatch(/facultad/)
+
+      fromMock.mockImplementation(
+        queueFrom({
+          evaluaciones: [{ data: [{ id: 1 }], error: null }],
+          respuestas_evaluacion: [{ data: [{ respuesta_texto: 'ab' }], error: null }],
+        }),
+      )
+      const numerico = await request(app)
+        .get('/api/ai/summarize/by-faculty?periodo_id=12')
+        .set('Authorization', `Bearer ${token}`)
+      expect(numerico.status).toBe(200)
+      expect(numerico.body.textsCount).toBe(0)
+
+      fromMock.mockImplementation(
+        queueFrom({
+          periodos_academicos: [{ data: { id: 9 }, error: null }],
+          evaluaciones: [{ data: [{ id: 2 }], error: null }],
+          respuestas_evaluacion: [
+            { data: [{ respuesta_texto: 'El curso de la facultad es excelente' }], error: null },
+          ],
+        }),
+      )
+      geminiSummarize.mockResolvedValue({
+        summary: 'Resumen facultad',
+        topics: ['facultad'],
+        analysisSource: 'open_text',
+      })
+      const named = await request(app)
+        .get('/api/ai/summarize/by-faculty?periodo_id=2026-1')
+        .set('Authorization', `Bearer ${token}`)
+      expect(named.status).toBe(200)
+      expect(named.body.textsCount).toBe(1)
+      expect(named.body.summary).toBe('Resumen facultad')
+
+      fromMock.mockImplementation(
+        queueFrom({
+          periodos_academicos: [{ data: null, error: { message: 'fail' } }],
+          evaluaciones: [{ data: [], error: null }],
+        }),
+      )
+      const periodoErr = await request(app)
+        .get('/api/ai/summarize/by-faculty?periodo_id=2026-2')
+        .set('Authorization', `Bearer ${token}`)
+      expect(periodoErr.status).toBe(200)
+      expect(periodoErr.body.textsCount).toBe(0)
+
+      fromMock.mockImplementation(
+        queueFrom({
+          evaluaciones: [
+            { data: null, error: { message: 'fail' } },
+            { data: [{ id: 3 }], error: null },
+          ],
+          respuestas_evaluacion: [{ data: [{ respuesta_texto: 'abcd' }], error: null }],
+        }),
+      )
+      const evalErr = await request(app)
+        .get('/api/ai/summarize/by-faculty?periodo_id=5')
+        .set('Authorization', `Bearer ${token}`)
+      expect(evalErr.status).toBe(200)
+      expect(evalErr.body.textsCount).toBe(1)
+
+      fromMock.mockImplementation(queueFrom({ evaluaciones: [{ data: [], error: null }] }))
+      const hyphen = await request(app)
+        .get('/api/ai/summarize/by-faculty?periodo_id=sin-formato')
+        .set('Authorization', `Bearer ${token}`)
+      expect(hyphen.status).toBe(200)
+    })
+
+    it('POST /summarize detecta acoso y usa resumen local positivo/negativo', async () => {
+      const token = mockAuthenticatedUser(adminUser)
+      geminiSummarize.mockResolvedValue(null)
+
+      const acoso = await request(app)
+        .post('/api/ai/summarize')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ texts: ['Hubo acoso y maltrato al estudiante en clase'] })
+      expect(acoso.status).toBe(200)
+      expect(acoso.body.acosoDetectado).toBe(true)
+      expect(acoso.body.mensajeAcoso).toMatch(/ALERTA/)
+
+      const positivo = await request(app)
+        .post('/api/ai/summarize')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ texts: ['Excelente, claro, me gusta, útil y fácil de entender en clase'] })
+      expect(positivo.status).toBe(200)
+      expect(positivo.body.acosoDetectado).toBeFalsy()
+
+      const negativo = await request(app)
+        .post('/api/ai/summarize')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ texts: ['Es difícil, complicado, confuso, falta, hay problema, malo y lento'] })
+      expect(negativo.status).toBe(200)
+      expect(negativo.body.summary).toMatch(/Estado general/)
+    })
   })
 })
