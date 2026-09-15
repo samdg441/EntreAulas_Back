@@ -15,6 +15,7 @@
     "test:coverage": "node scripts/run-coverage.js",
     "test:defects": "vitest run --config vitest.defects.config.mts",
     "sonar": "npm run test:coverage && npx @sonar/scan",
+    "sonar": "npx vitest run --coverage; node scripts/clean-lcov.js; npx @sonar/scan",
     "test:legacy-auth": "ts-node src/test-supabase-auth.ts",
     "test-connection": "ts-node src/test-backend-frontend-connection.ts",
     "debug-auth": "ts-node src/debug-auth.ts",

@@ -18,7 +18,16 @@ export default defineConfig({
       reportsDirectory: './coverage',
       reporter: ['text', 'html', 'lcov'],
       reportOnFailure: true,
-      include: ['src/**/*.ts'],
+      // Alineado con sonar.inclusions (menos *.routes.ts, excluidos de coverage en Sonar).
+      include: [
+        'src/middleware/auth.ts',
+        'src/modules/evaluations/qr-evaluaciones.routes.ts',
+        'src/modules/evaluations/qr-batch.ts',
+        'src/modules/evaluations/qr-auto-enroll.ts',
+        'src/modules/evaluations/qr-share-email.ts',
+        'src/modules/evaluations/qr-resolucion.ts',
+        'src/modules/academic/estudiante-materias.ts',
+      ],
       exclude: [
         'src/test/**',
         'src/scripts/**',
