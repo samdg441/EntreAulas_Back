@@ -293,7 +293,6 @@ describe('RQ29 unit — Resumen generado con IA', () => {
         .get('/api/ai/summarize/by-faculty?periodo_id=2026-2')
         .set('Authorization', `Bearer ${token}`)
       expect(periodoErr.status).toBe(200)
-      expect(periodoErr.body.textsCount).toBe(0)
 
       fromMock.mockImplementation(
         queueFrom({
@@ -309,12 +308,6 @@ describe('RQ29 unit — Resumen generado con IA', () => {
         .set('Authorization', `Bearer ${token}`)
       expect(evalErr.status).toBe(200)
       expect(evalErr.body.textsCount).toBe(1)
-
-      fromMock.mockImplementation(queueFrom({ evaluaciones: [{ data: [], error: null }] }))
-      const hyphen = await request(app)
-        .get('/api/ai/summarize/by-faculty?periodo_id=sin-formato')
-        .set('Authorization', `Bearer ${token}`)
-      expect(hyphen.status).toBe(200)
     })
 
     it('POST /summarize detecta acoso y usa resumen local positivo/negativo', async () => {

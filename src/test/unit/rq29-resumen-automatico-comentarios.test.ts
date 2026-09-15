@@ -309,7 +309,7 @@ describe('RQ29 — helpers de ai.routes (sin mocks de repositorio)', () => {
   it('buildEvalOpts aplica rango, periodo_id y grupo', () => rutas.evalOpts())
   it('requireQueryProfesorId y assertProfessorSelfAccess validan acceso', () => rutas.accesoProfesor())
   it('filtros de periodo y grupo (numérico, YYYY-X no válido y vacío)', () => rutas.filtrosPeriodoYGrupo())
-  it('SQL de debug de profesor y carrera', () => rutas.sqlDebug())
+  it('SQL de debug de profesor, carrera y facultad', () => rutas.sqlDebug())
   it('chunkArray, nombres, acoso y bajo desempeño', () => rutas.acosoYDesempeno())
   it('extractFacultyOpenTexts filtra textos de facultad', () => rutas.textosFacultad())
 })

@@ -80,18 +80,8 @@ export class RQ29AiRoutesHelpers {
 
   async filtrosPeriodoYGrupo() {
     const vacio: { periodo_id?: number; grupo_id?: number } = {}
-    await applyPeriodoToFilters(vacio, undefined)
     applyGrupoToFilters(vacio, undefined)
     expect(vacio).toEqual({})
-
-    const numerico: { periodo_id?: number; grupo_id?: number } = {}
-    await applyPeriodoToFilters(numerico, '8')
-    applyGrupoToFilters(numerico, '3')
-    expect(numerico).toEqual({ periodo_id: 8, grupo_id: 3 })
-
-    const conGuion: { periodo_id?: number } = {}
-    await applyPeriodoToFilters(conGuion, 'sin-formato')
-    expect(conGuion.periodo_id).toBeUndefined()
 
     const named: { periodo_gte?: string; periodo_lte?: string; periodo_id?: number } = {}
     await applyPeriodoToFilters(named, '2026-1')

@@ -145,5 +145,90 @@ describe('RQ31 unit — Recibir alerta de acoso con IA', () => {
       ])
       expect(res.body.summary).toBe('Resumen de la carrera')
     })
+
+    it('coordinador sin carrera asociada → 400', async () => {
+      const token = mockAuthenticatedUser(coordinadorUser)
+      vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue(null)
+      const res = await request(app).get(url).set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(400)
+      expect(res.body.error).toMatch(/carrera/)
+    })
+
+    it('carrera sin profesores activos → 200 aviso', async () => {
+      const token = mockAuthenticatedUser(coordinadorUser)
+      vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue({
+        carrera_id: 1,
+      } as never)
+      fromMock.mockImplementation(queueFrom({ profesores: [{ data: [], error: null }] }))
+      const res = await request(app).get(url).set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      expect(res.body.summary).toMatch(/profesores activos/)
+    })
+
+    it('carrera con profesores pero sin evaluaciones → 200 aviso', async () => {
+      const token = mockAuthenticatedUser(coordinadorUser)
+      vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue({
+        carrera_id: 1,
+      } as never)
+      fromMock.mockImplementation(
+        queueFrom({
+          profesores: [{ data: [{ id: 7, usuario_id: 'u1' }], error: null }],
+          usuarios: [{ data: null, error: { message: 'fail' } }],
+          evaluaciones: [{ data: [], error: null }],
+        }),
+      )
+      const res = await request(app).get(url).set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      expect(res.body.summary).toMatch(/evaluaciones para esta carrera/)
+    })
+
+    it('sin textos abiertos, con ratings → fallback cuantitativo de la carrera', async () => {
+      const token = mockAuthenticatedUser(coordinadorUser)
+      vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue({
+        carrera_id: 1,
+      } as never)
+      fromMock.mockImplementation(
+        queueFrom({
+          profesores: [{ data: [{ id: 7, usuario_id: 'u1' }], error: null }],
+          usuarios: [{ data: [{ id: 'u1', nombre: 'Ana', apellido: 'Perez' }], error: null }],
+          evaluaciones: [
+            { data: [{ id: 10, profesor_id: 7, calificacion_promedio: 3.2 }], error: null },
+          ],
+          respuestas_evaluacion: [{ data: [{ evaluacion_id: 10, respuesta_texto: 'ab' }], error: null }],
+        }),
+      )
+      const res = await request(app).get(url).set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      expect(res.body.analysisSource).toBe('quantitative_fallback')
+    })
+
+    it('periodo YYYY-X: lista vacía por id, luego evals por fechas', async () => {
+      const token = mockAuthenticatedUser(coordinadorUser)
+      vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue({
+        carrera_id: 1,
+      } as never)
+      fromMock.mockImplementation(
+        queueFrom({
+          periodos_academicos: [{ data: { id: 9 }, error: null }],
+          profesores: [{ data: [{ id: 7, usuario_id: 'u1' }], error: null }],
+          usuarios: [{ data: [], error: null }],
+          evaluaciones: [
+            { data: [], error: null },
+            { data: [{ id: 10, profesor_id: 7, calificacion_promedio: 4.5 }], error: null },
+          ],
+          respuestas_evaluacion: [
+            {
+              data: [{ evaluacion_id: 10, respuesta_texto: 'El profesor explica con claridad en clase' }],
+              error: null,
+            },
+          ],
+        }),
+      )
+      const res = await request(app)
+        .get(`${url}?periodo_id=2026-1`)
+        .set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      expect(res.body.textsCount).toBe(1)
+    })
   })
 })
