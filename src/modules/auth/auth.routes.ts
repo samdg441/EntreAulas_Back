@@ -3,16 +3,24 @@ import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { authRepository } from './auth.repository'
-import {
-  hashPassword,
-  verifyStoredPassword
-} from '../../utils/passwordSecurity'
+import { verifyStoredPassword } from '../../utils/passwordSecurity'
 import { dashboardDesdeRolSeleccionado } from './dashboard'
+import { proyectarUsuarioPublico } from './auth.dto'
+import {
+  armarPerfilConRoles,
+  autenticarCredenciales,
+  crearUsuarioConTipo,
+  generarTokenSesion,
+  migrarPasswordSiHaceFalta,
+  normalizarTipoUsuario,
+  resolverRolesUsuario
+} from './auth.service'
 import {
   badRequest,
   notFound,
   sendError,
   unauthorized,
+  asyncHandler
 } from '../../shared/errors'
 
 const router = Router()
@@ -37,241 +45,66 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
-const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
-
-
-async function migrarPasswordSiHaceFalta(
-  userId: string,
-  passwordCheck: { migratePlaintextToHash?: string }
-): Promise<void> {
-  if (!passwordCheck.migratePlaintextToHash) return
-  try {
-    const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-    await authRepository.updateUser(userId, { password: hashedPassword })
-  } catch (updateError) {
-    console.error('Error migrando contraseña a bcrypt:', updateError)
-  }
-}
-
-function tieneRolValido(tipoUsuario: string, roles: string[]): boolean {
-  return (
-    VALID_USER_TYPES.has(tipoUsuario) ||
-    roles.some((rol) => VALID_USER_TYPES.has(rol))
-  )
-}
-
-// Normaliza 'docente' a 'profesor' para compatibilidad con el frontend.
-function normalizarTipoUsuario(tipoUsuario: string): string {
-  return tipoUsuario === 'docente' ? 'profesor' : tipoUsuario
-}
-
-function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
-  if (roles.includes('admin')) return 'Administrador del sistema'
-  if (roles.includes('decano')) return 'Decano de la facultad'
-  if (roles.includes('coordinador')) return 'Coordinador del sistema'
-  if (roles.includes('profesor') || roles.includes('docente')) return 'Profesor/Docente del sistema'
-  if (roles.includes('estudiante')) return 'Estudiante del sistema'
-  return roles.length > 1
-    ? `Usuario con múltiples roles: ${roles.join(', ')}`
-    : `Usuario con rol: ${roles[0] || tipoUsuario}`
-}
-
-async function obtenerCoordinadorInfo(
-  roles: string[],
-  userId: string
-): Promise<{ carrera_id: unknown } | null> {
-  if (!roles.includes('coordinador')) return null
-  try {
-    const { RoleService } = await import('./role.service')
-    const info = await RoleService.obtenerCoordinadorPorUsuario(userId)
-    return info ? { carrera_id: info.carrera_id ?? null } : null
-  } catch (e) {
-    console.warn('Error obteniendo info del coordinador:', e)
-    return null
-  }
-}
-
-async function obtenerDecanoInfo(
-  roles: string[],
-  userId: string
-): Promise<Record<string, unknown> | null> {
-  if (!roles.includes('decano')) return null
-  try {
-    const { RoleService } = await import('./role.service')
-    const info = await RoleService.obtenerDecanoPorUsuario(userId)
-    if (!info) return null
-    return {
-      facultad_id: info.facultad_id ?? null,
-      facultad_nombre: info.facultades?.nombre ?? null,
-      fecha_nombramiento: info.fecha_nombramiento
-    }
-  } catch (e) {
-    console.warn('Error obteniendo info del decano:', e)
-    return null
-  }
-}
-
 // POST /auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', asyncHandler(async (req, res) => {
+  let validatedData
   try {
-    const validatedData = registerSchema.parse(req.body)
-
-    // Verificar si el usuario ya existe
-    const existingUser = await authRepository.findUserByEmail(validatedData.email)
-
-    if (existingUser) {
-      throw badRequest('El email ya está registrado')
-    }
-
-    const hashedPassword = await hashPassword(validatedData.password)
-
-    // Crear usuario con inserción automática en tabla específica
-    const user = await authRepository.createUserWithType({
-      email: validatedData.email,
-      password: hashedPassword,
-      nombre: validatedData.nombre,
-      apellido: validatedData.apellido,
-      tipo_usuario: validatedData.tipo_usuario,
-      // Campos para profesores
-      codigo_profesor: validatedData.codigo_profesor,
-      departamento: validatedData.departamento,
-      // Campos para estudiantes
-      codigo_estudiante: validatedData.codigo_estudiante,
-      carrera_id: validatedData.carrera_id,
-      semestre: validatedData.semestre
-    })
-
-    // Generar JWT
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, tipo_usuario: user.tipo_usuario },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
-    )
-
-    res.status(201).json({
-      message: 'Usuario registrado exitosamente',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        tipo_usuario: user.tipo_usuario
-      }
-    })
+    validatedData = registerSchema.parse(req.body)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return sendError(res, badRequest('Datos inválidos', error.errors))
     }
-    return sendError(res, error)
+    throw error
   }
-})
+
+  const user = await crearUsuarioConTipo(validatedData)
+  const token = generarTokenSesion({ userId: user.id, email: user.email, tipo_usuario: user.tipo_usuario })
+
+  res.status(201).json({
+    message: 'Usuario registrado exitosamente',
+    token,
+    user: proyectarUsuarioPublico(user)
+  })
+}))
 
 // POST /auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', asyncHandler(async (req, res) => {
+  let validatedData
   try {
-    const validatedData = loginSchema.parse(req.body)
-
-    const user = await authRepository.findUserByEmail(validatedData.email)
-
-    if (!user) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    if (!user.activo) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    const passwordCheck = await verifyStoredPassword(
-      validatedData.password,
-      user.password
-    )
-
-    if (!passwordCheck.ok) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    await migrarPasswordSiHaceFalta(user.id, passwordCheck)
-
-    const { RoleService } = await import('./role.service')
-    const roles = await RoleService.obtenerRolesUsuario(user.id)
-
-    if (!tieneRolValido(user.tipo_usuario, roles)) {
-      return res.status(401).json({ error: 'Tipo de usuario no válido' })
-    }
-
-    if (roles.length > 1) {
-      return res.status(200).json({
-        message: 'Usuario con múltiples roles detectado',
-        user: {
-          id: user.id,
-          email: user.email,
-          nombre: user.nombre,
-          apellido: user.apellido,
-          tipo_usuario: user.tipo_usuario,
-          roles: roles,
-          multiple_roles: true
-        },
-        available_roles: roles,
-        requires_role_selection: true
-      })
-    }
-
-    // Generar JWT
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, tipo_usuario: user.tipo_usuario },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
-    )
-
-    // Determinar el dashboard basado en roles múltiples
-    const dashboard = await RoleService.obtenerDashboardUsuario(user.id)
-    const permisos = await RoleService.obtenerPermisosUsuario(user.id)
-
-    const coordinadorInfo = await obtenerCoordinadorInfo(roles, user.id)
-    const decanoInfo = await obtenerDecanoInfo(roles, user.id)
-
-    // Normalizar 'docente' a 'profesor' para compatibilidad
-    const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
-    const userRole = userTypeDisplay
-
-    // Información adicional según los roles del usuario
-    const additionalInfo: any = {
-      dashboard: dashboard,
-      permissions: permisos,
-      roles: roles,
-      role_description: describirRolPrincipal(roles, user.tipo_usuario)
-    }
-
-    if (coordinadorInfo) {
-      additionalInfo.coordinador = coordinadorInfo
-    }
-
-    if (decanoInfo) {
-      additionalInfo.decano = decanoInfo
-    }
-
-    res.json({
-      message: 'Login exitoso',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        tipo_usuario: user.tipo_usuario,
-        user_type: userTypeDisplay,
-        user_role: userRole,
-        ...additionalInfo
-      }
-    })
+    validatedData = loginSchema.parse(req.body)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return sendError(res, badRequest('Datos inválidos', error.errors))
     }
-    return sendError(res, error)
+    throw error
   }
-})
+
+  const user = await autenticarCredenciales(validatedData.email, validatedData.password)
+  const roles = await resolverRolesUsuario(user.id, user.tipo_usuario)
+
+  if (roles.length > 1) {
+    return res.status(200).json({
+      message: 'Usuario con múltiples roles detectado',
+      user: proyectarUsuarioPublico(user, { roles, multiple_roles: true }),
+      available_roles: roles,
+      requires_role_selection: true
+    })
+  }
+
+  const token = generarTokenSesion({ userId: user.id, email: user.email, tipo_usuario: user.tipo_usuario })
+  const additionalInfo = await armarPerfilConRoles(user.id, roles, user.tipo_usuario)
+  const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
+
+  res.json({
+    message: 'Login exitoso',
+    token,
+    user: proyectarUsuarioPublico(user, {
+      user_type: userTypeDisplay,
+      user_role: userTypeDisplay,
+      ...additionalInfo
+    })
+  })
+}))
 
 // POST /auth/login-with-role - Login con rol específico
 router.post('/login-with-role', async (req, res) => {
@@ -453,68 +286,39 @@ router.get('/me', async (req, res) => {
 })
 
 // POST /auth/create-user - Crear usuario con hash automático (solo administradores)
-router.post('/create-user', authenticateToken, requireRole(['admin']), async (req, res) => {
-  try {
-    const {
-      email,
-      password,
-      nombre,
-      apellido,
-      tipo_usuario,
-      // Campos opcionales para profesores
-      codigo_profesor,
-      departamento,
-      // Campos opcionales para estudiantes
-      codigo_estudiante,
-      carrera_id,
-      semestre
-    } = req.body
+router.post('/create-user', authenticateToken, requireRole(['admin']), asyncHandler(async (req, res) => {
+  const {
+    email,
+    password,
+    nombre,
+    apellido,
+    tipo_usuario,
+    // Campos opcionales para profesores
+    codigo_profesor,
+    departamento,
+    // Campos opcionales para estudiantes
+    codigo_estudiante,
+    carrera_id,
+    semestre
+  } = req.body
 
-    if (!email || !password || !nombre || !apellido || !tipo_usuario) {
-      throw badRequest('Todos los campos son requeridos')
-    }
-
-    if (typeof password !== 'string' || password.length < 8) {
-      throw badRequest('La contraseña debe tener al menos 8 caracteres')
-    }
-
-    const existingUser = await authRepository.findUserByEmail(email)
-    if (existingUser) {
-      throw badRequest('El email ya está registrado')
-    }
-
-    const hashedPassword = await hashPassword(password)
-
-    // Crear usuario con inserción automática en tabla específica
-    const user = await authRepository.createUserWithType({
-      email,
-      password: hashedPassword,
-      nombre,
-      apellido,
-      tipo_usuario,
-      // Campos para profesores
-      codigo_profesor,
-      departamento,
-      // Campos para estudiantes
-      codigo_estudiante,
-      carrera_id,
-      semestre
-    })
-
-    res.status(201).json({
-      message: 'Usuario creado exitosamente',
-      user: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        tipo_usuario: user.tipo_usuario,
-        activo: user.activo
-      }
-    })
-  } catch (error) {
-    return sendError(res, error)
+  if (!email || !password || !nombre || !apellido || !tipo_usuario) {
+    throw badRequest('Todos los campos son requeridos')
   }
-})
+
+  if (typeof password !== 'string' || password.length < 8) {
+    throw badRequest('La contraseña debe tener al menos 8 caracteres')
+  }
+
+  const user = await crearUsuarioConTipo({
+    email, password, nombre, apellido, tipo_usuario,
+    codigo_profesor, departamento, codigo_estudiante, carrera_id, semestre
+  })
+
+  res.status(201).json({
+    message: 'Usuario creado exitosamente',
+    user: proyectarUsuarioPublico(user, { activo: user.activo })
+  })
+}))
 
 export default router

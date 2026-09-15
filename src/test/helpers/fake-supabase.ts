@@ -227,6 +227,16 @@ export const SupabaseDB = {
     if (error && error.code !== 'PGRST116') throw error
     return data
   },
+  async updateUser(id: string, updates: Fila) {
+    const { data, error } = await supabaseAdmin
+      .from('usuarios')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
 }
 
 export default {}
