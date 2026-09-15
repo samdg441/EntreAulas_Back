@@ -8,10 +8,9 @@ const vitest = spawnSync('npx', ['vitest', 'run', '--coverage'], {
   shell: true,
 })
 
-spawnSync('node', [path.join(__dirname, 'clean-lcov.js')], {
+const clean = spawnSync(process.execPath, [path.join(__dirname, 'clean-lcov.js')], {
   cwd: root,
   stdio: 'inherit',
-  shell: true,
 })
 
-process.exit(vitest.status ?? 1)
+process.exit(vitest.status ?? clean.status ?? 1)
