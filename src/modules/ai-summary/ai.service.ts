@@ -151,7 +151,7 @@ export class AiService {
     }
 
     const valid = ratings
-      .map((r) => Number(r))
+      .map(Number)
       .filter((r) => Number.isFinite(r) && r >= 1 && r <= 5)
 
     if (valid.length === 0) {
@@ -178,12 +178,9 @@ export class AiService {
     const positive = dist.e4 + dist.e5
     const low = dist.e1 + dist.e2
 
-    const contextText =
-      context === 'coordinador'
-        ? 'de los docentes de la carrera'
-        : context === 'decano'
-          ? 'de los docentes de la facultad'
-          : 'del docente'
+    let contextText = 'del docente'
+    if (context === 'coordinador') contextText = 'de los docentes de la carrera'
+    else if (context === 'decano') contextText = 'de los docentes de la facultad'
 
     let tone = 'La percepción general es intermedia.'
     if (avg >= 4.3) tone = 'La percepción general es muy positiva.'
