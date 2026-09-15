@@ -28,7 +28,7 @@ export function resumenMetricas(
 export type PartesPeriodo = { year: number; semester: 1 | 2 }
 
 /** Query/body pueden ser string; un objeto no se convierte a "[object Object]". */
-function textoPeriodo(period: unknown): string {
+export function textoPeriodo(period: unknown): string {
   if (typeof period === 'string') return period.trim()
   if (Array.isArray(period) && typeof period[0] === 'string') return period[0].trim()
   if (typeof period === 'number' && Number.isFinite(period)) return String(period)
