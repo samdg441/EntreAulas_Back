@@ -1,4 +1,6 @@
-import { SupabaseDB } from '../../config/supabase-only'
+import { academicRepository } from './academic.repository'
+import { teachersRepository } from './teachers.repository'
+import { logger } from '../../shared/logger'
 
 export type GrupoConProfesor = {
   id: number
@@ -15,45 +17,24 @@ export type GrupoConProfesor = {
 export async function listGruposConProfesorByCareer(
   carreraId: number
 ): Promise<GrupoConProfesor[]> {
-  const { data: cursos, error: cursosError } = await SupabaseDB.supabaseAdmin
-    .from('cursos')
-    .select('id, nombre, codigo')
-    .eq('carrera_id', carreraId)
-    .eq('activo', true)
-
-  if (cursosError) {
-    throw Object.assign(new Error(cursosError.message), { code: 'CURSOS_ERROR' })
-  }
-
+  const cursos = (await academicRepository.listCursosActivosByCareer(
+    carreraId,
+    'id, nombre, codigo'
+  )) as unknown as Array<{ id: number; nombre?: string; codigo?: string }>
   const cursoIds = (cursos || []).map((c: { id: number }) => c.id).filter(Boolean)
   if (cursoIds.length === 0) return []
 
-  const { data: grupos, error: gruposError } = await SupabaseDB.supabaseAdmin
-    .from('grupos')
-    .select('id, curso_id, numero_grupo')
-    .in('curso_id', cursoIds)
-    .eq('activo', true)
-
-  if (gruposError) {
-    throw Object.assign(new Error(gruposError.message), { code: 'GRUPOS_ERROR' })
-  }
-
-  const gruposList = grupos || []
+  const gruposList = (await academicRepository.listGruposActivosByCursoIds(cursoIds)) as Array<{
+    id: number
+    curso_id: number
+    numero_grupo?: number
+  }>
   if (gruposList.length === 0) return []
 
   const grupoIds = gruposList.map((g: { id: number }) => g.id)
   const cursoById = new Map((cursos || []).map((c: { id: number }) => [c.id, c]))
 
-  const { data: asignaciones, error: asigError } = await SupabaseDB.supabaseAdmin
-    .from('asignaciones_profesor')
-    .select('id, grupo_id, profesor_id, curso_id')
-    .in('grupo_id', grupoIds)
-    .eq('activa', true)
-
-  if (asigError) {
-    throw Object.assign(new Error(asigError.message), { code: 'ASIG_ERROR' })
-  }
-
+  const asignaciones = await academicRepository.listAsignacionesActivasByGrupoIds(grupoIds)
   const asignacionByGrupoId = new Map<number, { profesor_id: string }>()
   ;(asignaciones || []).forEach((a: { grupo_id: number; profesor_id: string }) => {
     asignacionByGrupoId.set(Number(a.grupo_id), a)
@@ -65,21 +46,17 @@ export async function listGruposConProfesorByCareer(
 
   const profesorById = new Map<string, string>()
   if (profesorIds.length > 0) {
-    const { data: profesores, error: profError } = await SupabaseDB.supabaseAdmin
-      .from('profesores')
-      .select('id, usuario:usuarios(nombre, apellido)')
-      .in('id', profesorIds)
-
-    if (profError) {
-      console.error('Error profesores en listGruposConProfesorByCareer:', profError)
+    try {
+      const profesores = await teachersRepository.listByIdsWithUsuario(profesorIds)
+      ;(profesores || []).forEach((p: any) => {
+        const u = Array.isArray(p.usuario) ? p.usuario[0] : p.usuario
+        const nombre =
+          [u?.nombre, u?.apellido].filter(Boolean).join(' ').trim() || 'Docente'
+        profesorById.set(p.id, nombre)
+      })
+    } catch (profError) {
+      logger.error('Error profesores en listGruposConProfesorByCareer:', profError)
     }
-
-    ;(profesores || []).forEach((p: any) => {
-      const u = Array.isArray(p.usuario) ? p.usuario[0] : p.usuario
-      const nombre =
-        [u?.nombre, u?.apellido].filter(Boolean).join(' ').trim() || 'Docente'
-      profesorById.set(p.id, nombre)
-    })
   }
 
   return gruposList.map((g: { id: number; curso_id: number; numero_grupo?: number }) => {

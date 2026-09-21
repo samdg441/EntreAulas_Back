@@ -1,5 +1,8 @@
 node_modules/
 dist/
+coverage/
+.scannerwork/
+sonar-project.properties
 .env
 .env.example
 npm-debug.log*

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { AiSummaryProvider, AiSummaryResult, SummaryContext } from '../ai.types'
+import { logger } from '../../../shared/logger'
 
 /**
  * Estrategia Gemini. Devuelve null si no hay API key o falla la llamada,
@@ -55,7 +56,7 @@ export class GeminiSummaryProvider implements AiSummaryProvider {
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn('⚠️  Error con Gemini API:', message)
+      logger.warn('Error con Gemini API:', message)
       return null
     }
   }
