@@ -315,7 +315,11 @@ export class CoordinadorService {
     })
   }
 
-  async getReportsOverview(usuarioId: string, periodQuery: unknown) {
+  async getReportsOverview(
+    usuarioId: string,
+    periodQuery: unknown,
+    filtros?: { courseId?: unknown; grupoId?: unknown }
+  ) {
     const carreraId = await this.carreraDelUsuario(usuarioId)
     const { period, partes, dateStart, dateEnd, periodId } = await resolverPeriodo(periodQuery)
 
@@ -635,18 +639,68 @@ export class CoordinadorService {
       })
     )
 
+    const gruposCatalogo = gruposArray.map((g: any) => ({
+      grupoId: g.id,
+      cursoId: g.curso_id,
+      numeroGrupo: g.numero_grupo,
+      cursoNombre: courseNameById.get(Number(g.curso_id)) || 'Curso',
+    }))
+
+    const cursoFiltro = filtros?.courseId
+    const grupoFiltro = filtros?.grupoId
+    const hayGrupo = grupoFiltro && String(grupoFiltro) !== 'all'
+    const hayCurso = cursoFiltro && String(cursoFiltro) !== 'all'
+    const evalsFiltradas = !hayGrupo && !hayCurso
+      ? evalsArray
+      : evalsArray.filter((e: any) => {
+          if (hayGrupo) return String(e.grupo_id) === String(grupoFiltro)
+          return String(groupToCourseId.get(Number(e.grupo_id))) === String(cursoFiltro)
+        })
+
+    const distributionFiltrada = (() => {
+      if (evalsFiltradas === evalsArray) return distribution
+      const copia = buckets.map((b) => ({ ...b, value: 0 }))
+      evalsFiltradas.forEach((e: any) => {
+        const value = Number(e.calificacion_promedio || 0)
+        if (!Number.isFinite(value) || value <= 0) return
+        const rounded = Math.max(1, Math.min(5, Math.round(value)))
+        copia[5 - rounded].value += 1
+      })
+      return copia.filter((b) => b.value > 0)
+    })()
+
+    const categoryFiltrada = evalsFiltradas === evalsArray
+      ? categoryStats
+      : await buildCategoryStats(evalsFiltradas)
+
+    const summaryFiltrado = evalsFiltradas === evalsArray
+      ? {
+          totalEvaluaciones,
+          calificacionPromedio,
+          tasaRespuesta: 0,
+          docentesEvaluados,
+          cursosEvaluados,
+          estudiantesRespondieron,
+        }
+      : {
+          totalEvaluaciones: evalsFiltradas.length,
+          calificacionPromedio: promedioDeEvals(evalsFiltradas),
+          tasaRespuesta: 0,
+          docentesEvaluados: new Set(evalsFiltradas.map((e: any) => e.profesor_id).filter(Boolean)).size,
+          cursosEvaluados: new Set(
+            evalsFiltradas
+              .map((e: any) => groupToCourseId.get(Number(e.grupo_id)))
+              .filter(Boolean)
+          ).size,
+          estudiantesRespondieron: new Set(evalsFiltradas.map((e: any) => e.estudiante_id).filter(Boolean)).size,
+        }
+
     return {
-      summary: {
-        totalEvaluaciones,
-        calificacionPromedio,
-        tasaRespuesta: 0,
-        docentesEvaluados,
-        cursosEvaluados,
-        estudiantesRespondieron,
-      },
-      categoryStats,
+      summary: summaryFiltrado,
+      categoryStats: categoryFiltrada,
       teacherAverages,
       courseAverages,
+      grupos: gruposCatalogo,
       reportRows,
       debug:
         process.env.NODE_ENV === 'development'
@@ -658,7 +712,7 @@ export class CoordinadorService {
             }
           : undefined,
       trend,
-      distribution,
+      distribution: distributionFiltrada,
     }
   }
 

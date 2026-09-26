@@ -95,7 +95,8 @@ router.get('/period-category-stats', authenticateToken, async (req: any, res) =>
       await teachersAnalyticsService.getPeriodCategoryStats(
         req.user.id,
         req.query.period,
-        req.query.courseId
+        req.query.courseId,
+        req.query.grupoId
       )
     )
   } catch (error) {
