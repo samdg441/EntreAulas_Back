@@ -4,6 +4,7 @@ import { academicRepository } from './academic.repository'
 import { analyticsRepository } from '../analytics/analytics.repository'
 import { evaluationsRepository } from '../evaluations/evaluations.repository'
 import { conflict, forbidden, internal, notFound } from '../../shared/errors'
+import { tieneRol } from '../../shared/tiene-rol'
 import { listarProfesoresConCursos } from './listado-profesores'
 
 function formatQuestions(questions: any[]) {
@@ -144,7 +145,7 @@ export class TeachersService {
     }
   ) {
     const { teacherId, groupId, answers, overallRating, comments } = validatedData
-    if (user.tipo_usuario !== 'estudiante') {
+    if (!tieneRol(user, 'estudiante')) {
       throw forbidden('Solo los estudiantes pueden realizar evaluaciones')
     }
 
@@ -233,8 +234,8 @@ export class TeachersService {
     }
   }
 
-  async getEvaluationQuestions(user: { id: string; tipo_usuario?: string }, courseId: string) {
-    if (user.tipo_usuario !== 'estudiante') {
+  async getEvaluationQuestions(user: { id: string; tipo_usuario?: string; roles?: string[] }, courseId: string) {
+    if (!tieneRol(user, 'estudiante')) {
       throw forbidden('Solo los estudiantes pueden acceder a las preguntas de evaluación')
     }
 

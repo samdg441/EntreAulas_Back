@@ -1,6 +1,7 @@
 import { academicRepository } from '../academic/academic.repository'
 import { qrRepository } from './qr.repository'
 import { AppError, badRequest, forbidden, internal, notFound } from '../../shared/errors'
+import { tieneRol } from '../../shared/tiene-rol'
 
 export type ResultadoAutoEnroll = {
   status: 200 | 201
@@ -33,9 +34,9 @@ export async function autoEnrollPorQr(
 }
 
 function esEstudiante(
-  user: { id?: string; tipo_usuario?: string } | null | undefined
-): user is { id: string; tipo_usuario: string } {
-  return Boolean(user?.id) && user?.tipo_usuario === 'estudiante'
+  user: { id?: string; tipo_usuario?: string; roles?: string[] } | null | undefined
+): user is { id: string; tipo_usuario?: string; roles?: string[] } {
+  return Boolean(user?.id) && tieneRol(user, 'estudiante')
 }
 
 async function grupoIdDesdeQr(token: string): Promise<number> {
