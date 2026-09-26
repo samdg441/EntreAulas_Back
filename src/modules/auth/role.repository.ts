@@ -63,6 +63,34 @@ export class RoleRepository {
     if (error) throw error
   }
 
+  async listRolesAgrupados(): Promise<Map<string, string[]>> {
+    const { data, error } = await supabaseAdmin
+      .from('usuario_roles')
+      .select('usuario_id, rol')
+      .eq('activo', true)
+    if (error) throw error
+    const mapa = new Map<string, string[]>()
+    for (const fila of data || []) {
+      const id = String(fila.usuario_id)
+      const roles = mapa.get(id) || []
+      roles.push(String(fila.rol))
+      mapa.set(id, roles)
+    }
+    return mapa
+  }
+
+  async sincronizarRoles(usuarioId: string, roles: string[]) {
+    const actuales = await this.listRolesActivos(usuarioId)
+    for (const rol of roles) {
+      await this.upsertRol(usuarioId, rol)
+    }
+    for (const rol of actuales) {
+      if (!roles.includes(rol)) {
+        await this.desactivarRol(usuarioId, rol)
+      }
+    }
+  }
+
   async listRolesActivos(usuarioId: string): Promise<string[]> {
     const { data, error } = await supabaseAdmin
       .from('usuario_roles')

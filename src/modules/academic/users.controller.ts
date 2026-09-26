@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import { academicService } from './academic.service'
 import { authRepository } from '../auth/auth.repository'
+import { normalizarCorreoPorRoles } from '../auth/correo-institucional'
+import { roleRepository } from '../auth/role.repository'
 import { hashPassword } from '../../utils/passwordSecurity'
 import {
   AppError,
@@ -93,7 +95,15 @@ export class UsersController {
   static async listUsers(_req: Request, res: Response) {
     try {
       const users = await academicService.listUsersSummary()
-      res.json({ users })
+      const rolesPorUsuario = await roleRepository.listRolesAgrupados()
+      const conRoles = (users || []).map((user: any) => {
+        const roles = rolesPorUsuario.get(String(user.id)) || []
+        return {
+          ...user,
+          roles: roles.length > 0 ? roles : user.tipo_usuario ? [user.tipo_usuario] : [],
+        }
+      })
+      res.json({ users: conRoles })
     } catch (e) {
       return sendError(res, e instanceof AppError ? e : internal('Error al listar usuarios'))
     }
@@ -111,7 +121,28 @@ export class UsersController {
         throw notFound('Usuario no encontrado')
       }
 
+      const rolesBody = Array.isArray(req.body?.roles) ? req.body.roles.map((rol: unknown) => String(rol)) : null
+      if (rolesBody) {
+        if (rolesBody.length === 0) {
+          throw badRequest('Selecciona al menos un rol')
+        }
+        for (const rol of rolesBody) {
+          if (!isAllowedUserType(rol)) {
+            throw badRequest('Rol inválido')
+          }
+        }
+      }
+      const rolesActuales = await roleRepository.listRolesActivos(id)
+      const rolesEfectivos = rolesBody ?? (rolesActuales.length > 0 ? rolesActuales : [existing.tipo_usuario])
+
       const updates = await collectUserUpdates(req.body)
+      if (typeof updates.email === 'string') {
+        updates.email = normalizarCorreoPorRoles(updates.email, rolesEfectivos)
+      }
+      if (rolesBody) {
+        const tipoActual = typeof updates.tipo_usuario === 'string' ? updates.tipo_usuario : existing.tipo_usuario
+        updates.tipo_usuario = rolesBody.includes(String(tipoActual)) ? tipoActual : rolesBody[0]
+      }
       assertHasUpdates(updates)
 
       const nextEmail = updates.email
@@ -121,6 +152,9 @@ export class UsersController {
           : null
       ensureEmailIsAvailable(id, existing.email, nextEmail, conflict)
       const user = await academicService.updateUser(id, updates as any)
+      if (rolesBody) {
+        await roleRepository.sincronizarRoles(id, rolesBody)
+      }
       res.json({
         message: 'Usuario actualizado',
         user: {
@@ -130,6 +164,7 @@ export class UsersController {
           apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
           activo: user.activo,
+          roles: rolesBody ?? rolesEfectivos,
         },
       })
     } catch (e) {
