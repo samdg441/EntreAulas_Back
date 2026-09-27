@@ -14,6 +14,7 @@ import {
   sendError,
   unauthorized,
 } from '../../shared/errors'
+import { normalizarCorreoInstitucional } from './correo-institucional'
 
 const router = Router()
 
@@ -478,7 +479,9 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       throw badRequest('La contraseña debe tener al menos 8 caracteres')
     }
 
-    const existingUser = await authRepository.findUserByEmail(email)
+    const correoInstitucional = normalizarCorreoInstitucional(email, tipo_usuario)
+
+    const existingUser = await authRepository.findUserByEmail(correoInstitucional)
     if (existingUser) {
       throw badRequest('El email ya está registrado')
     }
@@ -487,7 +490,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
 
     // Crear usuario con inserción automática en tabla específica
     const user = await authRepository.createUserWithType({
-      email,
+      email: correoInstitucional,
       password: hashedPassword,
       nombre,
       apellido,

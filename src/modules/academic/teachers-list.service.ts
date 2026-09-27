@@ -1,4 +1,5 @@
 import { SupabaseDB } from '../../config/supabase-only'
+import { tieneRol } from '../../shared/tiene-rol'
 
 const EMPTY_UUID = '00000000-0000-0000-0000-000000000000'
 
@@ -331,7 +332,7 @@ function buildTeachers(params: {
   gruposPorAsignaciones: any[]
   gruposDeEstudiante: any[]
 }) {
-  const esEstudiante = params.user?.tipo_usuario === 'estudiante'
+  const esEstudiante = tieneRol(params.user, 'estudiante')
   const cursoById = new Map((params.cursos || []).map((c: any) => [c.id, c]))
   const carreraById = new Map<any, any>()
   const { asignacionesByProfesor, gruposByProfesorCurso } = indexAsignaciones(
@@ -377,7 +378,7 @@ export async function listTeachersWithCourses(user: any) {
   let gruposDeEstudiante: any[] = []
   let profesorIdsFiltro: string[] | null = null
 
-  if (user?.tipo_usuario === 'estudiante') {
+  if (tieneRol(user, 'estudiante')) {
     const scope = await scopeEstudiante(user.id)
     if (scope.empty) return []
     gruposDeEstudiante = scope.grupos

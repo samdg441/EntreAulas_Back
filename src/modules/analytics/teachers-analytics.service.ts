@@ -661,7 +661,7 @@ export class TeachersAnalyticsService {
 
     let gruposEvaluados
     try {
-      gruposEvaluados = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id')
+      gruposEvaluados = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id, numero_grupo')
     } catch (gruposError) {
       throw internal(
         'Error obteniendo grupos de evaluaciones',
@@ -670,8 +670,10 @@ export class TeachersAnalyticsService {
     }
 
     const grupoToCurso = new Map<any, any>()
+    const grupoById = new Map<any, any>()
     ;(gruposEvaluados || []).forEach((g: any) => {
       grupoToCurso.set(g.id, g.curso_id)
+      grupoById.set(g.id, g)
     })
 
     const cursoIdsFromEvals = Array.from(
@@ -688,7 +690,31 @@ export class TeachersAnalyticsService {
 
     const cursosActivosSet = new Set((asignacionesActivas || []).map((a: any) => a.curso_id).filter(Boolean))
     const gruposActivosSet = new Set((asignacionesActivas || []).map((a: any) => a.grupo_id).filter(Boolean))
-    const cursoIdsToFetch = Array.from(new Set([...cursoIdsFromEvals, ...Array.from(cursosActivosSet)]))
+    const gruposSinDatos = Array.from(gruposActivosSet).filter((id) => !grupoById.has(id))
+    if (gruposSinDatos.length > 0) {
+      try {
+        const gruposAsignados = await analyticsRepository.getGruposByIds(
+          gruposSinDatos,
+          'id, curso_id, numero_grupo'
+        )
+        ;(gruposAsignados || []).forEach((g: any) => {
+          grupoToCurso.set(g.id, g.curso_id)
+          grupoById.set(g.id, g)
+        })
+      } catch (gruposError) {
+        throw internal(
+          'Error obteniendo grupos asignados',
+          (gruposError as Error)?.message ?? gruposError
+        )
+      }
+    }
+    const cursoIdsToFetch = Array.from(
+      new Set([
+        ...cursoIdsFromEvals,
+        ...Array.from(cursosActivosSet),
+        ...Array.from(grupoById.values()).map((g: any) => g.curso_id).filter(Boolean),
+      ])
+    )
 
     let cursosInfo: any[]
     try {
@@ -731,6 +757,33 @@ export class TeachersAnalyticsService {
       })
       .sort((a, b) => b.total - a.total)
 
+    const perGrupoAccumulator = new Map<any, { total: number; sum: number }>()
+    evaluacionesArray.forEach((e: any) => {
+      if (!grupoById.has(e.grupo_id)) return
+      const current = perGrupoAccumulator.get(e.grupo_id) || { total: 0, sum: 0 }
+      current.total += 1
+      current.sum += Number(e.calificacion_promedio || 0)
+      perGrupoAccumulator.set(e.grupo_id, current)
+    })
+
+    const evaluacionesPorGrupo = Array.from(grupoById.values())
+      .map((grupo: any) => {
+        const values = perGrupoAccumulator.get(grupo.id) || { total: 0, sum: 0 }
+        const curso = cursoById.get(grupo.curso_id)
+        return {
+          grupo_id: grupo.id,
+          curso_id: grupo.curso_id,
+          numero_grupo: grupo.numero_grupo,
+          nombre: curso?.nombre || 'Curso',
+          total: values.total,
+          encuestasRespondidas: values.total,
+          promedio: values.total > 0 ? Number((values.sum / values.total).toFixed(2)) : 0,
+        }
+      })
+      .sort((a, b) =>
+        String(a.numero_grupo ?? '').localeCompare(String(b.numero_grupo ?? ''), 'es', { numeric: true })
+      )
+
     const cursosImpartidos = Math.max(cursosActivosSet.size, evaluacionesPorCurso.length)
 
     return {
@@ -739,6 +792,7 @@ export class TeachersAnalyticsService {
       cursosImpartidos,
       totalGruposImpartidos: gruposActivosSet.size,
       evaluacionesPorCurso,
+      evaluacionesPorGrupo,
     }
   }
 
@@ -771,7 +825,7 @@ export class TeachersAnalyticsService {
         : 0
 
     const evalsArray: any[] = Array.isArray(evaluaciones) ? (evaluaciones as any[]) : []
-    const { grupoToCurso, cursoInfo: periodCursoMap } = await mapaGrupoYCurso(evalsArray, 'id, curso_id')
+    const { grupos, grupoToCurso, cursoInfo: periodCursoMap } = await mapaGrupoYCurso(evalsArray, 'id, curso_id, numero_grupo')
 
     const evaluacionesPorCursoMap: any = {}
     evalsArray.forEach((e: any) => {
@@ -804,6 +858,29 @@ export class TeachersAnalyticsService {
       })
     }
 
+    const grupoInfo = new Map((Array.isArray(grupos) ? grupos : []).map((g: any) => [String(g.id), g]))
+    const porGrupo = new Map<string, { total: number; sum: number }>()
+    evalsArray.forEach((e: any) => {
+      const id = String(e.grupo_id || '')
+      if (!id || !grupoInfo.has(id)) return
+      const current = porGrupo.get(id) || { total: 0, sum: 0 }
+      current.total += 1
+      current.sum += Number(e.calificacion_promedio || 0)
+      porGrupo.set(id, current)
+    })
+    const evaluacionesPorGrupo = Array.from(porGrupo.entries()).map(([grupoId, values]) => {
+      const grupo = grupoInfo.get(grupoId)
+      const curso = periodCursoMap[grupo?.curso_id]
+      return {
+        grupo_id: grupo?.id,
+        curso_id: grupo?.curso_id,
+        numero_grupo: grupo?.numero_grupo,
+        nombre: curso?.nombre || 'Curso',
+        total: values.total,
+        promedio: values.total > 0 ? Number((values.sum / values.total).toFixed(2)) : 0,
+      }
+    })
+
     let cursosImpartidos: any[] = []
     try {
       const asignaciones = await academicRepository.listAsignacionesByProfesorIds([profesor.id])
@@ -817,11 +894,12 @@ export class TeachersAnalyticsService {
       calificacionPromedio: Number(calificacionPromedio.toFixed(2)),
       totalCursos: cursosImpartidos?.length || 0,
       evaluacionesPorCurso,
+      evaluacionesPorGrupo,
       period: period || 'all',
     }
   }
 
-  async getPeriodCategoryStats(usuarioId: string, period: unknown, courseId: unknown) {
+  async getPeriodCategoryStats(usuarioId: string, period: unknown, courseId: unknown, grupoId: unknown) {
     const profesor = await teachersRepository.findByUsuarioId(usuarioId)
     if (!profesor) {
       throw notFound('Profesor no encontrado')
@@ -836,7 +914,10 @@ export class TeachersAnalyticsService {
       )
     )
 
-    const evalsArray = await filtrarEvaluacionesPorCurso(comoLista(evaluaciones), courseId)
+    let evalsArray = await filtrarEvaluacionesPorCurso(comoLista(evaluaciones), courseId)
+    if (grupoId && String(grupoId) !== 'all') {
+      evalsArray = evalsArray.filter((e: any) => String(e.grupo_id) === String(grupoId))
+    }
     const evaluacionIds = idsUnicos(evalsArray.map((e: any) => e.id))
     if (evaluacionIds.length === 0) return []
 

@@ -2,7 +2,9 @@ import { academicRepository } from './academic.repository'
 import { teachersRepository } from './teachers.repository'
 import { internal } from '../../shared/errors'
 
-type UsuarioListado = { id: string; tipo_usuario?: string }
+import { tieneRol } from '../../shared/tiene-rol'
+
+type UsuarioListado = { id: string; tipo_usuario?: string; roles?: string[] }
 
 type AlcanceEstudiante = {
   vacio: boolean
@@ -16,7 +18,7 @@ type IndicesAsignacion = {
 }
 
 function esEstudiante(user: UsuarioListado) {
-  return user?.tipo_usuario === 'estudiante'
+  return tieneRol(user, 'estudiante')
 }
 
 function idsUnicos(values: any[]) {
