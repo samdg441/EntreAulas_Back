@@ -139,4 +139,37 @@ describe('RF-REP-25 — Exportación de reportes', () => {
   it('C3: autorizado + datos → archivo xlsx con la información', () => pruebas.C3_generaArchivoConInformacion())
   it('C4: sin filas igual genera descarga', () => pruebas.C4_sinFilasSigueSiendoDescargable())
   it('C5: ordena filas y nombra docente si falta el usuario', () => pruebas.C5_ordenaYUsaFallbackDocente())
+
+  it('C6: el rol docente, sin la palabra profesor, no exporta', () => {
+    // Arrange
+    const persona = { roles: ['docente'] }
+
+    // Act
+    const permitido = puedeExportarReporte(persona)
+
+    // Assert
+    expect(permitido).toBe(false)
+  })
+
+  it('C7: un estudiante que también es admin sí exporta', () => {
+    // Arrange
+    const persona = { tipo_usuario: 'estudiante', roles: ['admin', 'estudiante'] }
+
+    // Act
+    const permitido = puedeExportarReporte(persona)
+
+    // Assert
+    expect(permitido).toBe(true)
+  })
+
+  it('C8: sin periodo el archivo se llama “todo”', () => {
+    // Arrange
+    const period = '   '
+
+    // Act
+    const nombre = nombreArchivoReporte(period)
+
+    // Assert
+    expect(nombre).toBe('reporte-coordinador-todo.xlsx')
+  })
 })

@@ -94,4 +94,27 @@ describe('RQ18 — Validar QR vencido o inválido', () => {
   it('C5: mapea fila con relaciones anidadas', () => pruebas.C5_mapeaFilaAnidada())
   it('C6: mapea relaciones que vienen como arreglo', () => pruebas.C6_mapeaRelacionesEnArreglo())
   it('C7: fila vacía → nombres nulos', () => pruebas.C7_mapeaFilaVacia())
+
+  it('C8: si la fila no trae activo en false, el código sigue vigente', () => {
+    // Arrange
+    const entrada = { token: 'vivo', qr: { profesor_id: 1, curso_id: 2, grupo_id: 3 } }
+
+    // Act
+    const respuesta = resolverEvaluacionQr(entrada)
+
+    // Assert
+    expect(respuesta.status).toBe(200)
+    expect(respuesta.ok).toBe(true)
+  })
+
+  it('C9: solo el apellido no deja un espacio delante', () => {
+    // Arrange
+    const fila = { profesor: { usuario: { nombre: '', apellido: 'Gómez' } } }
+
+    // Act
+    const vista = mapearRespuestaQr(fila)
+
+    // Assert
+    expect(vista.profesorNombre).toBe('Gómez')
+  })
 })

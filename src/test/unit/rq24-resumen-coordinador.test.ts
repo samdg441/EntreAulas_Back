@@ -190,4 +190,15 @@ describe('RQ24 — Ver resumen del coordinador', () => {
   it('C13: ordena por riesgo y nombre en empate', () => pruebas.C13_ordenaRiesgoYEmpate())
   it('C14: página fuera de rango se recorta', () => pruebas.C14_paginaFueraDeRango())
   it('C15: parsearPaginacion defaults y tope 50', () => pruebas.C15_parsearPaginacion())
+
+  it('C16: es coordinador por la lista de roles aunque el tipo sea admin', () => {
+    // Arrange
+    const persona = { roles: ['coordinador'], tipo_usuario: 'admin' }
+
+    // Act
+    const si = esCoordinador(persona)
+
+    // Assert
+    expect(si).toBe(true)
+  })
 })

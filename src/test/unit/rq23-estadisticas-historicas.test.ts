@@ -5,6 +5,7 @@ import {
   rangoFechasPeriodo,
   rangoFechasPeriodoOTodo,
   resumenHistorico,
+  textoPeriodo,
 } from '../../modules/analytics/calificaciones'
 import { EVALUACIONES_MEZCLADAS, PERIODOS_INVALIDOS, PERIODOS_VALIDOS } from '../fixtures/casos-datos'
 
@@ -94,4 +95,18 @@ describe('RQ23 — Consultar estadísticas históricas', () => {
   it('C8: notas fuera de 1–5 no entran al histórico', () => pruebas.C8_notasFueraDeEscalaNoCuentan())
   it('C9: periodo inválido usa rango “todo”', () => pruebas.C9_rangoOTodo())
   it('C10: histórico con periodo inválido → vacío', () => pruebas.C10_historicoPeriodoInvalido())
+
+  it('C11: un número se vuelve texto y un objeto queda vacío', () => {
+    // Arrange
+    const numero = 2026
+    const objeto = { year: 2026 }
+
+    // Act
+    const comoTexto = textoPeriodo(numero)
+    const vacio = textoPeriodo(objeto)
+
+    // Assert
+    expect(comoTexto).toBe('2026')
+    expect(vacio).toBe('')
+  })
 })

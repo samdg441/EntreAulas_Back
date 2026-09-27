@@ -61,4 +61,32 @@ describe('RQ22 — Calcular métricas de evaluación', () => {
   it('C5: sin evaluaciones → 0', () => pruebas.C5_sinEvaluaciones())
   it('C6: negativos, 0, 99 y no numéricos no entran', () => pruebas.C6_valoresInvalidosNoEntran())
   it('C7: resumenMetricas redondea y descarta inválidas', () => pruebas.C7_resumenMetricas())
+
+  it('C8: justo por fuera de 1 y de 5 no entra', () => {
+    // Arrange
+    const fuera = [0.99, 5.01]
+
+    // Act
+    const traducidas = fuera.map(calificacionEnEscala)
+
+    // Assert
+    expect(traducidas).toEqual([null, null])
+  })
+
+  it('C9: 4, 5 y 4, con un 99 al lado, promedian 4.33 en tres evaluaciones', () => {
+    // Arrange
+    const evaluaciones = [
+      { calificacion_promedio: 4 },
+      { calificacion_promedio: 5 },
+      { calificacion_promedio: 4 },
+      { calificacion_promedio: 99 },
+    ]
+
+    // Act
+    const resumen = resumenMetricas(evaluaciones)
+
+    // Assert
+    expect(resumen.totalEvaluaciones).toBe(3)
+    expect(resumen.calificacionPromedio).toBe(4.33)
+  })
 })
