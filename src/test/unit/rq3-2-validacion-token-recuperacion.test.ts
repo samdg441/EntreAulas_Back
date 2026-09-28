@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import passwordResetRoutes from '../../modules/auth/password-reset.routes'
+import { supabaseAdmin } from '../../config/supabase-only'
 
 
 
@@ -18,7 +19,29 @@ app.use('/api/auth', passwordResetRoutes)
 const validar = (token: string) =>
   request(app).get(`/api/auth/validate-reset-token/${encodeURIComponent(token)}`)
 
+/** Deja el token en BD con la fecha indicada y sin usar, para que la corrida no dependa de un seed viejo. */
+async function asegurarToken(token: string, expiresAt: Date) {
+  const fila = { email: EMAIL, expires_at: expiresAt.toISOString(), used: false }
+  const { data: existente } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .select('id')
+    .eq('token', token)
+    .maybeSingle()
+
+  if (existente) {
+    await supabaseAdmin.from('password_reset_tokens').update(fila).eq('id', (existente as { id: string }).id)
+  } else {
+    await supabaseAdmin.from('password_reset_tokens').insert({ ...fila, token })
+  }
+}
+
 describe('RQ3.2 — Validación del token de recuperación (código real)', () => {
+  beforeAll(async () => {
+    const unaHora = 60 * 60 * 1000
+    await asegurarToken(TOKEN_VALIDO, new Date(Date.now() + unaHora))
+    await asegurarToken(TOKEN_EXPIRADO, new Date(Date.now() - unaHora))
+  })
+
   describe('N1 · GET /api/auth/validate-reset-token/:token', () => {
     it('N1: la ruta está montada (con token y email no responde 404)', async () => {
       const res = await validar(TOKEN_CUALQUIERA).query({ email: EMAIL })
@@ -62,7 +85,7 @@ describe('RQ3.2 — Validación del token de recuperación (código real)', () =
   })
 
   describe('N8 → N9 · token expirado → 400', () => {
-    it('N9: token con expires_at en el pasado → 400 "El token ha expirado. Solicita uno nuevo." (requiere RQ32_TOKEN_EXPIRADO en BD)', async () => {
+    it('N9: token con expires_at en el pasado → 400 "El token ha expirado. Solicita uno nuevo."', async () => {
       const res = await validar(TOKEN_EXPIRADO).query({ email: EMAIL })
       expect(res.status).toBe(400)
       expect(res.body).toEqual({ error: 'El token ha expirado. Solicita uno nuevo.' })
@@ -70,7 +93,7 @@ describe('RQ3.2 — Validación del token de recuperación (código real)', () =
   })
 
   describe('N10 · token válido → 200', () => {
-    it('N10: token no usado y no expirado → 200 { message: "Token válido", valid: true } (requiere RQ32_TOKEN_VALIDO en BD)', async () => {
+    it('N10: token no usado y no expirado → 200 { message: "Token válido", valid: true }', async () => {
       const res = await validar(TOKEN_VALIDO).query({ email: EMAIL })
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ message: 'Token válido', valid: true })

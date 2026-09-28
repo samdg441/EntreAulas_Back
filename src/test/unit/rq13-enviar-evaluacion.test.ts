@@ -126,7 +126,7 @@ describe('RQ13 unit — Enviar evaluación docente', () => {
       fromMock.mockImplementation(
         queueFrom({
           estudiantes: [{ data: { id: 'est-1' }, error: null }],
-          evaluaciones: [{ data: { id: 11 }, error: null }],
+          evaluaciones: [{ data: [{ id: 11 }], error: null }],
         })
       )
 

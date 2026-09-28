@@ -42,10 +42,10 @@ npm install
 3. Copia el archivo de ejemplo de variables de entorno:
 
 ```bash
-cp env.example .env
+cp .env.example .env
 ```
 
-4. Ajusta los valores del archivo .env con tus credenciales de Supabase, JWT y correo.
+4. Ajusta los valores del archivo .env con tus credenciales de Supabase, JWT y correo. El archivo `.env` nunca se sube a GitHub; `.env.example` sí, porque solo trae nombres y valores de ejemplo.
 
 ## Variables de entorno importantes
 El proyecto espera estas variables mínimas:
@@ -55,8 +55,10 @@ SUPABASE_URL=tu_url_de_supabase
 SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
 JWT_SECRET=tu_secreto_jwt
 PORT=3000
-CORS_ORIGIN=http://localhost:5173
+CORS_ORIGIN=http://localhost:3001,http://localhost:8081
 ```
+
+`CORS_ORIGIN` acepta varios orígenes separados por coma (por ejemplo, el front en desarrollo y el front en Docker). Si se deja vacío, se permite cualquier origen.
 
 También puedes configurar correo SMTP y claves de IA si vas a usar funciones extras como recuperación de contraseña o resumen con Gemini/Hugging Face.
 

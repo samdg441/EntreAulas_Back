@@ -66,6 +66,7 @@ vi.mock('../../modules/academic/academic.service', () => ({
 
 import { app } from '../../app'
 import { RoleService } from '../../modules/auth/role.service'
+import { roleRepository } from '../../modules/auth/role.repository'
 import { hashPassword } from '../../utils/passwordSecurity'
 
 function signToken(userId: string) {
@@ -100,11 +101,14 @@ function mockAuthenticatedUser(tipo_usuario: string, roles: string[], id = 'user
   })
   vi.spyOn(RoleService, 'obtenerRolesUsuario').mockResolvedValue(roles)
   vi.spyOn(RoleService, 'obtenerPermisosUsuario').mockResolvedValue([])
+  vi.spyOn(roleRepository, 'listRolesActivos').mockResolvedValue([])
+  vi.spyOn(roleRepository, 'listRolesAgrupados').mockResolvedValue(new Map())
+  vi.spyOn(roleRepository, 'sincronizarRoles').mockResolvedValue(undefined as never)
   return signToken(id)
 }
 
 const createBody = {
-  email: 'nuevo@test.com',
+  email: 'nuevo@soyudemedellin.edu.co',
   password: 'password123',
   nombre: 'Luis',
   apellido: 'Gomez',
@@ -552,7 +556,7 @@ describe('RQ10 unit — auth.routes y listados de usuarios', () => {
 
     const lista = await request(app).get('/api/users').set('Authorization', `Bearer ${token}`)
     expect(lista.status).toBe(200)
-    expect(lista.body.users).toEqual([{ id: 'u1' }])
+    expect(lista.body.users).toEqual([{ id: 'u1', roles: [] }])
 
     const stats = await request(app).get('/api/users/stats').set('Authorization', `Bearer ${token}`)
     expect(stats.status).toBe(200)

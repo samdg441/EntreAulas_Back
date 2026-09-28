@@ -1,8 +1,8 @@
 node_modules/
 dist/
 coverage/
+test-results.xml
 .scannerwork/
 .env
-.env.example
 npm-debug.log*
 .DS_Store

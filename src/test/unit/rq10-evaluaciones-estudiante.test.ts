@@ -351,11 +351,11 @@ describe('RQ10 — Evaluaciones del estudiante', () => {
   it('Nodo 12: promedio trata null como 0', () => pruebas.N12_promedioConNulos())
   it('Nodo 13-14: error interno → 500', () => pruebas.N14_errorInterno())
   it('Nodo 15-16: JSON con pendientes y completadas', () => pruebas.N16_caminoIdeal())
-  it('FALLA N5: sin token — se espera (mal) 200', () => pruebas.FALLA_N5_sinTokenSeEspera200())
-  it('FALLA N7: profesor — se espera (mal) 200 con stats', () => pruebas.FALLA_N7_profesorSeEspera200())
-  it('FALLA N10: sin perfil — se espera (mal) cifras reales', () =>
+  it.fails('FALLA N5: sin token — se espera (mal) 200', () => pruebas.FALLA_N5_sinTokenSeEspera200())
+  it.fails('FALLA N7: profesor — se espera (mal) 200 con stats', () => pruebas.FALLA_N7_profesorSeEspera200())
+  it.fails('FALLA N10: sin perfil — se espera (mal) cifras reales', () =>
     pruebas.FALLA_N10_sinPerfilSeEsperaCifras())
-  it('FALLA N12: pendientes — se espera (mal) 4 en vez de 2', () =>
+  it.fails('FALLA N12: pendientes — se espera (mal) 4 en vez de 2', () =>
     pruebas.FALLA_N12_pendientesMalCalculadas())
-  it('FALLA N14: 500 — se espera (mal) 200', () => pruebas.FALLA_N14_errorInternoSeEspera200())
+  it.fails('FALLA N14: 500 — se espera (mal) 200', () => pruebas.FALLA_N14_errorInternoSeEspera200())
 })

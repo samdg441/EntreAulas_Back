@@ -8,7 +8,7 @@ import { supabaseAdmin } from '../../config/supabase-only'
 import { app } from '../../app'
 
 const ADMIN_EMAIL = 'rq1.admin@entreaulas.test'
-const EMAIL_NUEVO = 'rq1-5.regresion@entreaulas.test'
+const EMAIL_NUEVO = 'rq1-5.regresion@soyudemedellin.edu.co'
 const PASSWORD_INICIAL = 'Password123!'
 const PASSWORD_NUEVA = 'NuevaClave456?'
 

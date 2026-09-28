@@ -22,7 +22,7 @@ pipeline {
                     set -e
                     docker --version
                     java -version
-                    docker run --rm node:20-bookworm-slim node --version
+                    docker run --rm node:22-bookworm-slim node --version
                 '''
             }
         }
@@ -36,7 +36,7 @@ pipeline {
                         -e HOME=/tmp \
                         -v jenkins_home:/var/jenkins_home \
                         -w "$WORKSPACE" \
-                        node:20-bookworm-slim \
+                        node:22-bookworm-slim \
                         npm ci
                 '''
             }
@@ -48,15 +48,17 @@ pipeline {
                     sh '''
                         set -e
                         cp "$ENV_FILE" .env
+                        trap 'rm -f .env' EXIT
                         docker run --rm \
                             --user "$(id -u):$(id -g)" \
                             -e HOME=/tmp \
                             -v jenkins_home:/var/jenkins_home \
                             -w "$WORKSPACE" \
-                            node:20-bookworm-slim \
-                            npm test -- \
+                            node:22-bookworm-slim \
+                            npm run test:coverage -- \
+                                --reporter=default \
                                 --reporter=junit \
-                                --outputFile=test-results.xml
+                                --outputFile.junit=test-results.xml
                     '''
                 }
             }
@@ -93,7 +95,6 @@ pipeline {
                 sh '''
                     set -e
                     docker build \
-                        --pull \
                         -t "$IMAGE_NAME:$BUILD_NUMBER" \
                         -t "$IMAGE_NAME:latest" \
                         .

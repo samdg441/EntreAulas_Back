@@ -2,7 +2,7 @@ const { spawnSync } = require('child_process')
 const path = require('path')
 
 const root = path.join(__dirname, '..')
-const vitest = spawnSync('npx', ['vitest', 'run', '--coverage'], {
+const vitest = spawnSync('npx', ['vitest', 'run', '--coverage', ...process.argv.slice(2)], {
   cwd: root,
   stdio: 'inherit',
   shell: true,

@@ -49,7 +49,7 @@ function fakeReq(over: Partial<Request> = {}): Request {
 }
 
 const bodyValido = {
-  email: 'rq1.nuevo@entreaulas.test',
+  email: 'rq1.nuevo@soyudemedellin.edu.co',
   password: 'password123',
   nombre: 'Ana',
   apellido: 'Perez',
@@ -57,7 +57,7 @@ const bodyValido = {
 }
 
 const bodyValidoProfesor = {
-  email: 'rq1.nuevo.profesor@entreaulas.test',
+  email: 'rq1.nuevo.profesor@udemedellin.edu.co',
   password: 'password123',
   nombre: 'Prof',
   apellido: 'Esor',
@@ -174,7 +174,10 @@ class RQ1CrearUsuarioAdmin {
 
   // Nodo 12-14: el email ya está registrado → 400 (cubre crearUsuarioConTipo real, contra la BD real)
   async N14_emailYaRegistrado() {
-    const res = await crearUsuario({ ...bodyValido, email: 'usuario.activo@entreaulas.test' })
+    const primero = await crearUsuario(bodyValido)
+    expect(primero.status).toBe(201)
+
+    const res = await crearUsuario(bodyValido)
     expect(res.status).toBe(400)
     expect(res.body).toEqual({ error: 'El email ya está registrado' })
   }

@@ -266,7 +266,7 @@ describe('RQ31 — Recibir alerta ante indicios de acoso', () => {
     pruebas.N12_conIndiciosArmaAlertaYDocentes())
   it('Nodo 12: varios docentes se ordenan por menciones', () =>
     pruebas.N12_variosDocentesSeOrdenanPorMenciones())
-  it('FALLA N5: sin token — se espera (mal) alerta', () => pruebas.FALLA_N5_sinTokenSeEsperaAlerta())
-  it('FALLA N8: profesor — se espera (mal) alerta', () => pruebas.FALLA_N8_profesorSeEsperaAlerta())
-  it('FALLA N11: textos neutros — se espera (mal) alerta', () => pruebas.FALLA_N11_neutroSeEsperaAlerta())
+  it.fails('FALLA N5: sin token — se espera (mal) alerta', () => pruebas.FALLA_N5_sinTokenSeEsperaAlerta())
+  it.fails('FALLA N8: profesor — se espera (mal) alerta', () => pruebas.FALLA_N8_profesorSeEsperaAlerta())
+  it.fails('FALLA N11: textos neutros — se espera (mal) alerta', () => pruebas.FALLA_N11_neutroSeEsperaAlerta())
 })
