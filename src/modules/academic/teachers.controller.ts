@@ -100,7 +100,7 @@ export class TeachersController {
       if (!tieneRol(req.user, 'estudiante')) {
         throw forbidden('Solo los estudiantes pueden acceder a esta información')
       }
-      res.json(await teachersService.getStudentInfo(req.user.id))
+      res.json(await teachersService.getStudentInfo(req.user!.id))
     } catch (error) {
       return sendError(res, error)
     }
@@ -263,7 +263,7 @@ export class TeachersController {
       if (!tieneRol(req.user, 'estudiante')) {
         throw forbidden('Solo los estudiantes pueden acceder a esta información')
       }
-      res.json(await teachersService.getStudentEnrolledSubjects(req.user.id))
+      res.json(await teachersService.getStudentEnrolledSubjects(req.user!.id))
     } catch (error) {
       if (error instanceof AppError) return sendError(res, error)
       return res.json({ materiasMatriculadas: [], total: 0 })

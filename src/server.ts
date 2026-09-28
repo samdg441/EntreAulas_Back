@@ -28,7 +28,7 @@ async function checkAIConnection() {
   }
 }
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   logger.info(`Server listening on http://localhost:${PORT}`)
   logger.info(`Health check: http://localhost:${PORT}/health`)
   await checkAIConnection()
