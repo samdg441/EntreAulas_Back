@@ -48,15 +48,17 @@ pipeline {
                     sh '''
                         set -e
                         cp "$ENV_FILE" .env
+                        trap 'rm -f .env' EXIT
                         docker run --rm \
                             --user "$(id -u):$(id -g)" \
                             -e HOME=/tmp \
                             -v jenkins_home:/var/jenkins_home \
                             -w "$WORKSPACE" \
                             node:22-bookworm-slim \
-                            npm test -- \
+                            npm run test:coverage -- \
+                                --reporter=default \
                                 --reporter=junit \
-                                --outputFile=test-results.xml
+                                --outputFile.junit=test-results.xml
                     '''
                 }
             }
@@ -176,6 +178,6 @@ pipeline {
                 docker logs "$CONTAINER_NAME" \
                     2>/dev/null || true
             '''
-        }
+        }}
     }
 }
