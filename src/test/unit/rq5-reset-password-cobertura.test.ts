@@ -93,11 +93,14 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     expect(res.body).toEqual({ error: 'Token inválido o ya utilizado' })
   })
 
-  it('N11→N12: error de BD al buscar token → 400 (rama tokenError)', async () => {
+  // shared/supabase-result.ts::one() ya no enmascara errores de BD como "no encontrado":
+  // solo PGRST116 (0 filas) cae en esa rama; cualquier otro error se relanza y, como
+  // buscarTokenDeResetValido no tiene try/catch propio, llega al catch-all → 500.
+  it('N11→N12 (regresión): error de BD al buscar token → 500, ya no se enmascara como 400', async () => {
     fakeDb.fail('password_reset_tokens', { message: 'sin conexión' })
     const res = await reset(bodyOk())
-    expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: 'Token inválido o ya utilizado' })
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
   })
 
   it('N13→N14: token expirado → 400 "El token ha expirado"', async () => {
@@ -116,14 +119,14 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     expect(res.body).toEqual({ error: 'Usuario no encontrado' })
   })
 
-  it('N16→N17: error de BD al buscar usuario → 400 (rama userError)', async () => {
+  it('N16→N17 (regresión): error de BD al buscar usuario → 500, ya no se enmascara como 400', async () => {
     fakeDb.seed('password_reset_tokens', [
       { id: 'k1', token: 't-ok', email: USUARIO.email, used: false, expires_at: futuro },
     ])
     fakeDb.fail('usuarios', { message: 'sin conexión' })
     const res = await reset(bodyOk())
-    expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: 'Usuario no encontrado' })
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
   })
 
   it('N20→N21: falla el UPDATE de la contraseña → 500', async () => {
@@ -131,7 +134,12 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     fakeDb.fail('usuarios', { message: 'update bloqueado' }, 1) // 1ª consulta (buscar) pasa, 2ª (update) falla
     const res = await reset(bodyOk())
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error al actualizar la contraseña' })
+    // El handler envuelve el error real con internal(msg, updateError): sendError expone
+    // ese updateError como `details` (contrato { error, details? } de shared/errors.ts).
+    expect(res.body).toEqual({
+      error: 'Error al actualizar la contraseña',
+      details: { message: 'update bloqueado' },
+    })
   })
 
   it('N23: falla marcar el token como usado → NO corta el flujo, 200', async () => {
@@ -161,6 +169,7 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     })
     const res = await reset(bodyOk())
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor' })
+    // Error genérico (no AppError): sendError usa error.message como `details`.
+    expect(res.body).toEqual({ error: 'Error interno del servidor', details: 'caída inesperada' })
   })
 })

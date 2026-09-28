@@ -22,46 +22,66 @@ const forgot = (email: unknown) =>
   request(app).post('/api/auth/forgot-password').send({ email })
 
 
+interface EstadoSmtp {
+  enData: boolean
+  buffer: string
+}
+
+function procesarComandoSmtp(linea: string, socket: net.Socket, estado: EstadoSmtp, mensajes: string[]): void {
+  const cmd = linea.slice(0, 4).toUpperCase()
+  if (cmd === 'EHLO' || cmd === 'HELO') socket.write('250 buzon-test\r\n')
+  else if (cmd === 'DATA') {
+    socket.write('354 fin con <CRLF>.<CRLF>\r\n')
+    estado.enData = true
+  } else if (cmd === 'QUIT') {
+    socket.write('221 adios\r\n')
+    socket.end()
+  } else {
+    if (cmd === 'MAIL' || cmd === 'RCPT') {
+      mensajes.push(linea.toLowerCase())
+    }
+    socket.write('250 OK\r\n')
+  }
+}
+
+function procesarChunkSmtp(chunk: Buffer, socket: net.Socket, mensajes: string[], estado: EstadoSmtp): void {
+  const texto = chunk.toString('utf8')
+  if (estado.enData) {
+    estado.buffer += texto
+    if (estado.buffer.includes('\r\n.\r\n')) {
+      const decodificado = estado.buffer
+        .replace(/=\r\n/g, '')
+        .replace(/=([0-9A-F]{2})/g, (_m, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+      mensajes.push(decodificado)
+      estado.enData = false
+      estado.buffer = ''
+      socket.write('250 mensaje aceptado\r\n')
+    }
+    return
+  }
+  for (const linea of texto.split('\r\n').filter(Boolean)) {
+    procesarComandoSmtp(linea, socket, estado, mensajes)
+  }
+}
+
+function manejarConexionSmtp(socket: net.Socket, mensajes: string[]): void {
+  const estado: EstadoSmtp = { enData: false, buffer: '' }
+  socket.write('220 buzon-test\r\n')
+  socket.on('data', (chunk) => procesarChunkSmtp(chunk, socket, mensajes, estado))
+  socket.on('error', () => undefined)
+}
+
+function cerrarServidorSmtp(server: net.Server): Promise<void> {
+  return new Promise<void>((resolve) => server.close(() => resolve()))
+}
+
 function iniciarBuzonSmtp(): Promise<{ puerto: number; mensajes: string[]; cerrar: () => Promise<void> }> {
   const mensajes: string[] = []
+  const server = net.createServer((socket) => manejarConexionSmtp(socket, mensajes))
   return new Promise((resolve) => {
-    const server = net.createServer((socket) => {
-      let enData = false
-      let buffer = ''
-      socket.write('220 buzon-test\r\n')
-      socket.on('data', (chunk) => {
-        const texto = chunk.toString('utf8')
-        if (enData) {
-          buffer += texto
-          if (buffer.includes('\r\n.\r\n')) {
-            mensajes.push(buffer)
-            enData = false
-            buffer = ''
-            socket.write('250 mensaje aceptado\r\n')
-          }
-          return
-        }
-        for (const linea of texto.split('\r\n').filter(Boolean)) {
-          const cmd = linea.slice(0, 4).toUpperCase()
-          if (cmd === 'EHLO' || cmd === 'HELO') socket.write('250 buzon-test\r\n')
-          else if (cmd === 'DATA') {
-            socket.write('354 fin con <CRLF>.<CRLF>\r\n')
-            enData = true
-          } else if (cmd === 'QUIT') {
-            socket.write('221 adios\r\n')
-            socket.end()
-          } else socket.write('250 OK\r\n')
-        }
-      })
-      socket.on('error', () => undefined)
-    })
     server.listen(0, '127.0.0.1', () => {
       const dir = server.address() as net.AddressInfo
-      resolve({
-        puerto: dir.port,
-        mensajes,
-        cerrar: () => new Promise<void>((r) => server.close(() => r())),
-      })
+      resolve({ puerto: dir.port, mensajes, cerrar: () => cerrarServidorSmtp(server) })
     })
   })
 }

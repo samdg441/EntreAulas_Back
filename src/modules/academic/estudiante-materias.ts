@@ -55,9 +55,9 @@ export function etiquetaPeriodo(periodo?: {
     return { id: null, nombre: null, codigo: null }
   }
   const codigoExistente = texto(periodo.codigo)
-  const codigo =
-    codigoExistente ||
-    (periodo.ano != null && periodo.semestre != null ? `${periodo.ano}-${periodo.semestre}` : '')
+  const ano = escalar(periodo.ano)
+  const semestre = escalar(periodo.semestre)
+  const codigo = codigoExistente || (ano && semestre ? `${ano}-${semestre}` : '')
   const nombreExistente = texto(periodo.nombre)
   return {
     id: periodo.id ?? null,
@@ -151,6 +151,12 @@ function asRecord(valor: unknown): Record<string, unknown> | null {
 
 function texto(valor: unknown): string {
   return typeof valor === 'string' ? valor.trim() : ''
+}
+
+function escalar(valor: unknown): string {
+  if (typeof valor === 'string') return valor.trim()
+  if (typeof valor === 'number' && Number.isFinite(valor)) return String(valor)
+  return ''
 }
 
 function nombrePersona(usuario?: Record<string, unknown>): string {

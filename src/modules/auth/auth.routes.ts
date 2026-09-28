@@ -14,6 +14,7 @@ import {
   sendError,
   unauthorized,
 } from '../../shared/errors'
+import { normalizarCorreoInstitucional } from './correo-institucional'
 
 const router = Router()
 
@@ -367,7 +368,7 @@ router.get('/me', async (req, res) => {
   try {
     // Obtener el token del header Authorization
     const authHeader = req.headers.authorization
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw unauthorized('Token de autorización requerido')
     }
 
@@ -379,7 +380,7 @@ router.get('/me', async (req, res) => {
     // Buscar el usuario en la base de datos
     const user = await authRepository.findUserByEmail(decoded.email)
 
-    if (!user || !user.activo) {
+    if (!user?.activo) {
       throw unauthorized('Usuario no encontrado o inactivo')
     }
 
@@ -478,7 +479,9 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       throw badRequest('La contraseña debe tener al menos 8 caracteres')
     }
 
-    const existingUser = await authRepository.findUserByEmail(email)
+    const correoInstitucional = normalizarCorreoInstitucional(email, tipo_usuario)
+
+    const existingUser = await authRepository.findUserByEmail(correoInstitucional)
     if (existingUser) {
       throw badRequest('El email ya está registrado')
     }
@@ -487,7 +490,7 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
 
     // Crear usuario con inserción automática en tabla específica
     const user = await authRepository.createUserWithType({
-      email,
+      email: correoInstitucional,
       password: hashedPassword,
       nombre,
       apellido,

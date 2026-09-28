@@ -1,16 +1,128 @@
-import { calcularPromedio, esPeriodoValido, rangoFechasPeriodo, resumenMetricas } from './calificaciones'
+import {
+  calcularPromedio,
+  esPeriodoValido,
+  rangoFechasPeriodo,
+  resumenMetricas,
+  textoPeriodo,
+} from './calificaciones'
 import { analyticsRepository } from './analytics.repository'
 import { teachersRepository } from '../academic/teachers.repository'
 import { academicRepository } from '../academic/academic.repository'
 import { badRequest, internal, notFound } from '../../shared/errors'
 
-function filtroFechas(period: unknown): { gte?: string; lte?: string } {
-  let dateFilter: { gte?: string; lte?: string } = {}
-  if (period) {
-    const rango = rangoFechasPeriodo(String(period))
-    if (rango) dateFilter = { gte: rango.start, lte: rango.end }
+export function filtroFechas(period: unknown): { gte?: string; lte?: string } {
+  const texto = textoPeriodo(period)
+  if (!texto) return {}
+  const rango = rangoFechasPeriodo(texto)
+  if (!rango) return {}
+  return { gte: rango.start, lte: rango.end }
+}
+
+export function comoLista<T = any>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
+}
+
+export function idsUnicos(values: any[]) {
+  return Array.from(new Set(values))
+}
+
+async function dbOError<T>(etiqueta: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    throw internal(etiqueta, err)
   }
-  return dateFilter
+}
+
+async function dbOValor<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn()
+  } catch {
+    return fallback
+  }
+}
+
+export function idComoTexto(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number') return String(value)
+  return ''
+}
+
+export function debeFiltrarPorCurso(courseId: unknown, evals: any[]) {
+  return Boolean(courseId) && evals.length > 0
+}
+
+export function evaluacionDelCurso(evaluacion: any, grupoToCurso: Record<string, unknown>, courseId: unknown) {
+  return idComoTexto(grupoToCurso[evaluacion.grupo_id]) === idComoTexto(courseId)
+}
+
+export function mapaPorCampo(items: any[], campo: string) {
+  const mapa: Record<string, unknown> = {}
+  comoLista(items).forEach((item: any) => {
+    mapa[item.id] = item[campo]
+  })
+  return mapa
+}
+
+async function filtrarEvaluacionesPorCurso(evals: any[], courseId: unknown) {
+  if (!debeFiltrarPorCurso(courseId, evals)) return evals
+  const grupoIds = idsUnicos(evals.map((e: any) => e.grupo_id).filter(Boolean))
+  const grupos = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id')
+  const grupoToCurso = mapaPorCampo(grupos, 'curso_id')
+  return evals.filter((e: any) => evaluacionDelCurso(e, grupoToCurso, courseId))
+}
+
+async function cargarRespuestas(evaluacionIds: any[]) {
+  try {
+    return await analyticsRepository.listRespuestasByEvaluacionIds(
+      evaluacionIds,
+      'evaluacion_id, pregunta_id, respuesta_rating'
+    )
+  } catch {
+    return dbOError('Error obteniendo respuestas', () =>
+      analyticsRepository.listRespuestasByEvaluacionIds(
+        evaluacionIds,
+        'evaluacion_id, pregunta_id, valor'
+      )
+    )
+  }
+}
+
+export function ratingRespuesta(respuesta: any) {
+  return Number(respuesta.respuesta_rating ?? respuesta.valor ?? 0)
+}
+
+export function ratingValido(rating: number) {
+  return Number.isFinite(rating) && rating > 0
+}
+
+export function acumularPorCategoria(respuestas: any[], preguntaToCategoria: Record<string, unknown>) {
+  const acumulado: Record<string, { sum: number; count: number }> = {}
+  comoLista(respuestas).forEach((r: any) => {
+    const catId = preguntaToCategoria[r.pregunta_id] as string | undefined
+    if (!catId) return
+    if (!acumulado[catId]) acumulado[catId] = { sum: 0, count: 0 }
+    const rating = ratingRespuesta(r)
+    if (!ratingValido(rating)) return
+    acumulado[catId].sum += rating
+    acumulado[catId].count += 1
+  })
+  return acumulado
+}
+
+export function promedioCategoria(sum: number, count: number) {
+  if (count <= 0) return 0
+  return Number((sum / count).toFixed(2))
+}
+
+export function mapearStatsCategoria(
+  acumulado: Record<string, { sum: number; count: number }>,
+  categoriaInfo: Record<string, unknown>
+) {
+  return Object.keys(acumulado).map((catId) => ({
+    categoriaId: Number(catId),
+    nombre: categoriaInfo[catId] || `Categoría ${catId}`,
+    promedio: promedioCategoria(acumulado[catId].sum, acumulado[catId].count),
+  }))
 }
 
 async function mapaGrupoYCurso(evals: any[], columnasGrupos = 'id, curso_id, numero_grupo') {
@@ -36,7 +148,7 @@ async function mapaGrupoYCurso(evals: any[], columnasGrupos = 'id, curso_id, num
   return { grupos: Array.isArray(grupos) ? grupos : [], grupoToCurso, cursoInfo }
 }
 
-function agruparEvaluacionesPorCurso(evals: any[], grupoToCurso: any, cursoInfo: any) {
+export function agruparEvaluacionesPorCurso(evals: any[], grupoToCurso: any, cursoInfo: any) {
   const evaluacionesPorCurso =
     evals?.reduce((acc: any, evaluacion: any) => {
       const cursoId = grupoToCurso[evaluacion.grupo_id]
@@ -67,7 +179,7 @@ function agruparEvaluacionesPorCurso(evals: any[], grupoToCurso: any, cursoInfo:
   return evaluacionesPorCurso
 }
 
-function filtrarCarrerasSinTronco(carreras: any[]) {
+export function filtrarCarrerasSinTronco(carreras: any[]) {
   return (carreras || []).filter((c: any) => {
     const nombre = String(c.nombre || '').toLowerCase()
     if (nombre.includes('tronco común') || nombre.includes('tronco comun')) return false
@@ -108,22 +220,22 @@ export class TeachersAnalyticsService {
       cursoInfoStats
     )
 
-    const evaluacionesRecientes =
-      evalsArrayStats
-        ?.sort((a, b) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime())
-        ?.slice(0, 5)
-        ?.map((evaluacion) => {
-          const cursoId = grupoToCursoStats[evaluacion.grupo_id]
-          const cursoData = cursoInfoStats[cursoId] as any
-          return {
-            id: evaluacion.id,
-            curso: cursoData?.nombre || 'Curso desconocido',
-            codigo: cursoData?.codigo || 'N/A',
-            grupo: '-',
-            calificacion: evaluacion.calificacion_promedio,
-            fecha: evaluacion.fecha_creacion,
-          }
-        }) || []
+    const evaluacionesOrdenadas = [...evalsArrayStats]
+    evaluacionesOrdenadas.sort(
+      (a, b) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime()
+    )
+    const evaluacionesRecientes = evaluacionesOrdenadas.slice(0, 5).map((evaluacion) => {
+      const cursoId = grupoToCursoStats[evaluacion.grupo_id]
+      const cursoData = cursoInfoStats[cursoId] as any
+      return {
+        id: evaluacion.id,
+        curso: cursoData?.nombre || 'Curso desconocido',
+        codigo: cursoData?.codigo || 'N/A',
+        grupo: '-',
+        calificacion: evaluacion.calificacion_promedio,
+        fecha: evaluacion.fecha_creacion,
+      }
+    })
 
     return {
       totalEvaluaciones: metricas.totalEvaluaciones,
@@ -140,13 +252,7 @@ export class TeachersAnalyticsService {
     const profesor = profesorDebug
 
     if (!profesor) {
-      let mockDateFilter: { gte?: string; lte?: string } = {}
-      if (period) {
-        const rango = rangoFechasPeriodo(String(period))
-        if (rango) {
-          mockDateFilter = { gte: rango.start, lte: rango.end }
-        }
-      }
+      const mockDateFilter = filtroFechas(period)
       return {
         period: period || 'all',
         totalEvaluaciones: 0,
@@ -170,10 +276,11 @@ export class TeachersAnalyticsService {
 
     let dateFilter: { gte?: string; lte?: string } = {}
     if (period) {
-      if (!esPeriodoValido(String(period))) {
+      const texto = textoPeriodo(period)
+      if (!esPeriodoValido(texto)) {
         throw badRequest('Período inválido. Use YYYY-1 o YYYY-2.')
       }
-      const rango = rangoFechasPeriodo(String(period))
+      const rango = rangoFechasPeriodo(texto)
       if (rango) {
         dateFilter = { gte: rango.start, lte: rango.end }
       }
@@ -249,7 +356,7 @@ export class TeachersAnalyticsService {
       grupoToCursoRating[g.id] = g.curso_id
     })
     evaluaciones = (evaluaciones || []).filter(
-      (e: any) => String(e.curso_id ?? grupoToCursoRating[e.grupo_id]) === String(courseId)
+      (e: any) => idComoTexto(e.curso_id ?? grupoToCursoRating[e.grupo_id]) === idComoTexto(courseId)
     )
 
     if (!evaluaciones || evaluaciones.length === 0) {
@@ -554,7 +661,7 @@ export class TeachersAnalyticsService {
 
     let gruposEvaluados
     try {
-      gruposEvaluados = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id')
+      gruposEvaluados = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id, numero_grupo')
     } catch (gruposError) {
       throw internal(
         'Error obteniendo grupos de evaluaciones',
@@ -563,8 +670,10 @@ export class TeachersAnalyticsService {
     }
 
     const grupoToCurso = new Map<any, any>()
+    const grupoById = new Map<any, any>()
     ;(gruposEvaluados || []).forEach((g: any) => {
       grupoToCurso.set(g.id, g.curso_id)
+      grupoById.set(g.id, g)
     })
 
     const cursoIdsFromEvals = Array.from(
@@ -581,7 +690,31 @@ export class TeachersAnalyticsService {
 
     const cursosActivosSet = new Set((asignacionesActivas || []).map((a: any) => a.curso_id).filter(Boolean))
     const gruposActivosSet = new Set((asignacionesActivas || []).map((a: any) => a.grupo_id).filter(Boolean))
-    const cursoIdsToFetch = Array.from(new Set([...cursoIdsFromEvals, ...Array.from(cursosActivosSet)]))
+    const gruposSinDatos = Array.from(gruposActivosSet).filter((id) => !grupoById.has(id))
+    if (gruposSinDatos.length > 0) {
+      try {
+        const gruposAsignados = await analyticsRepository.getGruposByIds(
+          gruposSinDatos,
+          'id, curso_id, numero_grupo'
+        )
+        ;(gruposAsignados || []).forEach((g: any) => {
+          grupoToCurso.set(g.id, g.curso_id)
+          grupoById.set(g.id, g)
+        })
+      } catch (gruposError) {
+        throw internal(
+          'Error obteniendo grupos asignados',
+          (gruposError as Error)?.message ?? gruposError
+        )
+      }
+    }
+    const cursoIdsToFetch = Array.from(
+      new Set([
+        ...cursoIdsFromEvals,
+        ...Array.from(cursosActivosSet),
+        ...Array.from(grupoById.values()).map((g: any) => g.curso_id).filter(Boolean),
+      ])
+    )
 
     let cursosInfo: any[]
     try {
@@ -624,6 +757,33 @@ export class TeachersAnalyticsService {
       })
       .sort((a, b) => b.total - a.total)
 
+    const perGrupoAccumulator = new Map<any, { total: number; sum: number }>()
+    evaluacionesArray.forEach((e: any) => {
+      if (!grupoById.has(e.grupo_id)) return
+      const current = perGrupoAccumulator.get(e.grupo_id) || { total: 0, sum: 0 }
+      current.total += 1
+      current.sum += Number(e.calificacion_promedio || 0)
+      perGrupoAccumulator.set(e.grupo_id, current)
+    })
+
+    const evaluacionesPorGrupo = Array.from(grupoById.values())
+      .map((grupo: any) => {
+        const values = perGrupoAccumulator.get(grupo.id) || { total: 0, sum: 0 }
+        const curso = cursoById.get(grupo.curso_id)
+        return {
+          grupo_id: grupo.id,
+          curso_id: grupo.curso_id,
+          numero_grupo: grupo.numero_grupo,
+          nombre: curso?.nombre || 'Curso',
+          total: values.total,
+          encuestasRespondidas: values.total,
+          promedio: values.total > 0 ? Number((values.sum / values.total).toFixed(2)) : 0,
+        }
+      })
+      .sort((a, b) =>
+        String(a.numero_grupo ?? '').localeCompare(String(b.numero_grupo ?? ''), 'es', { numeric: true })
+      )
+
     const cursosImpartidos = Math.max(cursosActivosSet.size, evaluacionesPorCurso.length)
 
     return {
@@ -632,6 +792,7 @@ export class TeachersAnalyticsService {
       cursosImpartidos,
       totalGruposImpartidos: gruposActivosSet.size,
       evaluacionesPorCurso,
+      evaluacionesPorGrupo,
     }
   }
 
@@ -664,7 +825,7 @@ export class TeachersAnalyticsService {
         : 0
 
     const evalsArray: any[] = Array.isArray(evaluaciones) ? (evaluaciones as any[]) : []
-    const { grupoToCurso, cursoInfo: periodCursoMap } = await mapaGrupoYCurso(evalsArray, 'id, curso_id')
+    const { grupos, grupoToCurso, cursoInfo: periodCursoMap } = await mapaGrupoYCurso(evalsArray, 'id, curso_id, numero_grupo')
 
     const evaluacionesPorCursoMap: any = {}
     evalsArray.forEach((e: any) => {
@@ -697,6 +858,29 @@ export class TeachersAnalyticsService {
       })
     }
 
+    const grupoInfo = new Map((Array.isArray(grupos) ? grupos : []).map((g: any) => [String(g.id), g]))
+    const porGrupo = new Map<string, { total: number; sum: number }>()
+    evalsArray.forEach((e: any) => {
+      const id = String(e.grupo_id || '')
+      if (!id || !grupoInfo.has(id)) return
+      const current = porGrupo.get(id) || { total: 0, sum: 0 }
+      current.total += 1
+      current.sum += Number(e.calificacion_promedio || 0)
+      porGrupo.set(id, current)
+    })
+    const evaluacionesPorGrupo = Array.from(porGrupo.entries()).map(([grupoId, values]) => {
+      const grupo = grupoInfo.get(grupoId)
+      const curso = periodCursoMap[grupo?.curso_id]
+      return {
+        grupo_id: grupo?.id,
+        curso_id: grupo?.curso_id,
+        numero_grupo: grupo?.numero_grupo,
+        nombre: curso?.nombre || 'Curso',
+        total: values.total,
+        promedio: values.total > 0 ? Number((values.sum / values.total).toFixed(2)) : 0,
+      }
+    })
+
     let cursosImpartidos: any[] = []
     try {
       const asignaciones = await academicRepository.listAsignacionesByProfesorIds([profesor.id])
@@ -710,104 +894,51 @@ export class TeachersAnalyticsService {
       calificacionPromedio: Number(calificacionPromedio.toFixed(2)),
       totalCursos: cursosImpartidos?.length || 0,
       evaluacionesPorCurso,
+      evaluacionesPorGrupo,
       period: period || 'all',
     }
   }
 
-  async getPeriodCategoryStats(usuarioId: string, period: unknown, courseId: unknown) {
+  async getPeriodCategoryStats(usuarioId: string, period: unknown, courseId: unknown, grupoId: unknown) {
     const profesor = await teachersRepository.findByUsuarioId(usuarioId)
     if (!profesor) {
       throw notFound('Profesor no encontrado')
     }
 
     const dateFilter = filtroFechas(period)
-    let evaluaciones
-    try {
-      evaluaciones = await analyticsRepository.getCompletedInPeriod(
+    const evaluaciones = await dbOError('Error obteniendo evaluaciones', () =>
+      analyticsRepository.getCompletedInPeriod(
         profesor.id,
         dateFilter.gte || '2020-01-01',
         dateFilter.lte || '2030-12-31'
       )
-    } catch (evalError) {
-      throw internal('Error obteniendo evaluaciones', evalError)
-    }
+    )
 
-    let evalsArray: any[] = Array.isArray(evaluaciones) ? (evaluaciones as any[]) : []
-    if (courseId && evalsArray.length > 0) {
-      const grupoIds = Array.from(new Set(evalsArray.map((e: any) => e.grupo_id).filter(Boolean)))
-      const grupos = await analyticsRepository.getGruposByIds(grupoIds, 'id, curso_id')
-      const grupoToCurso: any = {}
-      ;(Array.isArray(grupos) ? grupos : []).forEach((g: any) => {
-        grupoToCurso[g.id] = g.curso_id
-      })
-      evalsArray = evalsArray.filter((e: any) => String(grupoToCurso[e.grupo_id]) === String(courseId))
+    let evalsArray = await filtrarEvaluacionesPorCurso(comoLista(evaluaciones), courseId)
+    if (grupoId && String(grupoId) !== 'all') {
+      evalsArray = evalsArray.filter((e: any) => String(e.grupo_id) === String(grupoId))
     }
-
-    const evaluacionIds = Array.from(new Set(evalsArray.map((e: any) => e.id)))
+    const evaluacionIds = idsUnicos(evalsArray.map((e: any) => e.id))
     if (evaluacionIds.length === 0) return []
 
-    let respuestas: any[] = []
-    try {
-      respuestas = await analyticsRepository.listRespuestasByEvaluacionIds(
-        evaluacionIds,
-        'evaluacion_id, pregunta_id, respuesta_rating'
-      )
-    } catch {
-      try {
-        respuestas = await analyticsRepository.listRespuestasByEvaluacionIds(
-          evaluacionIds,
-          'evaluacion_id, pregunta_id, valor'
-        )
-      } catch (fallbackError) {
-        throw internal('Error obteniendo respuestas', fallbackError)
-      }
-    }
-
-    const preguntaIds = Array.from(new Set(((respuestas as any[]) || []).map((r: any) => r.pregunta_id)))
+    const respuestas = await cargarRespuestas(evaluacionIds)
+    const preguntaIds = idsUnicos(comoLista(respuestas).map((r: any) => r.pregunta_id))
     if (preguntaIds.length === 0) return []
 
-    let catPreg: any[]
-    try {
-      catPreg = await analyticsRepository.listPreguntasByIds(preguntaIds, 'id, categoria_id')
-    } catch (catPregError) {
-      throw internal('Error obteniendo categorías de preguntas', catPregError)
-    }
-    const preguntaToCategoria: any = {}
-    ;(Array.isArray(catPreg) ? catPreg : []).forEach((cp: any) => {
-      preguntaToCategoria[cp.id] = cp.categoria_id
-    })
-
-    const categoriaIds = Array.from(
-      new Set(((catPreg as any[]) || []).map((cp: any) => cp.categoria_id).filter(Boolean))
+    const catPreg = await dbOError('Error obteniendo categorías de preguntas', () =>
+      analyticsRepository.listPreguntasByIds(preguntaIds, 'id, categoria_id')
     )
-    let categorias: any[] = []
-    try {
-      categorias = await analyticsRepository.listCategoriasByIds(categoriaIds, 'id, nombre')
-    } catch {
-      categorias = []
-    }
-    const categoriaInfo: any = {}
-    ;(Array.isArray(categorias) ? categorias : []).forEach((c: any) => {
-      categoriaInfo[c.id] = c.nombre
-    })
+    const preguntaToCategoria = mapaPorCampo(catPreg, 'categoria_id')
+    const categoriaIds = idsUnicos(comoLista(catPreg).map((cp: any) => cp.categoria_id).filter(Boolean))
+    const categorias = await dbOValor(
+      () => analyticsRepository.listCategoriasByIds(categoriaIds, 'id, nombre'),
+      []
+    )
 
-    const acumulado: any = {}
-    ;(Array.isArray(respuestas) ? (respuestas as any[]) : []).forEach((r: any) => {
-      const catId = preguntaToCategoria[r.pregunta_id]
-      if (!catId) return
-      if (!acumulado[catId]) acumulado[catId] = { sum: 0, count: 0 }
-      const rating = Number(r.respuesta_rating ?? r.valor ?? 0)
-      if (!Number.isFinite(rating) || rating <= 0) return
-      acumulado[catId].sum += rating
-      acumulado[catId].count += 1
-    })
-
-    return Object.keys(acumulado).map((catId: any) => ({
-      categoriaId: Number(catId),
-      nombre: categoriaInfo[catId] || `Categoría ${catId}`,
-      promedio:
-        acumulado[catId].count > 0 ? Number((acumulado[catId].sum / acumulado[catId].count).toFixed(2)) : 0,
-    }))
+    return mapearStatsCategoria(
+      acumularPorCategoria(respuestas, preguntaToCategoria),
+      mapaPorCampo(categorias, 'nombre')
+    )
   }
 }
 

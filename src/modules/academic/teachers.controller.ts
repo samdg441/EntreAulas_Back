@@ -7,6 +7,7 @@ import {
   forbidden,
   sendError,
 } from '../../shared/errors'
+import { tieneRol } from '../../shared/tiene-rol'
 
 const teacherIdSchema = z.union([
   z.string().uuid('ID de profesor inválido'),
@@ -44,11 +45,10 @@ function esDecano(user: { roles?: string[] } | undefined) {
   return Boolean(user?.roles?.includes('decano'))
 }
 
-function puedeComoProfesor(user: { tipo_usuario?: string } | undefined) {
+function puedeComoProfesor(user: { tipo_usuario?: string; roles?: string[] } | undefined) {
   return (
-    user?.tipo_usuario === 'profesor' ||
-    user?.tipo_usuario === 'docente' ||
-    user?.tipo_usuario === 'coordinador'
+    tieneRol(user, 'profesor') ||
+    tieneRol(user, 'coordinador')
   )
 }
 
@@ -97,7 +97,7 @@ export class TeachersController {
 
   static async getStudentInfo(req: Request, res: Response) {
     try {
-      if (req.user?.tipo_usuario !== 'estudiante') {
+      if (!tieneRol(req.user, 'estudiante')) {
         throw forbidden('Solo los estudiantes pueden acceder a esta información')
       }
       res.json(await teachersService.getStudentInfo(req.user.id))
@@ -260,7 +260,7 @@ export class TeachersController {
 
   static async getStudentEnrolledSubjects(req: Request, res: Response) {
     try {
-      if (req.user?.tipo_usuario !== 'estudiante') {
+      if (!tieneRol(req.user, 'estudiante')) {
         throw forbidden('Solo los estudiantes pueden acceder a esta información')
       }
       res.json(await teachersService.getStudentEnrolledSubjects(req.user.id))
@@ -272,7 +272,7 @@ export class TeachersController {
 
   static async getTeacherCourses(req: Request, res: Response) {
     try {
-      if (req.user?.tipo_usuario !== 'profesor') {
+      if (!tieneRol(req.user, 'profesor')) {
         throw forbidden('Solo los profesores pueden acceder a estos datos')
       }
       res.json(await teachersService.getTeacherCourses(req.params.teacherId))
@@ -283,7 +283,7 @@ export class TeachersController {
 
   static async getTeacherId(req: Request, res: Response) {
     try {
-      if (req.user?.tipo_usuario !== 'profesor') {
+      if (!tieneRol(req.user, 'profesor')) {
         throw forbidden('Solo los profesores pueden acceder a este endpoint')
       }
       res.json(await teachersService.getTeacherId(req.user!.id))

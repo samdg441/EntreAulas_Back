@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken } from '../../middleware/auth'
 import { teachersAnalyticsService } from './teachers-analytics.service'
+import { tieneRol } from '../../shared/tiene-rol'
 import { forbidden, sendError } from '../../shared/errors'
 
 const router = Router()
@@ -55,7 +56,7 @@ router.get('/career-results/:careerId', authenticateToken, async (req: any, res)
 
 router.get('/student-stats', authenticateToken, async (req: any, res) => {
   try {
-    if (req.user.tipo_usuario !== 'estudiante') {
+    if (!tieneRol(req.user, 'estudiante')) {
       throw forbidden('Solo los estudiantes pueden acceder a estas estadísticas')
     }
     res.json(await teachersAnalyticsService.getStudentStats(req.user.id))
@@ -66,7 +67,7 @@ router.get('/student-stats', authenticateToken, async (req: any, res) => {
 
 router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res) => {
   try {
-    if (req.user.tipo_usuario !== 'profesor') {
+    if (!tieneRol(req.user, 'profesor')) {
       throw forbidden('Solo los profesores pueden acceder a estas estadísticas')
     }
     res.json(await teachersAnalyticsService.getTeacherStats(req.params.teacherId))
@@ -77,7 +78,7 @@ router.get('/teacher-stats/:teacherId', authenticateToken, async (req: any, res)
 
 router.get('/period-stats', authenticateToken, async (req: any, res) => {
   try {
-    if (req.user.tipo_usuario !== 'profesor') {
+    if (!tieneRol(req.user, 'profesor')) {
       throw forbidden('Solo los profesores pueden acceder a estas estadísticas')
     }
     res.json(await teachersAnalyticsService.getPeriodStats(req.user.id, req.query.period))
@@ -88,14 +89,15 @@ router.get('/period-stats', authenticateToken, async (req: any, res) => {
 
 router.get('/period-category-stats', authenticateToken, async (req: any, res) => {
   try {
-    if (req.user.tipo_usuario !== 'profesor') {
+    if (!tieneRol(req.user, 'profesor')) {
       throw forbidden('Solo los profesores pueden acceder a estas estadísticas')
     }
     res.json(
       await teachersAnalyticsService.getPeriodCategoryStats(
         req.user.id,
         req.query.period,
-        req.query.courseId
+        req.query.courseId,
+        req.query.grupoId
       )
     )
   } catch (error) {

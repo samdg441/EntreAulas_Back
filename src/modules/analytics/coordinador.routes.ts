@@ -57,7 +57,12 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     if (!esCoordinador(req.user)) {
       throw forbidden('Solo coordinadores pueden acceder a esta información.')
     }
-    res.json(await coordinadorService.getReportsOverview(req.user.id, req.query?.period))
+    res.json(
+      await coordinadorService.getReportsOverview(req.user.id, req.query?.period, {
+        courseId: req.query?.courseId,
+        grupoId: req.query?.grupoId,
+      })
+    )
   } catch (error) {
     return sendError(res, error)
   }

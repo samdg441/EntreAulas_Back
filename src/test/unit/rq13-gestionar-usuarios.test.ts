@@ -11,6 +11,7 @@ import {
   validarActualizacionUsuario,
   validarCamposCreacionUsuario,
 } from '../helpers/gestionar-usuarios'
+import { RQ10UpdateUserHelpers } from '../helpers/actualizar-usuario'
 
 /**
  * RQ13 — Gestionar usuarios
@@ -90,17 +91,21 @@ class RQ13GestionarUsuarios {
   N9_camposFaltantes() {
     const { password: _p, ...sinPassword } = BODY_ALTA_VALIDO
     const r = validarCamposCreacionUsuario(sinPassword)
-    expect(r.ok).toBe(false)
-    expect(r.status).toBe(400)
-    expect(r.error).toBe('Todos los campos son requeridos')
+    expect(r).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'Todos los campos son requeridos',
+    })
   }
 
   // Nodo 7-9: password < 8 → 400
   N9_passwordCorta() {
     const r = validarCamposCreacionUsuario({ ...BODY_ALTA_VALIDO, password: 'corta12' })
-    expect(r.ok).toBe(false)
-    expect(r.status).toBe(400)
-    expect(r.error).toBe('La contraseña debe tener al menos 8 caracteres')
+    expect(r).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'La contraseña debe tener al menos 8 caracteres',
+    })
   }
 
   // Nodo 7-9: email duplicado → 400
@@ -112,9 +117,11 @@ class RQ13GestionarUsuarios {
       emailYaExiste: true,
       body: BODY_ALTA_VALIDO,
     })
-    expect(r.ok).toBe(false)
-    expect(r.status).toBe(400)
-    expect(r.error).toBe('El email ya está registrado')
+    expect(r).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'El email ya está registrado',
+    })
   }
 
   // Nodo 10: hash bcrypt 12 rounds
@@ -344,9 +351,24 @@ describe('RQ13 — Gestionar usuarios', () => {
   it('Nodo 16-14: DELETE inexistente → 404', () => pruebas.N14_deleteNoExiste())
   it('Nodo 16-14: auto-desactivación → 400', () => pruebas.N14_autoDesactivacion())
   it('Nodo 16-17: DELETE a otro → 200 activo=false', () => pruebas.N17_desactivado())
-  it('FALLA N5: no admin — se espera (mal) 201', () => pruebas.FALLA_N5_sinAdminSeEspera201())
-  it('FALLA N9: email duplicado — se espera (mal) 201', () => pruebas.FALLA_N9_emailDuplicadoSeEspera201())
-  it('FALLA N14: tipo inválido — se espera (mal) 200', () => pruebas.FALLA_N14_tipoInvalidoSeEspera200())
-  it('FALLA N14: auto-desactivar — se espera (mal) 200', () =>
+  it.fails('FALLA N5: no admin — se espera (mal) 201', () => pruebas.FALLA_N5_sinAdminSeEspera201())
+  it.fails('FALLA N9: email duplicado — se espera (mal) 201', () =>
+    pruebas.FALLA_N9_emailDuplicadoSeEspera201())
+  it.fails('FALLA N14: tipo inválido — se espera (mal) 200', () =>
+    pruebas.FALLA_N14_tipoInvalidoSeEspera200())
+  it.fails('FALLA N14: auto-desactivar — se espera (mal) 200', () =>
     pruebas.FALLA_N14_autoDesactivarSeEspera200())
+})
+
+const updateUser = new RQ10UpdateUserHelpers()
+
+describe('RQ10 — helpers de updateUser (sin mocks)', () => {
+  it('body vacío, undefined o solo espacios → sin updates', () => updateUser.bodyVacioOUndefined())
+  it('tipo_usuario no string se ignora', () => updateUser.ignoraCamposNoString())
+  it('tipo_usuario inválido → 400', () => updateUser.tipoUsuarioInvalido())
+  it('tipo_usuario válido se asigna', () => updateUser.tipoUsuarioValido())
+  it('password corta falla y vacía/no string se ignora', () => updateUser.passwordCortaOVacia())
+  it('password válida se hashea con bcrypt', () => updateUser.passwordValidaSeHashea())
+  it('arma email, apellido, tipo y activo', () => updateUser.armaPayloadDeActualizacion())
+  it('email propio, igual o libre pasa; el de otro falla', () => updateUser.emailDisponibleOConflicto())
 })

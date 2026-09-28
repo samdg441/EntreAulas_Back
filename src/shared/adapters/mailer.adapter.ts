@@ -9,6 +9,7 @@ export interface MailOptions {
   subject: string
   text?: string
   html?: string
+  encoding?: string
 }
 
 export interface MailerPort {
@@ -36,6 +37,7 @@ class NodemailerAdapter implements MailerPort {
       subject: opts.subject,
       text: opts.text,
       html: opts.html,
+      encoding: opts.encoding,
     })
   }
 }

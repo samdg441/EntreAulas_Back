@@ -60,7 +60,7 @@ export function sendError(res: Response, error: unknown): Response {
 
 /** Evita try/catch en cada handler: los throw AppError llegan a sendError. */
 export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown> | unknown
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch((error) => sendError(res, error))

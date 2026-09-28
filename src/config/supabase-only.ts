@@ -393,17 +393,27 @@ export class SupabaseDB {
     departamento?: string
     activo?: boolean
   }) {
-    const { data, error } = await supabaseAdmin
+    // El trigger `trigger_insert_user_type` (supabase-triggers.sql) ya inserta
+    // esta fila al crear el usuario; si llegó primero, actualizamos en vez de
+    // insertar de nuevo
+    const campos = {
+      codigo: professorData.codigo || null,
+      departamento: professorData.departamento || null,
+      activo: professorData.activo !== undefined ? professorData.activo : true
+    }
+
+    const { data: existente } = await supabaseAdmin
       .from('profesores')
-      .insert([{
-        usuario_id: professorData.usuario_id,
-        codigo: professorData.codigo || null,
-        departamento: professorData.departamento || null,
-        activo: professorData.activo !== undefined ? professorData.activo : true
-      }])
-      .select()
-      .single()
-    
+      .select('id')
+      .eq('usuario_id', professorData.usuario_id)
+      .maybeSingle()
+
+    const query = existente
+      ? supabaseAdmin.from('profesores').update(campos).eq('usuario_id', professorData.usuario_id)
+      : supabaseAdmin.from('profesores').insert([{ usuario_id: professorData.usuario_id, ...campos }])
+
+    const { data, error } = await query.select().single()
+
     if (error) throw error
     return data
   }
@@ -416,18 +426,27 @@ export class SupabaseDB {
     semestre?: string
     activo?: boolean
   }) {
-    const { data, error } = await supabaseAdmin
+    // Mismo caso que createProfessor: el trigger de BD puede haber creado ya
+    // la fila en `estudiantes`, así que actualizamos si ya existe.
+    const campos = {
+      codigo: studentData.codigo || null,
+      carrera_id: studentData.carrera_id || null,
+      semestre: studentData.semestre || null,
+      activo: studentData.activo !== undefined ? studentData.activo : true
+    }
+
+    const { data: existente } = await supabaseAdmin
       .from('estudiantes')
-      .insert([{
-        usuario_id: studentData.usuario_id,
-        codigo: studentData.codigo || null,
-        carrera_id: studentData.carrera_id || null,
-        semestre: studentData.semestre || null,
-        activo: studentData.activo !== undefined ? studentData.activo : true
-      }])
-      .select()
-      .single()
-    
+      .select('id')
+      .eq('usuario_id', studentData.usuario_id)
+      .maybeSingle()
+
+    const query = existente
+      ? supabaseAdmin.from('estudiantes').update(campos).eq('usuario_id', studentData.usuario_id)
+      : supabaseAdmin.from('estudiantes').insert([{ usuario_id: studentData.usuario_id, ...campos }])
+
+    const { data, error } = await query.select().single()
+
     if (error) throw error
     return data
   }

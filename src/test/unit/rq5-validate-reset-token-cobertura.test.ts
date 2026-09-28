@@ -36,11 +36,14 @@ describe('RQ5 — validate-reset-token (cobertura estructural, Fake Supabase)', 
     expect(res.body).toEqual({ error: 'Token inválido o ya utilizado' })
   })
 
-  it('N5→N6: error de BD → 400 (rama tokenError)', async () => {
+  // shared/supabase-result.ts::one() ya no enmascara errores de BD como "no encontrado":
+  // solo PGRST116 (0 filas) cae en esa rama; cualquier otro error se relanza y, como
+  // buscarTokenDeResetValido no tiene try/catch propio, llega al catch-all → 500.
+  it('N5→N6 (regresión): error de BD → 500, ya no se enmascara como 400', async () => {
     fakeDb.fail('password_reset_tokens', { message: 'sin conexión' })
     const res = await validar('t-ok', 'user@test.com')
-    expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: 'Token inválido o ya utilizado' })
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
   })
 
   it('N7→N8: token expirado → 400 "El token ha expirado"', async () => {
@@ -67,6 +70,7 @@ describe('RQ5 — validate-reset-token (cobertura estructural, Fake Supabase)', 
     })
     const res = await validar('t-ok', 'user@test.com')
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor' })
+    // Error genérico (no AppError): sendError usa error.message como `details`.
+    expect(res.body).toEqual({ error: 'Error interno del servidor', details: 'caída inesperada' })
   })
 })

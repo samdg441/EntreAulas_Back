@@ -26,200 +26,184 @@ router.post('/summarize', authenticateToken, requireRole(['docente', 'profesor',
   }
 })
 
-async function fetchOpenTextsByFilters(filters: any): Promise<string[]> {
-  if (!filters.profesor_id) {
-    throw new Error('profesor_id es requerido')
-  }
+type EvalFilterOpts = {
+  columns: string
+  profesorId: string
+  gte?: string
+  lte?: string
+  periodoId?: string | number
+  grupoId?: string | number
+}
 
-  // CRÍTICO: El profesor_id que recibimos es un usuario_id, necesitamos obtener el id real de profesores
-  // Buscar en la tabla profesores donde usuario_id = filters.profesor_id
+function hasValue(value: unknown) {
+  return value !== undefined && value !== null
+}
 
-  const profesor = await teachersRepository.findActiveByUsuarioId(filters.profesor_id)
-  if (!profesor) {
-    throw new Error(`No se encontró profesor activo para usuario_id: ${filters.profesor_id}`)
-  }
-
-  const profesorIdReal = profesor.id
-
-  // Usar exactamente la lógica del SQL que funciona:
-  // SELECT ... FROM evaluaciones e INNER JOIN respuestas_evaluacion re ON re.evaluacion_id = e.id
-  // WHERE e.carrera_id = X AND re.respuesta_texto IS NOT NULL ...
-
-  // by-professor: SIEMPRE filtrar por profesor_id real (no por carrera)
-  const evalOpts: {
-    columns: string
-    profesorId: string
-    gte?: string
-    lte?: string
-    periodoId?: string | number
-    grupoId?: string | number
-  } = {
-    columns: 'id',
-    profesorId: profesorIdReal,
-  }
-
-  // IMPORTANTE: Aplicar filtros opcionales SOLO si se proporcionan
-  // Si periodo_id no viene, buscar TODAS las evaluaciones de la carrera (como en el SQL que funciona)
+function applyPeriodoToEvalOpts(evalOpts: EvalFilterOpts, filters: any) {
   if (filters.periodo_gte && filters.periodo_lte) {
     evalOpts.gte = filters.periodo_gte
     evalOpts.lte = filters.periodo_lte
-  } else if (filters.periodo_id !== undefined && filters.periodo_id !== null) {
-    evalOpts.periodoId = filters.periodo_id
+    return
   }
+  if (!hasValue(filters.periodo_id)) return
+  evalOpts.periodoId = filters.periodo_id
+}
 
-  if (filters.grupo_id !== undefined && filters.grupo_id !== null) {
-    evalOpts.grupoId = filters.grupo_id
+function applyGrupoToEvalOpts(evalOpts: EvalFilterOpts, filters: any) {
+  if (!hasValue(filters.grupo_id)) return
+  evalOpts.grupoId = filters.grupo_id
+}
+
+function buildEvalOpts(profesorId: string, filters: any): EvalFilterOpts {
+  const evalOpts: EvalFilterOpts = { columns: 'id', profesorId }
+  applyPeriodoToEvalOpts(evalOpts, filters)
+  applyGrupoToEvalOpts(evalOpts, filters)
+  return evalOpts
+}
+
+function asPrimitiveString(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return `${value}`
   }
+  return null
+}
 
-  const evaluaciones = await analyticsRepository.listEvaluaciones(evalOpts)
-
-  const evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
-
-  if (evaluacionIds.length === 0) {
-    return []
+async function requireActiveProfesor(usuarioId: unknown) {
+  const id = asPrimitiveString(usuarioId)
+  if (!id) {
+    throw new Error('profesor_id es requerido')
   }
+  const profesor = await teachersRepository.findActiveByUsuarioId(id)
+  if (!profesor) {
+    throw new Error(`No se encontró profesor activo para usuario_id: ${id}`)
+  }
+  return profesor
+}
 
-  // Paso 3: Buscar respuestas usando los IDs de evaluaciones (simulando el INNER JOIN)
-  const respuestas = await analyticsRepository.listRespuestasTextoByEvaluacionIds(evaluacionIds)
+async function fetchEvaluacionIdsByFilters(filters: any): Promise<string[]> {
+  const profesor = await requireActiveProfesor(filters.profesor_id)
+  const evaluaciones = await analyticsRepository.listEvaluaciones(
+    buildEvalOpts(profesor.id, filters),
+  )
+  return (evaluaciones || []).map((e: any) => e.id)
+}
 
-  // Paso 4: Aplicar filtros exactamente como el SQL:
-  // - respuesta_texto IS NOT NULL (ya filtrado)
-  // - TRIM(respuesta_texto) != ''
-  // - LENGTH(TRIM(respuesta_texto)) >= 3
+function textoAbiertoValido(respuesta: unknown): string | null {
+  if (typeof respuesta !== 'string') return null
+  const texto = respuesta.trim()
+  if (texto.length < 3) return null
+  return texto
+}
+
+function extractValidOpenTexts(respuestas: Array<{ respuesta_texto?: unknown }> | null): string[] {
   const texts: string[] = []
-
-  for (const r of respuestas || []) {
-    const respuesta = r?.respuesta_texto
-
-    if (respuesta) {
-      const texto = String(respuesta).trim()
-
-      // Aplicar los mismos filtros que el SQL:
-      // TRIM(respuesta_texto) != '' Y LENGTH(TRIM(respuesta_texto)) >= 3
-      if (texto.length > 0 && texto.length >= 3) {
-        texts.push(texto)
-      }
-    }
+  for (const row of respuestas || []) {
+    const texto = textoAbiertoValido(row?.respuesta_texto)
+    if (!texto) continue
+    texts.push(texto)
   }
-
   return texts
 }
 
-async function fetchRatingsByFilters(filters: any): Promise<number[]> {
-  if (!filters.profesor_id) {
-    throw new Error('profesor_id es requerido')
-  }
-
-  const profesor = await teachersRepository.findActiveByUsuarioId(filters.profesor_id)
-  if (!profesor) {
-    throw new Error(`No se encontró profesor activo para usuario_id: ${filters.profesor_id}`)
-  }
-
-  const evalOpts: {
-    columns: string
-    profesorId: string
-    gte?: string
-    lte?: string
-    periodoId?: string | number
-    grupoId?: string | number
-  } = {
-    columns: 'id',
-    profesorId: profesor.id,
-  }
-
-  if (filters.periodo_gte && filters.periodo_lte) {
-    evalOpts.gte = filters.periodo_gte
-    evalOpts.lte = filters.periodo_lte
-  } else if (filters.periodo_id !== undefined && filters.periodo_id !== null) {
-    evalOpts.periodoId = filters.periodo_id
-  }
-  if (filters.grupo_id !== undefined && filters.grupo_id !== null) {
-    evalOpts.grupoId = filters.grupo_id
-  }
-
-  const evaluaciones = await analyticsRepository.listEvaluaciones(evalOpts)
-
-  const evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
+async function fetchOpenTextsByFilters(filters: any): Promise<string[]> {
+  const evaluacionIds = await fetchEvaluacionIdsByFilters(filters)
   if (evaluacionIds.length === 0) return []
+  const respuestas = await analyticsRepository.listRespuestasTextoByEvaluacionIds(evaluacionIds)
+  return extractValidOpenTexts(respuestas)
+}
 
+async function fetchRatingsByFilters(filters: any): Promise<number[]> {
+  const evaluacionIds = await fetchEvaluacionIdsByFilters(filters)
+  if (evaluacionIds.length === 0) return []
   const respuestas = await analyticsRepository.listRespuestasByEvaluacionIds(
     evaluacionIds,
-    'respuesta_rating'
+    'respuesta_rating',
   )
   return (respuestas || [])
     .map((r: any) => Number(r.respuesta_rating))
     .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 5)
 }
 
-// GET /api/ai/summarize/by-professor?profesor_id=...&periodo_id=... (puede ser número o formato YYYY-X)
-router.get('/summarize/by-professor', authenticateToken, requireRole(['docente', 'profesor', 'coordinador', 'decano', 'admin']), async (req: any, res) => {
+function requireQueryProfesorId(profesorId: unknown): string {
+  const id = asPrimitiveString(profesorId)
+  if (!id) {
+    throw badRequest('profesor_id es requerido')
+  }
+  return id
+}
+
+function assertProfessorSelfAccess(
+  user: { tipo_usuario?: string; id?: string } | undefined,
+  profesorId: string,
+) {
+  if (user?.tipo_usuario !== 'profesor') return
+  if (user.id === profesorId) return
+  throw forbidden('No autorizado')
+}
+
+async function applyNamedPeriodo(
+  filters: { periodo_gte?: string; periodo_lte?: string; periodo_id?: number },
+  periodoId: unknown,
+  partes: { year: number; semester: number },
+) {
+  const label = asPrimitiveString(periodoId)
+  const rango = label ? rangoFechasPeriodo(label) : null
+  if (rango) {
+    filters.periodo_gte = rango.start
+    filters.periodo_lte = rango.end
+  }
   try {
-    const { profesor_id, periodo_id, grupo_id } = req.query
+    const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
+    if (periodos?.id) filters.periodo_id = periodos.id
+  } catch {
+    // original ignored periodo errors
+  }
+}
 
-    if (!profesor_id) {
-      throw badRequest('profesor_id es requerido')
-    }
+async function applyPeriodoToFilters(
+  filters: { periodo_gte?: string; periodo_lte?: string; periodo_id?: number },
+  periodoId: unknown,
+) {
+  if (!periodoId) return
+  const partes = partesPeriodo(periodoId)
+  if (partes) {
+    await applyNamedPeriodo(filters, periodoId, partes)
+    return
+  }
+  const raw = asPrimitiveString(periodoId)
+  if (!raw || raw.includes('-')) return
+  filters.periodo_id = Number(raw)
+}
 
-    const filters: any = { profesor_id: String(profesor_id) }
+function applyGrupoToFilters(filters: { grupo_id?: number }, grupoId: unknown) {
+  const raw = asPrimitiveString(grupoId)
+  if (!raw) return
+  filters.grupo_id = Number(raw)
+}
 
-    // Si periodo_id es formato YYYY-X, aplicar rango de fechas para robustez.
-    // También se intenta resolver periodo_id numérico para compatibilidad.
-    if (periodo_id) {
-      const partes = partesPeriodo(periodo_id)
-      if (partes) {
-        const rango = rangoFechasPeriodo(String(periodo_id))
-        if (rango) {
-          filters.periodo_gte = rango.start
-          filters.periodo_lte = rango.end
-        }
-        try {
-          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
-          if (periodos?.id) {
-            filters.periodo_id = periodos.id
-          }
-        } catch {
-          // original ignored periodo errors
-        }
-      } else if (!String(periodo_id).includes('-')) {
-        filters.periodo_id = Number(periodo_id)
-      }
-    }
-    if (grupo_id) filters.grupo_id = Number(grupo_id)
+function periodoSqlClause(filters: {
+  periodo_gte?: string
+  periodo_lte?: string
+  periodo_id?: unknown
+}) {
+  if (filters.periodo_gte && filters.periodo_lte) {
+    return `\n  AND e.fecha_creacion BETWEEN '${filters.periodo_gte}' AND '${filters.periodo_lte}'`
+  }
+  const periodoId = asPrimitiveString(filters.periodo_id)
+  if (!periodoId) return ''
+  return `\n  AND e.periodo_id = ${periodoId}`
+}
 
-    // Profesores solo pueden consultarse a sí mismos
-    if (req.user?.tipo_usuario === 'profesor' && req.user.id !== String(profesor_id)) {
-      throw forbidden('No autorizado')
-    }
-
-    // Obtener profesor_id real y carrera_id para el SQL de debug
-    const profesor = await teachersRepository.findActiveByUsuarioId(String(profesor_id))
-    const profesorIdReal = profesor?.id
-    const carreraId = profesor?.carrera_id || null
-
-    const texts = await fetchOpenTextsByFilters(filters)
-
-    if (texts.length === 0) {
-      const ratings = await fetchRatingsByFilters(filters)
-      if (ratings.length > 0) {
-        const quantitative = AiService.summarizeFromRatings(ratings, 'profesor')
-        return res.json({
-          textsCount: 0,
-          ratingsCount: ratings.length,
-          analysisSource: 'quantitative_fallback',
-          ...quantitative
-        })
-      }
-
-      // Generar SQL para mostrar al usuario usando carrera_id en lugar de profesor_id
-      let sqlWhere = `WHERE
-  e.carrera_id = ${carreraId}`
-      if (filters.periodo_gte && filters.periodo_lte) {
-        sqlWhere += `\n  AND e.fecha_creacion BETWEEN '${filters.periodo_gte}' AND '${filters.periodo_lte}'`
-      } else if (filters.periodo_id) {
-        sqlWhere += `\n  AND e.periodo_id = ${filters.periodo_id}`
-      }
-
-      const sqlCommand = `SELECT
+function emptyProfessorSql(carreraId: unknown, filters: {
+  periodo_gte?: string
+  periodo_lte?: string
+  periodo_id?: unknown
+}) {
+  const carrera = asPrimitiveString(carreraId) ?? 'null'
+  const sqlWhere = `WHERE
+  e.carrera_id = ${carrera}${periodoSqlClause(filters)}`
+  return `SELECT
   e.id AS evaluacion_id,
   e.carrera_id,
   e.profesor_id,
@@ -234,240 +218,276 @@ ${sqlWhere}
   AND TRIM(re.respuesta_texto) != ''
   AND LENGTH(TRIM(re.respuesta_texto)) >= 3
 ORDER BY e.id, re.id;`
-      return res.json({
-        textsCount: 0,
-        summary: 'No se encontraron respuestas abiertas para este profesor en el período seleccionado. Verifica en Supabase ejecutando el SQL que aparece en la consola del servidor.',
-        topics: [],
-        sqlCommand: process.env.NODE_ENV === 'development' ? sqlCommand : undefined
-      })
-    }
+}
 
+async function emptyProfessorPayload(profesorId: string, filters: {
+  periodo_gte?: string
+  periodo_lte?: string
+  periodo_id?: unknown
+}) {
+  const profesor = await teachersRepository.findActiveByUsuarioId(profesorId)
+  const sqlCommand =
+    process.env.NODE_ENV === 'development'
+      ? emptyProfessorSql(profesor?.carrera_id ?? null, filters)
+      : undefined
+  return {
+    textsCount: 0,
+    summary:
+      'No se encontraron respuestas abiertas para este profesor en el período seleccionado. Verifica en Supabase ejecutando el SQL que aparece en la consola del servidor.',
+    topics: [] as string[],
+    sqlCommand,
+  }
+}
+
+async function professorSummaryPayload(filters: {
+  profesor_id: string
+  periodo_gte?: string
+  periodo_lte?: string
+  periodo_id?: number
+  grupo_id?: number
+}) {
+  const texts = await fetchOpenTextsByFilters(filters)
+  if (texts.length > 0) {
     const result = await AiService.summarizeOpenResponses(texts, 'profesor')
+    return { textsCount: texts.length, ...result }
+  }
 
-    res.json({ textsCount: texts.length, ...result })
+  const ratings = await fetchRatingsByFilters(filters)
+  if (ratings.length > 0) {
+    const quantitative = AiService.summarizeFromRatings(ratings, 'profesor')
+    return {
+      textsCount: 0,
+      ratingsCount: ratings.length,
+      analysisSource: 'quantitative_fallback',
+      ...quantitative,
+    }
+  }
+
+  return emptyProfessorPayload(filters.profesor_id, filters)
+}
+
+async function buildProfessorFilters(query: {
+  profesor_id?: unknown
+  periodo_id?: unknown
+  grupo_id?: unknown
+}) {
+  const profesorId = requireQueryProfesorId(query.profesor_id)
+  const filters: {
+    profesor_id: string
+    periodo_gte?: string
+    periodo_lte?: string
+    periodo_id?: number
+    grupo_id?: number
+  } = { profesor_id: profesorId }
+  await applyPeriodoToFilters(filters, query.periodo_id)
+  applyGrupoToFilters(filters, query.grupo_id)
+  return filters
+}
+
+// GET /api/ai/summarize/by-professor?profesor_id=...&periodo_id=... (puede ser número o formato YYYY-X)
+router.get('/summarize/by-professor', authenticateToken, requireRole(['docente', 'profesor', 'coordinador', 'decano', 'admin']), async (req: any, res) => {
+  try {
+    const filters = await buildProfessorFilters(req.query)
+    assertProfessorSelfAccess(req.user, filters.profesor_id)
+    res.json(await professorSummaryPayload(filters))
   } catch (error: any) {
     return sendError(res, error)
   }
 })
 
-// GET /api/ai/summarize/by-career?periodo_id=... (para coordinadores)
-// Lógica:
-// 1. Obtener carrera_id del coordinador
-// 2. Obtener profesores activos de esa carrera
-// 3. Filtrar evaluaciones por esos profesores (opcionalmente por período)
-// 4. Obtener respuestas_evaluacion con respuesta_texto válido
-router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador', 'decano', 'admin']), async (req: any, res) => {
+async function requireCarreraIdCoordinador(usuarioId: unknown) {
+  const { RoleService } = await import('../auth/role.service')
+  const id = asPrimitiveString(usuarioId)
+  const coordinadorInfo = id ? await RoleService.obtenerCoordinadorPorUsuario(id) : null
+  if (!coordinadorInfo?.carrera_id) {
+    throw badRequest(
+      'No se encontró información de carrera para el coordinador',
+      'El usuario no está asociado a una carrera como coordinador',
+    )
+  }
+  return coordinadorInfo.carrera_id
+}
+
+function docenteNombre(usuario: { nombre?: unknown; apellido?: unknown } | undefined, profesorId: string) {
+  const nombre = asPrimitiveString(usuario?.nombre) ?? ''
+  const apellido = asPrimitiveString(usuario?.apellido) ?? ''
+  return `${nombre} ${apellido}`.trim() || `Docente ${profesorId}`
+}
+
+async function mapNombresProfesores(profesores: any[]) {
+  const usuarioIds = profesores.map((p) => p.usuario_id).filter(Boolean)
+  let usuarios: any[] = []
   try {
-    const { periodo_id } = req.query as any
-    const { RoleService } = await import('../auth/role.service')
+    usuarios = await analyticsRepository.getUsuariosByIds(usuarioIds)
+  } catch {
+    usuarios = []
+  }
+  const usuarioById = new Map(
+    (usuarios || []).map((u: any) => [asPrimitiveString(u.id) ?? '', u]),
+  )
+  const profesorNombreById = new Map<string, string>()
+  for (const p of profesores) {
+    const pid = asPrimitiveString(p.id)
+    if (!pid) continue
+    const uid = asPrimitiveString(p.usuario_id) ?? ''
+    const usuario = usuarioById.get(uid) ?? p.usuario
+    profesorNombreById.set(pid, docenteNombre(usuario, pid))
+  }
+  return profesorNombreById
+}
 
-    // Paso 1: Obtener carrera_id del coordinador
-    const coordinadorInfo = await RoleService.obtenerCoordinadorPorUsuario(req.user.id)
-
-    if (!coordinadorInfo || !coordinadorInfo.carrera_id) {
-      throw badRequest('No se encontró información de carrera para el coordinador', 'El usuario no está asociado a una carrera como coordinador')
-    }
-
-    const carreraId = coordinadorInfo.carrera_id
-
-    // Paso 2: Convertir periodo_id si viene en formato YYYY-X
-    let periodoIdNum: number | undefined = undefined
-    let periodoDateRange: { gte: string; lte: string } | null = null
-    if (periodo_id) {
-      const partes = partesPeriodo(periodo_id)
-      if (partes) {
-        const rango = rangoFechasPeriodo(String(periodo_id))
-        if (rango) {
-          periodoDateRange = { gte: rango.start, lte: rango.end }
-        }
-        try {
-          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
-          if (periodos?.id) {
-            periodoIdNum = periodos.id
-          }
-        } catch {
-          // original ignored periodo errors
-        }
-      } else if (!String(periodo_id).includes('-')) {
-        periodoIdNum = Number(periodo_id)
-      }
-    }
-
-    // Paso 3: profesores activos de la carrera
-    let profesores: any[]
-    try {
-      profesores = await teachersRepository.listActiveByCareer(carreraId)
-    } catch (profError) {
-      throw profError
-    }
-
-    const profesorIds = (profesores || []).map((p: any) => p.id).filter(Boolean)
-    const profesorNombreById = new Map<string, string>()
-    const usuarioIds = (profesores || []).map((p: any) => p.usuario_id).filter(Boolean)
-    let usuarios: any[] = []
-    try {
-      usuarios = await analyticsRepository.getUsuariosByIds(usuarioIds)
-    } catch {
-      usuarios = []
-    }
-    const usuarioById = new Map((usuarios || []).map((u: any) => [String(u.id), u]))
-    ;(profesores || []).forEach((p: any) => {
-      const u = usuarioById.get(String(p.usuario_id))
-      const nombre = `${u?.nombre || ''} ${u?.apellido || ''}`.trim() || `Docente ${p.id}`
-      profesorNombreById.set(String(p.id), nombre)
+async function listEvaluacionesCarrera(
+  profesorIds: any[],
+  periodo: { periodo_id?: number; periodo_gte?: string; periodo_lte?: string },
+) {
+  const evaluaciones = await analyticsRepository.listEvaluaciones({
+    columns: 'id, profesor_id, calificacion_promedio',
+    profesorIds,
+    completada: true,
+    ...(periodo.periodo_id ? { periodoId: periodo.periodo_id } : {}),
+  })
+  const evalsArray = Array.isArray(evaluaciones) ? evaluaciones : []
+  if (evalsArray.length > 0 || !periodo.periodo_gte || !periodo.periodo_lte) {
+    return evalsArray
+  }
+  try {
+    const evalsByDate = await analyticsRepository.listEvaluaciones({
+      columns: 'id, profesor_id, calificacion_promedio',
+      profesorIds,
+      completada: true,
+      gte: periodo.periodo_gte,
+      lte: periodo.periodo_lte,
     })
-    if (profesorIds.length === 0) {
-      return res.json({
-        textsCount: 0,
-        summary: 'No se encontraron profesores activos en esta carrera.',
-        topics: []
-      })
-    }
+    return Array.isArray(evalsByDate) ? evalsByDate : []
+  } catch {
+    return []
+  }
+}
 
-    // Paso 4: evaluaciones de esos profesores
-    let evalsArray: any[] = []
-    try {
-      const evaluaciones = await analyticsRepository.listEvaluaciones({
-        columns: 'id, profesor_id, calificacion_promedio',
-        profesorIds,
-        completada: true,
-        ...(periodoIdNum ? { periodoId: periodoIdNum } : {}),
-      })
-      evalsArray = Array.isArray(evaluaciones) ? evaluaciones : []
-    } catch (evalError) {
-      throw evalError
-    }
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
 
-    // Fallback: si vino periodo_id pero no hay evaluaciones, intentar por fecha_creacion
-    // porque en algunos datos históricos periodo_id viene nulo/inconsistente.
-    if (evalsArray.length === 0 && periodoDateRange) {
-      try {
-        const evalsByDate = await analyticsRepository.listEvaluaciones({
-          columns: 'id, profesor_id, calificacion_promedio',
-          profesorIds,
-          completada: true,
-          gte: periodoDateRange.gte,
-          lte: periodoDateRange.lte,
-        })
-        evalsArray = Array.isArray(evalsByDate) ? evalsByDate : []
-      } catch {
-        // original ignored evalByDateError
-      }
-    }
+async function fetchRespuestasTextoEnLotes(evaluacionIds: any[]) {
+  const respuestas: any[] = []
+  for (const chunk of chunkArray(evaluacionIds, 150)) {
+    const chunkData = await analyticsRepository.listRespuestasTextoByEvaluacionIds(chunk)
+    respuestas.push(...(Array.isArray(chunkData) ? chunkData : []))
+  }
+  return respuestas
+}
 
-    const evaluacionIds = evalsArray.map((e: any) => e.id).filter(Boolean)
-    if (evaluacionIds.length === 0) {
-      return res.json({
-        textsCount: 0,
-        summary: 'No se encontraron evaluaciones para esta carrera en el período seleccionado.',
-        topics: []
-      })
-    }
+function normalizeText(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+}
 
-    // Paso 5: respuestas abiertas válidas (en lotes para evitar Bad Request por query grande)
-    const chunkArray = <T,>(arr: T[], size: number): T[][] => {
-      const out: T[][] = []
-      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
-      return out
-    }
+const ACOSO_KEYWORDS = [
+  'acoso',
+  'hostigamiento',
+  'abus',
+  'maltrato',
+  'intimidacion',
+  'inapropiado',
+  'violencia',
+  'amenaza',
+  'miedo',
+  'temor',
+  'humillacion',
+  'tocamiento',
+  'agresion',
+  'insinuacion',
+].map(normalizeText)
 
-    let respuestas: any[] = []
-    for (const chunk of chunkArray(evaluacionIds, 150)) {
-      const chunkData = await analyticsRepository.listRespuestasTextoByEvaluacionIds(chunk)
-      respuestas.push(...(Array.isArray(chunkData) ? chunkData : []))
-    }
+function collectAcosoProfesores(
+  respuestas: any[],
+  evalsArray: any[],
+  profesorNombreById: Map<string, string>,
+) {
+  const evalToProfesor = new Map<string, string>()
+  for (const e of evalsArray) {
+    const eid = asPrimitiveString(e.id)
+    if (!eid) continue
+    evalToProfesor.set(eid, asPrimitiveString(e.profesor_id) ?? '')
+  }
 
-    const evalToProfesor = new Map<string, string>()
-    ;(evalsArray || []).forEach((e: any) => {
-      evalToProfesor.set(String(e.id), String(e.profesor_id || ''))
-    })
+  const acosoPorProfesor = new Map<string, { count: number; ejemplos: string[] }>()
+  for (const r of respuestas) {
+    const texto = textoAbiertoValido(r?.respuesta_texto)
+    if (!texto) continue
+    if (!ACOSO_KEYWORDS.some((k) => normalizeText(texto).includes(k))) continue
+    const profesorId = evalToProfesor.get(asPrimitiveString(r?.evaluacion_id) ?? '')
+    if (!profesorId) continue
+    const prev = acosoPorProfesor.get(profesorId) ?? { count: 0, ejemplos: [] }
+    prev.count += 1
+    if (prev.ejemplos.length < 2) prev.ejemplos.push(texto.slice(0, 160))
+    acosoPorProfesor.set(profesorId, prev)
+  }
 
-    const normalizeText = (text: string): string =>
-      String(text || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '')
+  return Array.from(acosoPorProfesor.entries())
+    .map(([profesorId, data]) => ({
+      profesorId,
+      nombre: profesorNombreById.get(profesorId) || `Docente ${profesorId}`,
+      menciones: data.count,
+      ejemplos: data.ejemplos,
+    }))
+    .sort((a, b) => b.menciones - a.menciones)
+}
 
-    const acosoKeywords = [
-      'acoso', 'hostigamiento', 'abus', 'maltrato', 'intimidacion',
-      'inapropiado', 'violencia', 'amenaza', 'miedo', 'temor',
-      'humillacion', 'tocamiento', 'agresion', 'insinuacion'
-    ].map(normalizeText)
+function lowPerformersFromEvals(evalsArray: any[], profesorNombreById: Map<string, string>) {
+  const perTeacherAcc = new Map<string, { sum: number; count: number }>()
+  for (const e of evalsArray) {
+    const pid = asPrimitiveString(e.profesor_id)
+    const rating = Number(e.calificacion_promedio ?? 0)
+    if (!pid || !Number.isFinite(rating) || rating <= 0) continue
+    const prev = perTeacherAcc.get(pid) ?? { sum: 0, count: 0 }
+    prev.sum += rating
+    prev.count += 1
+    perTeacherAcc.set(pid, prev)
+  }
+  return Array.from(perTeacherAcc.entries())
+    .map(([profesorId, data]) => ({
+      profesorId,
+      nombre: profesorNombreById.get(profesorId) || `Docente ${profesorId}`,
+      promedio: data.count > 0 ? Number((data.sum / data.count).toFixed(2)) : 0,
+    }))
+    .filter((p) => p.promedio > 0 && p.promedio < 4.0)
+    .sort((a, b) => a.promedio - b.promedio)
+}
 
-    const acosoPorProfesor = new Map<string, { count: number; ejemplos: string[] }>()
-    const texts: string[] = respuestas
-      .map((r: any) => String(r.respuesta_texto || '').trim())
-      .filter((texto: string) => texto.length >= 3)
+function careerQuantitativePayload(
+  ratings: number[],
+  evalsArray: any[],
+  profesorNombreById: Map<string, string>,
+  acosoProfesores: unknown[],
+) {
+  const lowPerformers = lowPerformersFromEvals(evalsArray, profesorNombreById)
+  const quantitative = AiService.summarizeFromRatings(ratings, 'coordinador')
+  const alertaBajoDesempeno =
+    lowPerformers.length > 0
+      ? ` Alerta: se detectaron ${lowPerformers.length} docentes con promedio menor a 4.0; se recomienda revisión y acompañamiento académico.`
+      : ' No se detectaron docentes con promedio menor a 4.0 en el período consultado.'
+  return {
+    textsCount: 0,
+    ratingsCount: ratings.length,
+    lowPerformersCount: lowPerformers.length,
+    lowPerformers,
+    acosoProfesores,
+    analysisSource: 'quantitative_fallback',
+    summary: `${quantitative.summary}${alertaBajoDesempeno}`,
+    topics: [
+      ...(quantitative.topics || []),
+      lowPerformers.length > 0 ? 'docentes bajo 4.0' : 'sin alertas bajo 4.0',
+    ],
+  }
+}
 
-    ;(respuestas || []).forEach((r: any) => {
-      const texto = String(r?.respuesta_texto || '').trim()
-      if (texto.length < 3) return
-      const low = normalizeText(texto)
-      const hasAcoso = acosoKeywords.some((k) => low.includes(k))
-      if (!hasAcoso) return
-      const profesorId = evalToProfesor.get(String(r?.evaluacion_id || ''))
-      if (!profesorId) return
-      const prev = acosoPorProfesor.get(profesorId) || { count: 0, ejemplos: [] }
-      prev.count += 1
-      if (prev.ejemplos.length < 2) prev.ejemplos.push(texto.slice(0, 160))
-      acosoPorProfesor.set(profesorId, prev)
-    })
-
-    const acosoProfesores = Array.from(acosoPorProfesor.entries())
-      .map(([profesorId, data]) => ({
-        profesorId,
-        nombre: profesorNombreById.get(profesorId) || `Docente ${profesorId}`,
-        menciones: data.count,
-        ejemplos: data.ejemplos
-      }))
-      .sort((a, b) => b.menciones - a.menciones)
-
-    if (texts.length === 0) {
-      const ratings = evalsArray
-        .map((e: any) => Number(e.calificacion_promedio))
-        .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 5)
-
-      if (ratings.length > 0) {
-        const perTeacherAcc = new Map<string, { sum: number; count: number }>()
-        ;(evalsArray || []).forEach((e: any) => {
-          const pid = String(e.profesor_id || '')
-          const r = Number(e.calificacion_promedio || 0)
-          if (!pid || !Number.isFinite(r) || r <= 0) return
-          const prev = perTeacherAcc.get(pid) || { sum: 0, count: 0 }
-          prev.sum += r
-          prev.count += 1
-          perTeacherAcc.set(pid, prev)
-        })
-
-        const lowPerformers = Array.from(perTeacherAcc.entries())
-          .map(([profesorId, data]) => ({
-            profesorId,
-            nombre: profesorNombreById.get(profesorId) || `Docente ${profesorId}`,
-            promedio: data.count > 0 ? Number((data.sum / data.count).toFixed(2)) : 0
-          }))
-          .filter((p) => p.promedio > 0 && p.promedio < 4.0)
-          .sort((a, b) => a.promedio - b.promedio)
-
-        const quantitative = AiService.summarizeFromRatings(ratings, 'coordinador')
-        const alertaBajoDesempeno = lowPerformers.length > 0
-          ? ` Alerta: se detectaron ${lowPerformers.length} docentes con promedio menor a 4.0; se recomienda revisión y acompañamiento académico.`
-          : ' No se detectaron docentes con promedio menor a 4.0 en el período consultado.'
-        return res.json({
-          textsCount: 0,
-          ratingsCount: ratings.length,
-          lowPerformersCount: lowPerformers.length,
-          lowPerformers,
-          acosoProfesores,
-          analysisSource: 'quantitative_fallback',
-          summary: `${quantitative.summary}${alertaBajoDesempeno}`,
-          topics: [
-            ...(quantitative.topics || []),
-            lowPerformers.length > 0 ? 'docentes bajo 4.0' : 'sin alertas bajo 4.0'
-          ]
-        })
-      }
-
-      const sqlCommand = `SELECT
+function emptyCareerSql(carreraId: unknown, periodoId?: number) {
+  const carrera = asPrimitiveString(carreraId) ?? 'null'
+  const periodo = asPrimitiveString(periodoId)
+  const periodoClause = periodo ? `AND e.periodo_id = ${periodo}` : ''
+  return `SELECT
   re.id AS respuesta_id,
   re.evaluacion_id,
   re.respuesta_texto
@@ -476,109 +496,142 @@ WHERE re.evaluacion_id IN (
   SELECT e.id
   FROM evaluaciones e
   WHERE e.profesor_id IN (
-    SELECT p.id FROM profesores p WHERE p.carrera_id = ${carreraId} AND p.activo = true
+    SELECT p.id FROM profesores p WHERE p.carrera_id = ${carrera} AND p.activo = true
   )
-  ${periodoIdNum ? `AND e.periodo_id = ${periodoIdNum}` : ''}
+  ${periodoClause}
   AND e.completada = true
 )
 AND re.respuesta_texto IS NOT NULL
 AND TRIM(re.respuesta_texto) <> ''
 AND LENGTH(TRIM(re.respuesta_texto)) >= 3
 ORDER BY re.evaluacion_id, re.id;`
-      return res.json({
-        textsCount: 0,
-        summary: 'No se encontraron respuestas abiertas válidas para esta carrera.',
-        topics: [],
-        sqlCommand: process.env.NODE_ENV === 'development' ? sqlCommand : undefined
-      })
+}
+
+async function careerSummaryPayload(usuarioId: unknown, periodoId: unknown) {
+  const carreraId = await requireCarreraIdCoordinador(usuarioId)
+  const periodo: { periodo_id?: number; periodo_gte?: string; periodo_lte?: string } = {}
+  await applyPeriodoToFilters(periodo, periodoId)
+
+  const profesores = (await teachersRepository.listActiveByCareer(carreraId)) || []
+  const profesorIds = profesores.map((p: any) => p.id).filter(Boolean)
+  if (profesorIds.length === 0) {
+    return {
+      textsCount: 0,
+      summary: 'No se encontraron profesores activos en esta carrera.',
+      topics: [] as string[],
     }
+  }
 
-    // Paso 6: Generar resumen IA con contexto de coordinador (habla en general de todos los profesores)
+  const profesorNombreById = await mapNombresProfesores(profesores)
+  const evalsArray = await listEvaluacionesCarrera(profesorIds, periodo)
+  const evaluacionIds = evalsArray.map((e: any) => e.id).filter(Boolean)
+  if (evaluacionIds.length === 0) {
+    return {
+      textsCount: 0,
+      summary: 'No se encontraron evaluaciones para esta carrera en el período seleccionado.',
+      topics: [] as string[],
+    }
+  }
 
+  const respuestas = await fetchRespuestasTextoEnLotes(evaluacionIds)
+  const texts = extractValidOpenTexts(respuestas)
+  const acosoProfesores = collectAcosoProfesores(respuestas, evalsArray, profesorNombreById)
+  if (texts.length > 0) {
     const result = await AiService.summarizeOpenResponses(texts, 'coordinador')
+    return { textsCount: texts.length, acosoProfesores, ...result }
+  }
 
-    res.json({ textsCount: texts.length, acosoProfesores, ...result })
+  const ratings = evalsArray
+    .map((e: any) => Number(e.calificacion_promedio))
+    .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 5)
+  if (ratings.length > 0) {
+    return careerQuantitativePayload(ratings, evalsArray, profesorNombreById, acosoProfesores)
+  }
+
+  return {
+    textsCount: 0,
+    summary: 'No se encontraron respuestas abiertas válidas para esta carrera.',
+    topics: [] as string[],
+    sqlCommand:
+      process.env.NODE_ENV === 'development'
+        ? emptyCareerSql(carreraId, periodo.periodo_id)
+        : undefined,
+  }
+}
+
+// GET /api/ai/summarize/by-career?periodo_id=... (para coordinadores)
+router.get('/summarize/by-career', authenticateToken, requireRole(['coordinador', 'decano', 'admin']), async (req: any, res) => {
+  try {
+    res.json(await careerSummaryPayload(req.user?.id, req.query?.periodo_id))
   } catch (error: any) {
     return sendError(res, error)
   }
 })
 
-// GET /api/ai/summarize/by-faculty?periodo_id=... (para decanos)
-// Lógica simplificada: usar la vista SQL directamente
-// La vista ya tiene todos los JOINs y filtros aplicados, solo necesitamos filtrar por periodo_id
-router.get('/summarize/by-faculty', authenticateToken, requireRole(['decano', 'admin']), async (req: any, res) => {
+function parseNumericPeriodoId(periodoId: unknown): number | undefined {
+  const raw = asPrimitiveString(periodoId)
+  if (!raw || raw.includes('-')) return undefined
+  return Number(raw)
+}
+
+async function findPeriodoNumericId(partes: { year: number; semester: number }) {
   try {
-    const { periodo_id } = req.query as any
+    const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
+    return periodos?.id
+  } catch {
+    return undefined
+  }
+}
 
-    // Paso 1: Convertir periodo_id si viene en formato YYYY-X
-    let periodoIdNum: number | undefined = undefined
-    if (periodo_id) {
-      const partes = partesPeriodo(periodo_id)
-      if (partes) {
-        try {
-          const periodos = await analyticsRepository.findPeriodo(partes.year, partes.semester)
-          if (periodos?.id) {
-            periodoIdNum = periodos.id
-          }
-        } catch {
-          // original ignored periodo errors
-        }
-      } else if (!String(periodo_id).includes('-')) {
-        periodoIdNum = Number(periodo_id)
-      }
-    }
+async function resolveFacultyPeriodoId(periodoId: unknown): Promise<number | undefined> {
+  if (!periodoId) return undefined
+  const partes = partesPeriodo(periodoId)
+  if (partes) return findPeriodoNumericId(partes)
+  return parseNumericPeriodoId(periodoId)
+}
 
-    // Paso 2: Consultar directamente respuestas_evaluacion (igual que tu SQL)
-    // Si hay período, obtener evaluacion_ids primero y filtrar
-    let evaluacionIds: string[] | undefined = undefined
+async function facultyEvaluacionIds(periodoIdNum?: number): Promise<string[] | undefined> {
+  if (!periodoIdNum) return undefined
+  try {
+    const evaluaciones = await analyticsRepository.listEvaluaciones({
+      columns: 'id',
+      periodoId: periodoIdNum,
+    })
+    return (evaluaciones || []).map((e: any) => e.id)
+  } catch {
+    return []
+  }
+}
 
-    if (periodoIdNum) {
-      try {
-        const evaluaciones = await analyticsRepository.listEvaluaciones({
-          columns: 'id',
-          periodoId: periodoIdNum,
-        })
-        evaluacionIds = (evaluaciones || []).map((e: any) => e.id)
-      } catch {
-        evaluacionIds = []
-      }
-    }
+async function facultyRespuestas(evaluacionIds?: string[]) {
+  if (evaluacionIds?.length) {
+    return analyticsRepository.listRespuestasTextoByEvaluacionIds(evaluacionIds)
+  }
+  const allEvals = await analyticsRepository.listEvaluaciones({ columns: 'id' })
+  return fetchRespuestasTextoEnLotes((allEvals || []).map((e: any) => e.id))
+}
 
-    // Consultar respuestas_evaluacion directamente (como tu SQL)
-    let respuestas: any[] = []
-    if (evaluacionIds && evaluacionIds.length > 0) {
-      respuestas = await analyticsRepository.listRespuestasTextoByEvaluacionIds(evaluacionIds)
-    } else {
-      const allEvals = await analyticsRepository.listEvaluaciones({ columns: 'id' })
-      const allIds = (allEvals || []).map((e: any) => e.id)
-      const chunkArray = <T,>(arr: T[], size: number): T[][] => {
-        const out: T[][] = []
-        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
-        return out
-      }
-      for (const chunk of chunkArray(allIds, 150)) {
-        const chunkData = await analyticsRepository.listRespuestasTextoByEvaluacionIds(chunk)
-        respuestas.push(...(Array.isArray(chunkData) ? chunkData : []))
-      }
-    }
+function extractFacultyOpenTexts(respuestas: Array<{ respuesta_texto?: unknown }> | null) {
+  const texts: string[] = []
+  for (const row of respuestas || []) {
+    const texto = asPrimitiveString(row?.respuesta_texto)?.trim()
+    if (!texto || texto.length <= 3) continue
+    texts.push(texto)
+  }
+  return texts
+}
 
-    // Paso 3: Aplicar filtros de texto exactamente como tu SQL:
-    // TRIM(respuesta_texto) <> '' AND LENGTH(TRIM(respuesta_texto)) > 3
-    const texts: string[] = (respuestas || [])
-      .map((r: any) => String(r.respuesta_texto || '').trim())
-      .filter((texto: string) => texto.length > 0 && texto.length > 3)
+function facultyPeriodoSqlClause(periodoIdNum?: number) {
+  if (!periodoIdNum) return ''
+  return `\n  AND evaluacion_id IN (SELECT id FROM evaluaciones WHERE periodo_id = ${periodoIdNum})`
+}
 
-    if (texts.length === 0) {
-      let sqlWhere = `WHERE
+function emptyFacultySql(periodoIdNum?: number) {
+  const sqlWhere = `WHERE
   respuesta_texto IS NOT NULL
   AND TRIM(respuesta_texto) <> ''
-  AND LENGTH(TRIM(respuesta_texto)) > 3`
-
-      if (periodoIdNum) {
-        sqlWhere += `\n  AND evaluacion_id IN (SELECT id FROM evaluaciones WHERE periodo_id = ${periodoIdNum})`
-      }
-
-      const sqlCommand = `SELECT
+  AND LENGTH(TRIM(respuesta_texto)) > 3${facultyPeriodoSqlClause(periodoIdNum)}`
+  return `SELECT
   id AS respuesta_id,
   evaluacion_id,
   pregunta_id,
@@ -587,23 +640,62 @@ router.get('/summarize/by-faculty', authenticateToken, requireRole(['decano', 'a
 FROM respuestas_evaluacion
 ${sqlWhere}
 ORDER BY evaluacion_id, id;`
-      return res.json({
-        textsCount: 0,
-        summary: 'No se encontraron respuestas abiertas válidas para la facultad en el período seleccionado.',
-        topics: [],
-        sqlCommand: process.env.NODE_ENV === 'development' ? sqlCommand : undefined
-      })
-    }
+}
 
-    // Paso 4: Enviar textos directamente a la IA
+function emptyFacultyPayload(periodoIdNum?: number) {
+  return {
+    textsCount: 0,
+    summary: 'No se encontraron respuestas abiertas válidas para la facultad en el período seleccionado.',
+    topics: [] as string[],
+    sqlCommand:
+      process.env.NODE_ENV === 'development' ? emptyFacultySql(periodoIdNum) : undefined,
+  }
+}
 
-    const result = await AiService.summarizeOpenResponses(texts, 'decano')
+async function facultySummaryPayload(periodoId: unknown) {
+  const periodoIdNum = await resolveFacultyPeriodoId(periodoId)
+  const texts = extractFacultyOpenTexts(
+    await facultyRespuestas(await facultyEvaluacionIds(periodoIdNum)),
+  )
+  if (texts.length === 0) return emptyFacultyPayload(periodoIdNum)
+  const result = await AiService.summarizeOpenResponses(texts, 'decano')
+  return { textsCount: texts.length, ...result }
+}
 
-    res.json({ textsCount: texts.length, ...result })
+// GET /api/ai/summarize/by-faculty?periodo_id=... (para decanos)
+router.get('/summarize/by-faculty', authenticateToken, requireRole(['decano', 'admin']), async (req: any, res) => {
+  try {
+    res.json(await facultySummaryPayload(req.query?.periodo_id))
   } catch (error: any) {
     return sendError(res, error)
   }
 })
+
+export {
+  hasValue,
+  applyPeriodoToEvalOpts,
+  applyGrupoToEvalOpts,
+  buildEvalOpts,
+  asPrimitiveString,
+  textoAbiertoValido,
+  extractValidOpenTexts,
+  requireQueryProfesorId,
+  assertProfessorSelfAccess,
+  applyPeriodoToFilters,
+  applyGrupoToFilters,
+  periodoSqlClause,
+  emptyProfessorSql,
+  chunkArray,
+  normalizeText,
+  collectAcosoProfesores,
+  lowPerformersFromEvals,
+  careerQuantitativePayload,
+  emptyCareerSql,
+  docenteNombre,
+  buildProfessorFilters,
+  extractFacultyOpenTexts,
+  emptyFacultySql,
+}
 
 export default router
 

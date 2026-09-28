@@ -68,4 +68,37 @@ describe('RQ19 — Redirigir al dashboard según el rol', () => {
   it('C8: tipo desconocido → /dashboard', () => pruebas.C8_tipoDesconocido())
   it('C9: admin gana si hay varios roles', () => pruebas.C9_prioridadAdmin())
   it('C10: rol seleccionado en el login', () => pruebas.C10_rolSeleccionado())
+
+  it('C11: decano gana sobre coordinador', () => {
+    // Arrange
+    const roles = ['coordinador', 'decano']
+
+    // Act
+    const ruta = dashboardParaUsuario(roles)
+
+    // Assert
+    expect(ruta).toBe('/dashboard-decano')
+  })
+
+  it('C12: profesor gana sobre estudiante', () => {
+    // Arrange
+    const roles = ['estudiante', 'profesor']
+
+    // Act
+    const ruta = dashboardDesdeRoles(roles)
+
+    // Assert
+    expect(ruta).toBe('/dashboard-profesor')
+  })
+
+  it('C13: el tipo Coordinador, con mayúscula, llega a su panel', () => {
+    // Arrange
+    const tipo = 'Coordinador'
+
+    // Act
+    const ruta = dashboardParaUsuario([], tipo)
+
+    // Assert
+    expect(ruta).toBe('/dashboard-coordinador')
+  })
 })
