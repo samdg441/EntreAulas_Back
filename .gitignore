@@ -3,6 +3,5 @@ dist/
 coverage/
 .scannerwork/
 .env
-.env.example
 npm-debug.log*
 .DS_Store

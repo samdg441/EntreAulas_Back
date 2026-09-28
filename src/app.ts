@@ -22,8 +22,13 @@ dotenv.config()
 export const app = express()
 app.disable('x-powered-by')
 
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
   credentials: true,
   optionsSuccessStatus: 200,
 }
