@@ -95,7 +95,6 @@ pipeline {
                 sh '''
                     set -e
                     docker build \
-                        --pull \
                         -t "$IMAGE_NAME:$BUILD_NUMBER" \
                         -t "$IMAGE_NAME:latest" \
                         .
