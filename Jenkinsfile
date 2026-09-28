@@ -178,6 +178,6 @@ pipeline {
                 docker logs "$CONTAINER_NAME" \
                     2>/dev/null || true
             '''
-        }}
+        }
     }
 }
