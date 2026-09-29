@@ -915,8 +915,9 @@ export class TeachersAnalyticsService {
     )
 
     let evalsArray = await filtrarEvaluacionesPorCurso(comoLista(evaluaciones), courseId)
-    if (grupoId && String(grupoId) !== 'all') {
-      evalsArray = evalsArray.filter((e: any) => String(e.grupo_id) === String(grupoId))
+    const grupoTexto = idComoTexto(grupoId)
+    if (grupoTexto && grupoTexto !== 'all') {
+      evalsArray = evalsArray.filter((e: any) => idComoTexto(e.grupo_id) === grupoTexto)
     }
     const evaluacionIds = idsUnicos(evalsArray.map((e: any) => e.id))
     if (evaluacionIds.length === 0) return []

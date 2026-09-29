@@ -135,7 +135,7 @@ describe('RQ18→RQ25 — Regresión de QR, dashboard, métricas, histórico, co
   })
 
   it('Regresión RQ19: sin roles la lista no inventa una ruta', () => {
-    expect(resultado.sinRoles).to.equal(null)
+    expect(resultado.sinRoles).to.be.null
   })
 
   it('RQ22: 4 y 5 promedian 4.5', () => {

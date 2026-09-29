@@ -91,16 +91,55 @@ export function ensureEmailIsAvailable(
   }
 }
 
+export function parseRolesBody(roles: unknown): string[] | null {
+  if (!Array.isArray(roles)) return null
+  const parsed = roles.map(String)
+  if (parsed.length === 0) {
+    throw badRequest('Selecciona al menos un rol')
+  }
+  for (const rol of parsed) {
+    if (!isAllowedUserType(rol)) {
+      throw badRequest('Rol inválido')
+    }
+  }
+  return parsed
+}
+
+export function resolveEffectiveRoles(
+  rolesBody: string[] | null,
+  rolesActuales: string[],
+  tipoUsuario: string,
+): string[] {
+  if (rolesBody) return rolesBody
+  if (rolesActuales.length > 0) return rolesActuales
+  return [tipoUsuario]
+}
+
+export function applyRoleConstraints(
+  updates: Record<string, unknown>,
+  rolesBody: string[] | null,
+  rolesEfectivos: string[],
+  tipoExistente: string,
+) {
+  if (typeof updates.email === 'string') {
+    updates.email = normalizarCorreoPorRoles(updates.email, rolesEfectivos)
+  }
+  if (!rolesBody) return
+  const tipoActual = typeof updates.tipo_usuario === 'string' ? updates.tipo_usuario : tipoExistente
+  updates.tipo_usuario = rolesBody.includes(String(tipoActual)) ? tipoActual : rolesBody[0]
+}
+
 export class UsersController {
   static async listUsers(_req: Request, res: Response) {
     try {
       const users = await academicService.listUsersSummary()
       const rolesPorUsuario = await roleRepository.listRolesAgrupados()
       const conRoles = (users || []).map((user: any) => {
-        const roles = rolesPorUsuario.get(String(user.id)) || []
+        const rolesActivos = rolesPorUsuario.get(String(user.id)) || []
+        const rolesPorTipo = user.tipo_usuario ? [user.tipo_usuario] : []
         return {
           ...user,
-          roles: roles.length > 0 ? roles : user.tipo_usuario ? [user.tipo_usuario] : [],
+          roles: rolesActivos.length > 0 ? rolesActivos : rolesPorTipo,
         }
       })
       res.json({ users: conRoles })
@@ -121,28 +160,12 @@ export class UsersController {
         throw notFound('Usuario no encontrado')
       }
 
-      const rolesBody = Array.isArray(req.body?.roles) ? req.body.roles.map((rol: unknown) => String(rol)) : null
-      if (rolesBody) {
-        if (rolesBody.length === 0) {
-          throw badRequest('Selecciona al menos un rol')
-        }
-        for (const rol of rolesBody) {
-          if (!isAllowedUserType(rol)) {
-            throw badRequest('Rol inválido')
-          }
-        }
-      }
+      const rolesBody = parseRolesBody(req.body?.roles)
       const rolesActuales = await roleRepository.listRolesActivos(id)
-      const rolesEfectivos = rolesBody ?? (rolesActuales.length > 0 ? rolesActuales : [existing.tipo_usuario])
+      const rolesEfectivos = resolveEffectiveRoles(rolesBody, rolesActuales, existing.tipo_usuario)
 
       const updates = await collectUserUpdates(req.body)
-      if (typeof updates.email === 'string') {
-        updates.email = normalizarCorreoPorRoles(updates.email, rolesEfectivos)
-      }
-      if (rolesBody) {
-        const tipoActual = typeof updates.tipo_usuario === 'string' ? updates.tipo_usuario : existing.tipo_usuario
-        updates.tipo_usuario = rolesBody.includes(String(tipoActual)) ? tipoActual : rolesBody[0]
-      }
+      applyRoleConstraints(updates, rolesBody, rolesEfectivos, existing.tipo_usuario)
       assertHasUpdates(updates)
 
       const nextEmail = updates.email

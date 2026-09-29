@@ -41,25 +41,14 @@ describe('DEF-04 — El período debe validarse antes de usarse', () => {
     fromMock.mockImplementation(sinDatos())
   })
 
-  it('un período con texto arbitrario debe rechazarse con 400', async () => {
-    const res = await request(app).get('/api/teachers/7/stats/historical?period=DROP-TABLE')
-    expect(res.status).toBe(400)
-  })
-
-  it('un semestre inexistente (2026-9) debe rechazarse con 400', async () => {
-    const res = await request(app).get('/api/teachers/7/stats/historical?period=2026-9')
-    expect(res.status).toBe(400)
-  })
-
-  it('sin period o period vacío debe rechazarse con 400', async () => {
-    const sin = await request(app).get('/api/teachers/7/stats/historical')
-    const vacio = await request(app).get('/api/teachers/7/stats/historical?period=')
-    expect(sin.status).toBe(400)
-    expect(vacio.status).toBe(400)
-  })
-
-  it('un año sin semestre (2026) debe rechazarse con 400', async () => {
-    const res = await request(app).get('/api/teachers/7/stats/historical?period=2026')
+  it.each([
+    { caso: 'un período con texto arbitrario', query: '?period=DROP-TABLE' },
+    { caso: 'un semestre inexistente (2026-9)', query: '?period=2026-9' },
+    { caso: 'sin period', query: '' },
+    { caso: 'un period vacío', query: '?period=' },
+    { caso: 'un año sin semestre (2026)', query: '?period=2026' },
+  ])('$caso debe rechazarse con 400', async ({ query }) => {
+    const res = await request(app).get(`/api/teachers/7/stats/historical${query}`)
     expect(res.status).toBe(400)
   })
 })

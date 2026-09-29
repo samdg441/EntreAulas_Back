@@ -191,6 +191,33 @@ describe('RQ11 — teachers-analytics.service (cobertura)', () => {
     expect(r).toEqual([{ categoriaId: 7, nombre: 'Categoría 7', promedio: 4.5 }])
   })
 
+  it('getPeriodCategoryStats: filtra por grupo y no stringifica objetos', async () => {
+    teachersRepository.findByUsuarioId.mockResolvedValue({ id: 'p1' })
+    analyticsRepository.getCompletedInPeriod.mockResolvedValue([
+      { id: 1, grupo_id: 10 },
+      { id: 2, grupo_id: 20 },
+    ])
+    analyticsRepository.listRespuestasByEvaluacionIds.mockResolvedValue([])
+
+    await teachersAnalyticsService.getPeriodCategoryStats('u1', '2026-1', null, 10)
+    expect(analyticsRepository.listRespuestasByEvaluacionIds).toHaveBeenLastCalledWith(
+      [1],
+      'evaluacion_id, pregunta_id, respuesta_rating'
+    )
+
+    await teachersAnalyticsService.getPeriodCategoryStats('u1', '2026-1', null, 'all')
+    expect(analyticsRepository.listRespuestasByEvaluacionIds).toHaveBeenLastCalledWith(
+      [1, 2],
+      'evaluacion_id, pregunta_id, respuesta_rating'
+    )
+
+    await teachersAnalyticsService.getPeriodCategoryStats('u1', '2026-1', null, { id: 10 })
+    expect(analyticsRepository.listRespuestasByEvaluacionIds).toHaveBeenLastCalledWith(
+      [1, 2],
+      'evaluacion_id, pregunta_id, respuesta_rating'
+    )
+  })
+
   it('getPeriodCategoryStats: sin preguntas en respuestas → []', async () => {
     teachersRepository.findByUsuarioId.mockResolvedValueOnce({ id: 'p1' })
     analyticsRepository.getCompletedInPeriod.mockResolvedValueOnce([{ id: 1, grupo_id: 10 }])
