@@ -4,7 +4,7 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
@@ -13,6 +13,7 @@ pipeline {
         SONAR_PROJECT_NAME = 'EntreAulas Back'
         IMAGE_NAME = 'entreaulas-back'
         CONTAINER_NAME = 'entreaulas-back-container'
+        RENDER_URL = 'https://entreaulas-back.onrender.com'
     }
 
     stages {
@@ -153,6 +154,41 @@ pipeline {
                 '''
             }
         }
+        stage('Deploy to Render') {
+    steps {
+        withCredentials([string(credentialsId: 'render-deploy-hook-back', variable: 'RENDER_HOOK')]) {
+            sh '''
+                set -e
+                curl -fsS -X POST "$RENDER_HOOK" -o /dev/null
+                echo "Despliegue solicitado a Render para el commit $GIT_COMMIT"
+            '''
+        }
+    }
+}
+
+stage('Verify Render') {
+    steps {
+        timeout(time: 15, unit: 'MINUTES') {
+            sh '''
+                set -e
+                for attempt in $(seq 1 60); do
+                    RESPONSE=$(curl -fsS --max-time 60 "$RENDER_URL/health" || true)
+                    echo "Intento $attempt: $RESPONSE"
+
+                    if echo "$RESPONSE" | grep -q "$GIT_COMMIT"; then
+                        echo "Render ya sirve el commit $GIT_COMMIT"
+                        exit 0
+                    fi
+
+                    sleep 15
+                done
+
+                echo "Render no publico el commit $GIT_COMMIT a tiempo."
+                exit 1
+            '''
+        }
+    }
+}
     }
 
     post {

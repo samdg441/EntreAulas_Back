@@ -53,5 +53,5 @@ app.use('/api/ai', aiRoutes)
 app.use('/api/users', usersRoutes)
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true })
+  res.json({ ok: true, commit: process.env.RENDER_GIT_COMMIT || null })
 })
