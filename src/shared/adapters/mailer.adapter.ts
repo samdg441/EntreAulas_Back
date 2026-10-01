@@ -11,6 +11,13 @@ export interface MailOptions {
   text?: string
   html?: string
   encoding?: string
+  attachments?: MailAttachment[]
+}
+
+export interface MailAttachment {
+  filename: string
+  content: Buffer
+  contentType?: string
 }
 
 export interface MailerPort {
@@ -41,6 +48,7 @@ class NodemailerAdapter implements MailerPort {
       text: opts.text,
       html: opts.html,
       encoding: opts.encoding,
+      attachments: opts.attachments,
     })
   }
 }
@@ -70,6 +78,9 @@ class BrevoApiAdapter implements MailerPort {
         subject: opts.subject,
         textContent: opts.text,
         htmlContent: opts.html,
+        attachment: opts.attachments?.length
+          ? opts.attachments.map((a) => ({ name: a.filename, content: a.content.toString('base64') }))
+          : undefined,
       }),
       signal: AbortSignal.timeout(15000),
     })

@@ -92,6 +92,9 @@ describe('RQ16 — compartirQrsPorEmail', () => {
     expect(r.totalLinks).toBe(1)
     expect(sendMail).toHaveBeenCalledTimes(1)
     expect(sendMail.mock.calls[0][0].text).toContain('Álgebra')
+    const [adjunto] = sendMail.mock.calls[0][0].attachments
+    expect(adjunto.filename).toBe('QR-MAT-101-GA.png')
+    expect(adjunto.content.subarray(1, 4).toString()).toBe('PNG')
     delete process.env.FRONTEND_URL
   })
 

@@ -1,21 +1,20 @@
-import { sendMail } from '../../shared/adapters/mailer.adapter'
+import { sendMail, type MailAttachment } from '../../shared/adapters/mailer.adapter'
 import { mailConfigured } from '../../shared/adapters/mail-config'
 import { qrRepository } from './qr.repository'
 import { parseGrupoIds, carreraIdSiCoordinador } from './qr-batch'
 import { AppError, badRequest, forbidden, internal, notFound, unavailable } from '../../shared/errors'
+import {
+  correoQrDocenteHtml,
+  correoQrDocenteTexto,
+  urlImagenQr,
+  type QrCurso,
+} from '../../shared/email-templates'
+import QRCode from 'qrcode'
 
 const EMAIL_REGEX = /^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{1,63}$/
+const TOKEN_QR_REGEX = /^[A-Za-z0-9-]{1,64}$/
 
 type Relacion<T> = T | T[] | null | undefined
-
-type LinkQr = {
-  grupoId: number
-  url: string
-  cursoNombre: string
-  cursoCodigo: string
-  grupoNumero: string
-  profesorNombre: string
-}
 
 export async function compartirQrsPorEmail(
   user: { id?: string; roles?: string[]; tipo_usuario?: string },
@@ -98,16 +97,29 @@ function appBaseUrl() {
   return url
 }
 
-function linkDesdeFila(row: Record<string, unknown>, baseUrl: string): LinkQr {
+export function urlEncuestaQr(token: string, baseUrl = appBaseUrl()) {
+  return `${baseUrl}/qr-evaluacion?token=${encodeURIComponent(token)}`
+}
+
+/** PNG del QR que apunta a la encuesta. Se sirve por URL porque los correos bloquean imágenes en base64. */
+export async function generarPngQr(token: string): Promise<Buffer> {
+  if (!TOKEN_QR_REGEX.test(token)) throw badRequest('Token de QR inválido.')
+  return QRCode.toBuffer(urlEncuestaQr(token), { type: 'png', errorCorrectionLevel: 'M', width: 400, margin: 2 })
+}
+
+function linkDesdeFila(row: Record<string, unknown>, baseUrl: string): QrCurso {
   const curso = cursoDeFila(row)
   const grupo = uno(row.grupo as Relacion<Record<string, unknown>>)
   const profesor = uno(row.profesor as Relacion<Record<string, unknown>>)
   const usuario = uno(profesor?.usuario as Relacion<Record<string, unknown>>)
   const profesorNombre =
     `${texto(usuario?.nombre)} ${texto(usuario?.apellido)}`.trim() || 'Docente'
+  const token = texto(row.token)
   return {
-    grupoId: Number(row.grupo_id),
-    url: `${baseUrl}/qr-evaluacion?token=${encodeURIComponent(texto(row.token))}`,
+    token,
+    url: urlEncuestaQr(token, baseUrl),
+    imagenUrl: urlImagenQr(token),
+    descargaUrl: urlImagenQr(token, true),
     cursoNombre: texto(curso?.nombre) || 'Curso',
     cursoCodigo: texto(curso?.codigo),
     grupoNumero: texto(grupo?.numero_grupo) || texto(row.grupo_id),
@@ -115,47 +127,20 @@ function linkDesdeFila(row: Record<string, unknown>, baseUrl: string): LinkQr {
   }
 }
 
-function cuerpoTexto(message: string, links: LinkQr[]) {
-  return (
-    `${message.trim()}\n\n` +
-    links
-      .map(
-        (l, idx) =>
-          `${idx + 1}. ${l.cursoNombre} (${l.cursoCodigo}) - Grupo ${l.grupoNumero} - ${l.profesorNombre}\n${l.url}`
-      )
-      .join('\n\n')
-  )
-}
-
-function cuerpoHtml(message: string, links: LinkQr[]) {
-  const intro = message.trim() || 'Compartimos los códigos QR de evaluación para los siguientes grupos:'
-  const items = links
-    .map(
-      (l, idx) =>
-        `<li style="margin-bottom:12px">
-            <strong>${idx + 1}. ${l.cursoNombre} (${l.cursoCodigo})</strong><br/>
-            Grupo: ${l.grupoNumero}<br/>
-            Docente: ${l.profesorNombre}<br/>
-            <a href="${l.url}" target="_blank" rel="noreferrer">${l.url}</a>
-          </li>`
-    )
-    .join('')
-  return `
-      <div style="font-family: Arial, sans-serif; color: #111827;">
-        <p>${intro}</p>
-        <ol>${items}</ol>
-      </div>
-    `
-}
-
-async function enviarCorreoQr(email: string, subject: string, message: string, links: LinkQr[]) {
+async function enviarCorreoQr(email: string, subject: string, message: string, links: QrCurso[]) {
   if (!mailConfigured({ smtpAuth: true })) {
     throw unavailable('Servicio de correo no configurado. Faltan variables SMTP o BREVO_API_KEY en el backend.')
   }
   await sendMail({
     to: email,
     subject,
-    text: cuerpoTexto(message, links),
-    html: cuerpoHtml(message, links),
+    text: correoQrDocenteTexto({ qrs: links, mensaje: message }),
+    html: correoQrDocenteHtml({ qrs: links, mensaje: message }),
+    attachments: await Promise.all(links.map(adjuntoQr)),
   })
+}
+
+async function adjuntoQr(qr: QrCurso): Promise<MailAttachment> {
+  const nombre = `QR-${qr.cursoCodigo || 'curso'}-G${qr.grupoNumero}`.replace(/[^A-Za-z0-9_-]/g, '_')
+  return { filename: `${nombre}.png`, content: await generarPngQr(qr.token), contentType: 'image/png' }
 }

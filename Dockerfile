@@ -11,6 +11,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+COPY public ./public
 USER node
 EXPOSE 3000
 # La imagen slim no trae curl ni wget; se usa el fetch nativo de Node.

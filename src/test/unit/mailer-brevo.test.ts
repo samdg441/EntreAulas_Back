@@ -36,6 +36,20 @@ describe('Correo vía API de Brevo', () => {
     })
   })
 
+  it('manda los adjuntos en base64 con su nombre', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 201 }))
+
+    await sendMail({
+      to: 'destino@test.com',
+      subject: 'QR',
+      text: 't',
+      attachments: [{ filename: 'QR-C1-G1.png', content: Buffer.from('png'), contentType: 'image/png' }],
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.attachment).toEqual([{ name: 'QR-C1-G1.png', content: Buffer.from('png').toString('base64') }])
+  })
+
   it('lanza error con el detalle cuando Brevo rechaza el envío', async () => {
     fetchMock.mockResolvedValue(new Response('{"message":"sender not valid"}', { status: 400 }))
 

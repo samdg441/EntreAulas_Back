@@ -3,7 +3,7 @@ import { authenticateToken, requireRole } from '../../middleware/auth'
 import { qrRepository } from './qr.repository'
 import { generarQrsBatch } from './qr-batch'
 import { autoEnrollPorQr } from './qr-auto-enroll'
-import { compartirQrsPorEmail, errorEnvioCorreo } from './qr-share-email'
+import { compartirQrsPorEmail, errorEnvioCorreo, generarPngQr } from './qr-share-email'
 import { mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
 import { AppError, sendError } from '../../shared/errors'
 
@@ -43,6 +43,21 @@ router.post('/share-email', authenticateToken, requireRole(['coordinador', 'admi
     })
   } catch (error) {
     return sendError(res, errorEnvioCorreo(error))
+  }
+})
+
+/**
+ * GET /qr-evaluaciones/:token/imagen.png[?descargar=1]
+ * PNG del QR de la encuesta. Es público porque lo cargan los clientes de correo.
+ */
+router.get('/:token/imagen.png', async (req, res) => {
+  try {
+    const png = await generarPngQr(String(req.params.token))
+    res.set('Cache-Control', 'public, max-age=86400')
+    if (req.query.descargar) res.attachment('qr-evaluacion.png')
+    res.type('png').send(png)
+  } catch (error) {
+    return sendError(res, error)
   }
 })
 

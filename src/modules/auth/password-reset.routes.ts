@@ -8,6 +8,7 @@ import {
 import { logger } from '../../shared/logger'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
 import { mailConfigured } from '../../shared/adapters/mail-config'
+import { correoRecuperacionHtml, correoRecuperacionTexto } from '../../shared/email-templates'
 import { authRepository } from './auth.repository'
 import {
   buscarTokenDeResetValido,
@@ -18,23 +19,23 @@ import {
 
 const router = Router()
 
+// Debe coincidir con generateExpirationDate().
+const VIGENCIA_TOKEN = '1 hora'
+
 function appBaseUrl(): string {
   return String(process.env.FRONTEND_URL || 'http://localhost:5173')
 }
 
-async function enviarCorreoRecuperacion(email: string, resetLink: string): Promise<void> {
+async function enviarCorreoRecuperacion(email: string, resetLink: string, nombre?: string): Promise<void> {
   if (!mailConfigured({ smtpAuth: false })) return
 
+  const datos = { nombre, resetLink, vigencia: VIGENCIA_TOKEN }
   try {
     await sendMail({
       to: email,
       subject: 'Recuperación de contraseña - EntreAulas',
-      text:
-        'Solicitaste recuperar tu contraseña. Usa el siguiente enlace (válido por 1 hora) ' +
-        `para continuar:\n\n${resetLink}`,
-      html:
-        '<p>Solicitaste recuperar tu contraseña. Usa el siguiente enlace ' +
-        `(válido por 1 hora) para continuar:</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+      text: correoRecuperacionTexto(datos),
+      html: correoRecuperacionHtml(datos),
       encoding: '7bit'
     })
   } catch (mailError) {
@@ -85,7 +86,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
 
   // Enviar correo con enlace de recuperación; nunca devolver el token en JSON en producción.
   const resetLink = `${appBaseUrl()}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
-  await enviarCorreoRecuperacion(email, resetLink)
+  await enviarCorreoRecuperacion(email, resetLink, (user as { nombre?: string }).nombre)
 
   const debugReset =
     process.env.PASSWORD_RESET_DEBUG_RESPONSE === 'true' &&

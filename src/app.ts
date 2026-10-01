@@ -1,4 +1,5 @@
 import express from 'express'
+import path from 'node:path'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import swaggerUi from 'swagger-ui-express'
@@ -16,7 +17,6 @@ import courseRoutes from './routes/courseRoutes'
 import usersRoutes from './routes/usersRoutes'
 import coordinadorRoutes from './routes/coordinador'
 import aiRoutes from './routes/aiRoutes'
-
 dotenv.config()
 
 export const app = express()
@@ -34,6 +34,9 @@ const corsOptions = {
 }
 app.use(cors(corsOptions))
 app.use(express.json())
+
+// Imágenes públicas que cargan los clientes de correo (logo).
+app.use('/static', express.static(path.resolve('public'), { maxAge: '7d' }))
 
 // Contrato OpenAPI (V&V)
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec))
