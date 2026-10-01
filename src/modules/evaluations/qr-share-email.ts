@@ -1,4 +1,5 @@
 import { sendMail } from '../../shared/adapters/mailer.adapter'
+import { mailConfigured } from '../../shared/adapters/mail-config'
 import { qrRepository } from './qr.repository'
 import { parseGrupoIds, carreraIdSiCoordinador } from './qr-batch'
 import { AppError, badRequest, forbidden, internal, notFound, unavailable } from '../../shared/errors'
@@ -97,10 +98,6 @@ function appBaseUrl() {
   return url
 }
 
-function smtpListo() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM)
-}
-
 function linkDesdeFila(row: Record<string, unknown>, baseUrl: string): LinkQr {
   const curso = cursoDeFila(row)
   const grupo = uno(row.grupo as Relacion<Record<string, unknown>>)
@@ -152,8 +149,8 @@ function cuerpoHtml(message: string, links: LinkQr[]) {
 }
 
 async function enviarCorreoQr(email: string, subject: string, message: string, links: LinkQr[]) {
-  if (!smtpListo()) {
-    throw unavailable('Servicio de correo no configurado. Faltan variables SMTP en el backend.')
+  if (!mailConfigured({ smtpAuth: true })) {
+    throw unavailable('Servicio de correo no configurado. Faltan variables SMTP o BREVO_API_KEY en el backend.')
   }
   await sendMail({
     to: email,

@@ -7,6 +7,7 @@ import {
 } from '../../shared/errors'
 import { logger } from '../../shared/logger'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
+import { mailConfigured } from '../../shared/adapters/mail-config'
 import { authRepository } from './auth.repository'
 import {
   buscarTokenDeResetValido,
@@ -21,12 +22,8 @@ function appBaseUrl(): string {
   return String(process.env.FRONTEND_URL || 'http://localhost:5173')
 }
 
-function smtpConfigured(): boolean {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM)
-}
-
 async function enviarCorreoRecuperacion(email: string, resetLink: string): Promise<void> {
-  if (!smtpConfigured()) return
+  if (!mailConfigured({ smtpAuth: false })) return
 
   try {
     await sendMail({

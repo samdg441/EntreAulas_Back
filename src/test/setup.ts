@@ -9,7 +9,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret'
 
 // Las pruebas nunca envían correos reales: las que prueban el envío levantan su propio buzón SMTP local.
 // Se deja vacío (no delete) para que el dotenv.config() de app.ts no vuelva a cargar el valor del .env.
-for (const key of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM']) {
+for (const key of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'BREVO_API_KEY']) {
   process.env[key] = ''
 }
 
