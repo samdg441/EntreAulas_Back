@@ -161,7 +161,7 @@ describe('RQ4 — Envío de correo de recuperación (código real)', () => {
         await forgot(EMAIL_EXISTENTE)
         await esperarMensaje(buzon)
         const cuerpo = buzon.mensajes.join('\n')
-        expect(cuerpo).toMatch(/forgot-password\?token=[0-9a-f]{64}/)
+        expect(cuerpo).toMatch(/reset-password\?token=[0-9a-f]{64}/)
       } finally {
         await buzon.cerrar()
       }
@@ -253,7 +253,7 @@ describe('RQ4 — Envío de correo de recuperación (código real)', () => {
       const res = await forgot(EMAIL_EXISTENTE)
       expect(res.status).toBe(200)
       expect(res.body.resetLink).toBe(
-        `https://app.entreaulas.com/forgot-password?token=${res.body.resetToken}` +
+        `https://app.entreaulas.com/reset-password?token=${res.body.resetToken}` +
           `&email=${encodeURIComponent(EMAIL_EXISTENTE)}`,
       )
     })
@@ -262,7 +262,7 @@ describe('RQ4 — Envío de correo de recuperación (código real)', () => {
       delete process.env.FRONTEND_URL
       const res = await forgot(EMAIL_EXISTENTE)
       expect(res.status).toBe(200)
-      expect(res.body.resetLink.startsWith('http://localhost:5173/forgot-password?')).toBe(true)
+      expect(res.body.resetLink.startsWith('http://localhost:5173/reset-password?')).toBe(true)
     })
 
     it('N5: el email del resetLink va codificado con encodeURIComponent', async () => {

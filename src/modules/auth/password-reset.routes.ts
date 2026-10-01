@@ -84,7 +84,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
   }
 
   // Enviar correo con enlace de recuperación; nunca devolver el token en JSON en producción.
-  const resetLink = `${appBaseUrl()}/forgot-password?token=${resetToken}&email=${encodeURIComponent(email)}`
+  const resetLink = `${appBaseUrl()}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
   await enviarCorreoRecuperacion(email, resetLink)
 
   const debugReset =

@@ -106,7 +106,7 @@ describe('RQ3 — Solicitud de recuperación de contraseña (código real)', () 
       expect(res.body.message).toBe(MENSAJE_GENERICO)
       expect(res.body.resetToken).toMatch(/^[0-9a-f]{64}$/)
       expect(res.body.resetLink).toBe(
-        `http://localhost:5173/forgot-password?token=${res.body.resetToken}` +
+        `http://localhost:5173/reset-password?token=${res.body.resetToken}` +
           `&email=${encodeURIComponent(EMAIL_EXISTENTE)}`,
       )
     })

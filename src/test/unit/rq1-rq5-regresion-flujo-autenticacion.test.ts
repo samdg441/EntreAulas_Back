@@ -182,7 +182,7 @@ describe('RQ1→RQ5 — Regresión de punta a punta: alta, login y recuperación
         resultado.mensajesCorreo = [...buzon.mensajes]
 
         const cuerpoCorreo = buzon.mensajes.join('\n')
-        const enlace = cuerpoCorreo.match(/forgot-password\?token=([0-9a-f]{64})/)
+        const enlace = cuerpoCorreo.match(/reset-password\?token=([0-9a-f]{64})/)
         if (!enlace) throw new Error('el correo no llegó o no traía el enlace con el token de recuperación')
         resultado.tokenDelCorreo = enlace[1]
       } finally {

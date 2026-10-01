@@ -101,7 +101,7 @@ describe('RQ3 — forgot-password (cobertura estructural, Fake Supabase)', () =>
     expect(res.body.message).toBe(MENSAJE_GENERICO)
     expect(res.body.resetToken).toMatch(/^[0-9a-f]{64}$/)
     expect(res.body.resetLink).toBe(
-      `https://app.entreaulas.com/forgot-password?token=${res.body.resetToken}` +
+      `https://app.entreaulas.com/reset-password?token=${res.body.resetToken}` +
         `&email=${encodeURIComponent(USUARIO_ACTIVO.email)}`
     )
   })
@@ -115,7 +115,7 @@ describe('RQ3 — forgot-password (cobertura estructural, Fake Supabase)', () =>
     const res = await forgot({ email: USUARIO_ACTIVO.email })
 
     expect(res.status).toBe(200)
-    expect(res.body.resetLink.startsWith('http://localhost:5173/forgot-password?')).toBe(true)
+    expect(res.body.resetLink.startsWith('http://localhost:5173/reset-password?')).toBe(true)
   })
 
   it('N4 (&&): flag=true pero NODE_ENV=production → 200 sin token (rama && derecha falsa)', async () => {
