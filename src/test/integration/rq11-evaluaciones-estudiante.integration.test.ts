@@ -1,5 +1,5 @@
 /**
- * Integración RQ11: el grafo completo vive en `src/test/unit/rq11-*.test.ts`.
+ * Integración RQ11: el grafo completo vive en `src/test/unit/evaluaciones/rq11-*.test.ts`.
  * Aquí el contrato HTTP del camino feliz (C5) y del fallo de auth (C1).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'

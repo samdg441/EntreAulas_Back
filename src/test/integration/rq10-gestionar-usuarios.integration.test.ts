@@ -1,5 +1,5 @@
 /**
- * Integración RQ10: el grafo completo vive en `src/test/unit/rq10-*.test.ts`.
+ * Integración RQ10: el grafo completo vive en `src/test/unit/usuarios/rq10-*.test.ts`.
  * Contrato HTTP de auth (C1), alta (C3) y desactivación (C7).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'

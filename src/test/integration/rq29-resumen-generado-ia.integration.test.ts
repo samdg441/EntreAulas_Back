@@ -1,5 +1,5 @@
 /**
- * Integración RQ29 — Resumen generado con IA. El grafo completo vive en `src/test/unit/rq29-*.test.ts`.
+ * Integración RQ29 — Resumen generado con IA. El grafo completo vive en `src/test/unit/resumen-ia/rq29-*.test.ts`.
  * Contrato HTTP de auth (C1) y del camino Gemini (C5).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'

@@ -1,6 +1,6 @@
 /**
  * Integración RQ31 — Recibir alerta de acoso con IA.
- * El grafo completo vive en `src/test/unit/rq31-*.test.ts`.
+ * El grafo completo vive en `src/test/unit/resumen-ia/rq31-*.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
