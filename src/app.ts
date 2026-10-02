@@ -17,6 +17,7 @@ import courseRoutes from './routes/courseRoutes'
 import usersRoutes from './routes/usersRoutes'
 import coordinadorRoutes from './routes/coordinador'
 import aiRoutes from './routes/aiRoutes'
+import periodosRoutes from './routes/periodos'
 dotenv.config()
 
 export const app = express()
@@ -54,6 +55,7 @@ app.use('/api/coordinador', coordinadorRoutes)
 app.use('/api/qr-evaluaciones', qrEvaluacionesRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/users', usersRoutes)
+app.use('/api/periodos', periodosRoutes)
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, commit: process.env.RENDER_GIT_COMMIT || null })

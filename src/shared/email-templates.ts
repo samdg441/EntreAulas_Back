@@ -4,9 +4,13 @@
  * ni imágenes en base64: todo va en tablas con estilos en línea y las imágenes por URL pública.
  */
 
-const ROJO = '#E30613'
-const ROJO_OSCURO = '#991B1B'
-const ROJO_SUAVE = '#FECACA'
+// Rojos pastel: identidad de la universidad sin tono de alerta.
+// ROSA_BOTON y ROSA_TEXTO mantienen contraste AA (>= 4.5:1) con blanco.
+const ROSA_BOTON = '#BD5260'
+const ROSA_TEXTO = '#9B3D4A'
+const ROSA_ACENTO = '#F2A7B0'
+const ROSA_BORDE = '#F8D3D8'
+const ROSA_FONDO = '#FFF5F6'
 const GRIS_TEXTO = '#374151'
 const GRIS_SUAVE = '#6B7280'
 const FONDO = '#F3F4F6'
@@ -50,7 +54,7 @@ function boton(href: string, texto: string): string {
   return `
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
   <tr>
-    <td align="center" bgcolor="${ROJO}" style="border-radius:6px;">
+    <td align="center" bgcolor="${ROSA_BOTON}" style="border-radius:6px;">
       <a href="${escapeHtml(href)}" target="_blank"
          style="display:inline-block;padding:13px 28px;font-family:${FUENTE};font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:6px;">${escapeHtml(texto)}</a>
     </td>
@@ -59,7 +63,7 @@ function boton(href: string, texto: string): string {
 }
 
 function enlaceFooter(href: string, texto: string): string {
-  return `<a href="${escapeHtml(href)}" target="_blank" style="color:${ROJO_OSCURO};text-decoration:underline;">${escapeHtml(texto)}</a>`
+  return `<a href="${escapeHtml(href)}" target="_blank" style="color:${ROSA_TEXTO};text-decoration:underline;">${escapeHtml(texto)}</a>`
 }
 
 function urlLogo(): string {
@@ -82,7 +86,7 @@ function layout(params: { titulo: string; preheader: string; etiqueta?: string; 
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
              style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:10px;overflow:hidden;">
         <tr>
-          <td bgcolor="#FFFFFF" style="padding:18px 28px;border-bottom:4px solid ${ROJO};">
+          <td bgcolor="#FFFFFF" style="padding:18px 28px;border-bottom:4px solid ${ROSA_ACENTO};">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
                 <td width="60" valign="middle" style="width:60px;">
@@ -94,7 +98,7 @@ function layout(params: { titulo: string; preheader: string; etiqueta?: string; 
                   <div style="font-size:13px;color:${GRIS_SUAVE};">Universidad de Medellín</div>
                 </td>
                 ${params.etiqueta ? `<td align="right" valign="middle" style="font-family:${FUENTE};">
-                  <span style="display:inline-block;padding:5px 12px;background-color:#FEF2F2;border:1px solid ${ROJO_SUAVE};border-radius:999px;font-size:12px;font-weight:bold;color:${ROJO_OSCURO};white-space:nowrap;">${escapeHtml(params.etiqueta)}</span>
+                  <span style="display:inline-block;padding:5px 12px;background-color:${ROSA_FONDO};border:1px solid ${ROSA_BORDE};border-radius:999px;font-size:12px;font-weight:bold;color:${ROSA_TEXTO};white-space:nowrap;">${escapeHtml(params.etiqueta)}</span>
                 </td>` : ''}
               </tr>
             </table>
@@ -134,14 +138,14 @@ export function correoRecuperacionHtml({ nombre, resetLink, vigencia }: CorreoRe
 <p style="margin:0 0 12px;">Recibimos una solicitud para restablecer la contraseña de tu cuenta de EntreAulas. Si no fuiste tú, ignora este mensaje: tu contraseña no cambiará.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
   <tr>
-    <td bgcolor="#FEF2F2" style="padding:10px 14px;border-left:4px solid ${ROJO};font-size:14px;color:${ROJO_OSCURO};">
+    <td bgcolor="${ROSA_FONDO}" style="padding:10px 14px;border-left:4px solid ${ROSA_ACENTO};font-size:14px;color:${ROSA_TEXTO};">
       &#9201; Este enlace expira en <strong>${escapeHtml(vigencia)}</strong> y solo puede usarse una vez.
     </td>
   </tr>
 </table>
 ${boton(resetLink, 'Restablecer mi Contraseña')}
 <p style="margin:24px 0 6px;font-size:13px;color:${GRIS_SUAVE};">Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
-<p style="margin:0;font-size:13px;word-break:break-all;"><a href="${escapeHtml(resetLink)}" target="_blank" style="color:${ROJO};">${escapeHtml(resetLink)}</a></p>`
+<p style="margin:0;font-size:13px;word-break:break-all;"><a href="${escapeHtml(resetLink)}" target="_blank" style="color:${ROSA_TEXTO};">${escapeHtml(resetLink)}</a></p>`
 
   const footer = `
 <div>${soporte ? `${enlaceFooter(`mailto:${soporte}`, 'Soporte técnico')} &nbsp;·&nbsp; ` : ''}${enlaceFooter(SITIO_UNIVERSIDAD, 'Aviso de privacidad')}</div>
@@ -186,13 +190,13 @@ function tarjetaQr(qr: QrCurso): string {
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
   <tr>
-    <td align="center" style="padding:20px;border:2px solid ${ROJO_SUAVE};border-radius:10px;background-color:#FFFFFF;">
-      <div style="font-size:13px;font-weight:bold;letter-spacing:0.5px;color:${ROJO};">${titulo}</div>
+    <td align="center" style="padding:20px;border:2px solid ${ROSA_BORDE};border-radius:10px;background-color:#FFFFFF;">
+      <div style="font-size:13px;font-weight:bold;letter-spacing:0.5px;color:${ROSA_TEXTO};">${titulo}</div>
       <div style="margin:2px 0 14px;font-size:13px;color:${GRIS_SUAVE};">Grupo ${escapeHtml(qr.grupoNumero)} · ${escapeHtml(qr.profesorNombre)}</div>
       <img src="${escapeHtml(qr.imagenUrl)}" width="200" height="200" alt="Código QR de la evaluación"
            style="display:block;margin:0 auto 16px;width:200px;height:200px;border:0;">
       ${boton(qr.descargaUrl, 'Descargar QR para Clase')}
-      <div style="margin-top:12px;font-size:12px;"><a href="${escapeHtml(qr.url)}" target="_blank" style="color:${ROJO_OSCURO};">Abrir el enlace de la encuesta</a></div>
+      <div style="margin-top:12px;font-size:12px;"><a href="${escapeHtml(qr.url)}" target="_blank" style="color:${ROSA_TEXTO};">Abrir el enlace de la encuesta</a></div>
     </td>
   </tr>
 </table>`
@@ -218,7 +222,7 @@ export function correoQrDocenteHtml({ qrs, mensaje }: CorreoQrDocente): string {
 <p style="margin:0 0 16px;">Ya está abierta la evaluación de ${qrs.length === 1 ? 'tu curso' : 'tus cursos'}. Puedes proyectar este código QR en la pantalla del aula o compartirlo con tus estudiantes para que respondan la encuesta. También va adjunto en PNG, listo para imprimir o proyectar.</p>
 ${nota}
 ${qrs.map(tarjetaQr).join('')}
-<p style="margin:8px 0 0;text-align:center;font-size:14px;"><a href="${escapeHtml(panel)}" target="_blank" style="color:${ROJO};font-weight:bold;">Ver estado de la evaluación en mi panel</a></p>`
+<p style="margin:8px 0 0;text-align:center;font-size:14px;"><a href="${escapeHtml(panel)}" target="_blank" style="color:${ROSA_TEXTO};font-weight:bold;">Ver estado de la evaluación en mi panel</a></p>`
 
   const footer = `
 <div style="font-weight:bold;color:${GRIS_TEXTO};">Departamento Académico · Universidad de Medellín</div>
