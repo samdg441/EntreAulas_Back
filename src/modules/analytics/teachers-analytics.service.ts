@@ -232,10 +232,15 @@ async function infoCarreraPorGrupo(grupoIdsCrudos: unknown[]): Promise<Map<numbe
     info.set(Number(g.id), {
       cursoId: Number(g.curso_id),
       carreraId: curso?.carrera_id != null ? Number(curso.carrera_id) : null,
-      cursoNombre: curso ? `${curso.codigo ? `${curso.codigo} - ` : ''}${curso.nombre}` : `Curso ${g.curso_id}`,
+      cursoNombre: nombreDeCurso(curso, g.curso_id),
     })
   })
   return info
+}
+
+function nombreDeCurso(curso: any, cursoId: unknown): string {
+  if (!curso) return `Curso ${cursoId}`
+  return [curso.codigo, curso.nombre].filter(Boolean).join(' - ')
 }
 
 /** Estadísticas y reportes montados bajo /api/teachers (analytics). */
