@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import dotenv from 'dotenv'
+import { normalizarNombres } from '../shared/nombres'
 
 // Cargar variables de entorno
 dotenv.config()
@@ -32,7 +33,7 @@ export class SupabaseDB {
   }) {
     const { data, error } = await supabaseAdmin
       .from('usuarios')
-      .insert([userData])
+      .insert([normalizarNombres(userData)])
       .select()
       .single()
     
@@ -65,7 +66,7 @@ export class SupabaseDB {
   static async updateUser(id: string, updates: any) {
     const { data, error } = await supabaseAdmin
       .from('usuarios')
-      .update(updates)
+      .update(normalizarNombres(updates))
       .eq('id', id)
       .select()
       .single()

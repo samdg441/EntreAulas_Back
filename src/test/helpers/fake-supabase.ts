@@ -39,6 +39,7 @@ export class QueryBuilder {
   private filasInsert: Fila[] | null = null
   private parche: Fila | null = null
   private orden: { columna: string; asc: boolean } | null = null
+  private rango: { desde: number; hasta: number } | null = null
   private forzarError: ErrorConsulta | null
 
   constructor(
@@ -86,6 +87,11 @@ export class QueryBuilder {
 
   order(columna: string, opts?: { ascending?: boolean }) {
     this.orden = { columna, asc: opts?.ascending !== false }
+    return this
+  }
+
+  range(desde: number, hasta: number) {
+    this.rango = { desde, hasta }
     return this
   }
 
@@ -152,6 +158,10 @@ export class QueryBuilder {
         const cmp = comparar(a[columna], b[columna])
         return asc ? cmp : -cmp
       })
+    }
+
+    if (this.rango) {
+      filas = filas.slice(this.rango.desde, this.rango.hasta + 1)
     }
 
     return this.empaquetar(filas.map((f) => ({ ...f })), modo)

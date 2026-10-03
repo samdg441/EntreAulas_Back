@@ -378,6 +378,35 @@ describe('RQ11 — teachers-analytics.service (cobertura)', () => {
     await expect(teachersAnalyticsService.getCareerResultsAll()).rejects.toMatchObject({ status: 500 })
   })
 
+  it('getCareerResultsAll: atribuye cada evaluación a su carrera por grupo → curso', async () => {
+    academicRepository.listCarreras.mockReset()
+    academicRepository.listCarreras.mockResolvedValueOnce([
+      { id: 1, nombre: 'Sistemas', activa: true },
+      { id: 2, nombre: 'Civil', activa: true },
+    ])
+    analyticsRepository.listEvaluaciones.mockResolvedValueOnce([
+      { id: 1, calificacion_promedio: 4, fecha_creacion: '2026-03-01', grupo_id: 10, profesor_id: 'p1' },
+      { id: 2, calificacion_promedio: 5, fecha_creacion: '2026-03-05', grupo_id: 10, profesor_id: 'p2' },
+      { id: 3, calificacion_promedio: '3', fecha_creacion: '2026-02-01', grupo_id: 20, profesor_id: 'p3' },
+    ])
+    analyticsRepository.getGruposByIds.mockResolvedValueOnce([
+      { id: 10, curso_id: 3 },
+      { id: 20, curso_id: 9 },
+    ])
+    academicRepository.listCursosByIds.mockResolvedValueOnce([
+      { id: 3, nombre: 'Cálculo', carrera_id: 1 },
+      { id: 9, nombre: 'Estática', carrera_id: 2 },
+    ])
+
+    const r = await teachersAnalyticsService.getCareerResultsAll()
+
+    expect(r.resultados_por_carrera).toEqual([
+      expect.objectContaining({ carrera_id: 1, total_evaluaciones: 2, calificacion_promedio: 4.5, profesores_evaluados: 2 }),
+      expect.objectContaining({ carrera_id: 2, total_evaluaciones: 1, calificacion_promedio: 3, profesores_evaluados: 1 }),
+    ])
+    expect(r.estadisticas_generales).toMatchObject({ total_evaluaciones: 3, promedio_general: 4, carreras_con_evaluaciones: 2 })
+  })
+
   it('getCareerResultsByCareer: 404, profesores y filtro por carrera', async () => {
     academicRepository.getCarreraById.mockRejectedValueOnce(new Error('db'))
     await expect(teachersAnalyticsService.getCareerResultsByCareer('1')).rejects.toMatchObject({
@@ -429,7 +458,6 @@ describe('RQ11 — teachers-analytics.service (cobertura)', () => {
       },
     ])
     analyticsRepository.getGruposByIds.mockRejectedValueOnce(new Error('g'))
-    academicRepository.listCursosByIds.mockRejectedValueOnce(new Error('c'))
     const vacio = await teachersAnalyticsService.getCareerResultsByCareer('1')
     expect(vacio.estadisticas_carrera.total_profesores).toBe(1)
     expect(vacio.profesores[0].total_evaluaciones).toBe(0)
@@ -440,7 +468,9 @@ describe('RQ11 — teachers-analytics.service (cobertura)', () => {
       codigo: 'SIS',
       activa: true,
     })
-    teachersRepository.listByCareerDetailed.mockResolvedValueOnce([{ id: 'p1' }])
+    teachersRepository.listByCareerDetailed.mockResolvedValueOnce([
+      { id: 'p1', usuarios: { nombre: 'ANA', apellido: 'RUIZ', email: 'ana@udem.edu.co' } },
+    ])
     analyticsRepository.listEvaluaciones.mockResolvedValueOnce([
       {
         id: 1,
@@ -451,10 +481,18 @@ describe('RQ11 — teachers-analytics.service (cobertura)', () => {
       },
     ])
     analyticsRepository.getGruposByIds.mockResolvedValueOnce([{ id: 10, curso_id: 3 }])
-    academicRepository.listCursosByIds.mockResolvedValueOnce([{ id: 3, carrera_id: 1 }])
+    academicRepository.listCursosByIds.mockResolvedValueOnce([
+      { id: 3, nombre: 'Cálculo', codigo: 'CM1', carrera_id: 1 },
+    ])
     const ok = await teachersAnalyticsService.getCareerResultsByCareer('1')
-    expect(ok.profesores[0].total_evaluaciones).toBe(1)
+    expect(ok.profesores[0]).toMatchObject({
+      total_evaluaciones: 1,
+      profesor_nombre: 'ANA RUIZ',
+      profesor_email: 'ana@udem.edu.co',
+      cursos_evaluados: ['CM1 - Cálculo'],
+    })
     expect(ok.estadisticas_carrera.promedio_general).toBe(5)
+    expect(ok.estadisticas_carrera.cursos_evaluados).toBe(1)
   })
 
   it('getStudentStats: ceros, catch de consultas y progreso', async () => {

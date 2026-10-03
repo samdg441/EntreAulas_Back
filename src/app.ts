@@ -16,6 +16,7 @@ import teachersRoutes from './routes/teachers'
 import courseRoutes from './routes/courseRoutes'
 import usersRoutes from './routes/usersRoutes'
 import coordinadorRoutes from './routes/coordinador'
+import decanoRoutes from './routes/decano'
 import aiRoutes from './routes/aiRoutes'
 import periodosRoutes from './routes/periodos'
 dotenv.config()
@@ -52,6 +53,7 @@ app.use('/api/resultados', resultadosRoutes)
 app.use('/api/teachers', teachersRoutes)
 app.use('/api/courses', courseRoutes)
 app.use('/api/coordinador', coordinadorRoutes)
+app.use('/api/decano', decanoRoutes)
 app.use('/api/qr-evaluaciones', qrEvaluacionesRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/users', usersRoutes)

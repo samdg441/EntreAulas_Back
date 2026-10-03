@@ -200,8 +200,8 @@ class RQ1CrearUsuarioAdmin {
       message: 'Usuario creado exitosamente',
       user: {
         email: bodyValido.email,
-        nombre: bodyValido.nombre,
-        apellido: bodyValido.apellido,
+        nombre: bodyValido.nombre.toUpperCase(),
+        apellido: bodyValido.apellido.toUpperCase(),
         tipo_usuario: bodyValido.tipo_usuario,
         activo: true,
       },

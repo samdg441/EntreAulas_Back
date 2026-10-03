@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabase-only'
 import { one } from '../../shared/supabase-result'
+import { normalizarNombres } from '../../shared/nombres'
 import type { CoordinadorInfo, DecanoPorFacultad, DecanoPorUsuario } from './role.types'
 
 const DECANO_POR_USUARIO = `
@@ -122,7 +123,7 @@ export class RoleRepository {
     const { data, error } = await supabaseAdmin
       .from('usuarios')
       .insert({
-        ...row,
+        ...normalizarNombres(row),
         tipo_usuario: 'profesor',
         activo: true,
       })

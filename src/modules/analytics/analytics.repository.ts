@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../../config/supabase-only'
+import { todasLasFilas } from '../../shared/supabase-paginacion'
 
 type SbError = { code?: string } | null
 
@@ -131,17 +132,18 @@ export class AnalyticsRepository {
     periodoId?: string | number
     grupoId?: string | number
   }) {
-    let query = supabaseAdmin.from('evaluaciones').select(opts.columns)
-    if (opts.profesorId !== undefined) query = query.eq('profesor_id', opts.profesorId)
-    if (opts.profesorIds?.length) query = query.in('profesor_id', opts.profesorIds)
-    if (opts.estudianteId !== undefined) query = query.eq('estudiante_id', opts.estudianteId)
-    if (opts.completada !== undefined) query = query.eq('completada', opts.completada)
-    if (opts.gte) query = query.gte('fecha_creacion', opts.gte)
-    if (opts.lte) query = query.lte('fecha_creacion', opts.lte)
-    if (opts.periodoId !== undefined) query = query.eq('periodo_id', opts.periodoId)
-    if (opts.grupoId !== undefined) query = query.eq('grupo_id', opts.grupoId)
-    const { data, error } = await query
-    return many(data, error)
+    return todasLasFilas<any>((desde, hasta) => {
+      let query = supabaseAdmin.from('evaluaciones').select(opts.columns)
+      if (opts.profesorId !== undefined) query = query.eq('profesor_id', opts.profesorId)
+      if (opts.profesorIds?.length) query = query.in('profesor_id', opts.profesorIds)
+      if (opts.estudianteId !== undefined) query = query.eq('estudiante_id', opts.estudianteId)
+      if (opts.completada !== undefined) query = query.eq('completada', opts.completada)
+      if (opts.gte) query = query.gte('fecha_creacion', opts.gte)
+      if (opts.lte) query = query.lte('fecha_creacion', opts.lte)
+      if (opts.periodoId !== undefined) query = query.eq('periodo_id', opts.periodoId)
+      if (opts.grupoId !== undefined) query = query.eq('grupo_id', opts.grupoId)
+      return query.order('id', { ascending: true }).range(desde, hasta)
+    })
   }
 
   async insertEvaluacion(evaluationData: Record<string, unknown>) {
@@ -175,12 +177,14 @@ export class AnalyticsRepository {
     columns = 'evaluacion_id, pregunta_id, respuesta_rating, respuesta_texto'
   ) {
     const ids = evaluacionIds.length ? evaluacionIds : [-1]
-    const { data, error } = await supabaseAdmin
-      .from('respuestas_evaluacion')
-      .select(columns)
-      .in('evaluacion_id', ids)
-    if (error) throw error
-    return data || []
+    return todasLasFilas<any>((desde, hasta) =>
+      supabaseAdmin
+        .from('respuestas_evaluacion')
+        .select(columns)
+        .in('evaluacion_id', ids)
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    )
   }
 
   async listRespuestasTextoByEvaluacionIds(evaluacionIds: Array<string | number>) {

@@ -189,6 +189,55 @@ export function filtrarCarrerasSinTronco(carreras: any[]) {
   })
 }
 
+function promedioRedondeado(evaluaciones: any[]): number {
+  return Number(calcularPromedio(evaluaciones.map((e: any) => e.calificacion_promedio)).toFixed(2))
+}
+
+function ultimaFecha(evaluaciones: any[]): number | null {
+  const tiempos = evaluaciones
+    .map((e: any) => new Date(e.fecha_creacion).getTime())
+    .filter((t) => Number.isFinite(t))
+  return tiempos.length ? Math.max(...tiempos) : null
+}
+
+type InfoGrupo = { cursoId: number; carreraId: number | null; cursoNombre: string }
+
+/** grupo → curso → carrera, para atribuir cada evaluación a su carrera. */
+async function infoCarreraPorGrupo(grupoIdsCrudos: unknown[]): Promise<Map<number, InfoGrupo>> {
+  const info = new Map<number, InfoGrupo>()
+  const grupoIds = idsUnicos(grupoIdsCrudos.map(Number).filter((id) => Number.isFinite(id) && id > 0))
+  if (!grupoIds.length) return info
+
+  const grupos: any[] = []
+  const cursos: any[] = []
+  try {
+    for (let i = 0; i < grupoIds.length; i += 150) {
+      grupos.push(...comoLista(await analyticsRepository.getGruposByIds(grupoIds.slice(i, i + 150), 'id, curso_id')))
+    }
+    const cursoIds = idsUnicos(grupos.map((g: any) => g.curso_id).filter(Boolean))
+    for (let i = 0; i < cursoIds.length; i += 150) {
+      cursos.push(
+        ...comoLista(
+          await academicRepository.listCursosByIds(cursoIds.slice(i, i + 150), 'id, nombre, codigo, carrera_id')
+        )
+      )
+    }
+  } catch {
+    return info
+  }
+
+  const cursoPorId = new Map(cursos.map((c: any) => [Number(c.id), c]))
+  grupos.forEach((g: any) => {
+    const curso = cursoPorId.get(Number(g.curso_id))
+    info.set(Number(g.id), {
+      cursoId: Number(g.curso_id),
+      carreraId: curso?.carrera_id != null ? Number(curso.carrera_id) : null,
+      cursoNombre: curso ? `${curso.codigo ? `${curso.codigo} - ` : ''}${curso.nombre}` : `Curso ${g.curso_id}`,
+    })
+  })
+  return info
+}
+
 /** Estadísticas y reportes montados bajo /api/teachers (analytics). */
 export class TeachersAnalyticsService {
   async getStats(profesorId: string) {
@@ -416,61 +465,49 @@ export class TeachersAnalyticsService {
   async getCareerResultsAll() {
     let carreras: any[]
     try {
-      carreras = await academicRepository.listCarreras('id, nombre, codigo, activo, activa')
+      carreras = await academicRepository.listCarreras('id, nombre, activa')
     } catch (carrerasError) {
       try {
-        carreras = await academicRepository.listCarreras('id, nombre, codigo, activa')
+        carreras = await academicRepository.listCarreras('id, nombre')
       } catch {
         throw internal('Error obteniendo carreras', carrerasError)
       }
     }
-    carreras = filtrarCarrerasSinTronco(carreras)
+    carreras = filtrarCarrerasSinTronco(comoLista(carreras))
 
     let evaluacionesGenerales: any[]
     try {
-      evaluacionesGenerales = await analyticsRepository.listEvaluaciones({
-        columns: 'id, calificacion_promedio, fecha_creacion, grupo_id',
-      })
+      evaluacionesGenerales = comoLista(
+        await analyticsRepository.listEvaluaciones({
+          columns: 'id, calificacion_promedio, fecha_creacion, grupo_id, profesor_id',
+          completada: true,
+        })
+      )
     } catch (evalError) {
       throw internal('Error obteniendo evaluaciones', evalError)
     }
 
+    const infoGrupo = await infoCarreraPorGrupo(evaluacionesGenerales.map((e: any) => e.grupo_id))
+
     const resultadosPorCarrera = carreras.map((carrera) => {
-      const evaluacionesCarrera: any[] = []
-      const calificaciones = evaluacionesCarrera
-        .map((evaluacion) => evaluacion.calificacion_promedio)
-        .filter((c) => c !== null)
-      const promedioCarrera =
-        calificaciones.length > 0
-          ? calificaciones.reduce((sum, cal) => sum + cal, 0) / calificaciones.length
-          : 0
+      const evaluacionesCarrera = evaluacionesGenerales.filter(
+        (e: any) => idComoTexto(infoGrupo.get(Number(e.grupo_id))?.carreraId) === idComoTexto(carrera.id)
+      )
       return {
         carrera_id: carrera.id,
         carrera_nombre: carrera.nombre,
-        carrera_codigo: carrera.codigo,
         total_evaluaciones: evaluacionesCarrera.length,
-        calificacion_promedio: promedioCarrera,
-        profesores_evaluados: 0,
-        ultima_evaluacion:
-          evaluacionesCarrera.length > 0
-            ? Math.max(
-                ...evaluacionesCarrera.map((evaluacion) => new Date(evaluacion.fecha_creacion).getTime())
-              )
-            : null,
+        calificacion_promedio: promedioRedondeado(evaluacionesCarrera),
+        profesores_evaluados: new Set(evaluacionesCarrera.map((e: any) => e.profesor_id).filter(Boolean)).size,
+        ultima_evaluacion: ultimaFecha(evaluacionesCarrera),
       }
     })
 
-    const totalEvaluaciones = evaluacionesGenerales?.length || 0
-    const calificacionesGenerales =
-      evaluacionesGenerales?.map((evaluacion) => evaluacion.calificacion_promedio).filter((c) => c !== null) ||
-      []
-    const promedioGeneral =
-      calificacionesGenerales.length > 0
-        ? calificacionesGenerales.reduce((sum, cal) => sum + cal, 0) / calificacionesGenerales.length
-        : 0
+    const totalEvaluaciones = evaluacionesGenerales.length
+    const promedioGeneral = promedioRedondeado(evaluacionesGenerales)
 
     return {
-      periodo: '2025-2',
+      periodo: null,
       estadisticas_generales: {
         total_carreras: carreras.length,
         total_evaluaciones: totalEvaluaciones,
@@ -502,86 +539,59 @@ export class TeachersAnalyticsService {
 
     let evaluaciones: any[]
     try {
-      evaluaciones = await analyticsRepository.listEvaluaciones({
-        columns: 'id, calificacion_promedio, fecha_creacion, comentarios, profesor_id, grupo_id',
-      })
+      evaluaciones = comoLista(
+        await analyticsRepository.listEvaluaciones({
+          columns: 'id, calificacion_promedio, fecha_creacion, profesor_id, grupo_id',
+          completada: true,
+        })
+      )
     } catch (evaluacionesError) {
       throw internal('Error obteniendo evaluaciones', evaluacionesError)
     }
-    const grupoIdsCareer = Array.from(new Set((evaluaciones || []).map((e: any) => e.grupo_id).filter(Boolean)))
-    let gruposCareer: any[] = []
-    try {
-      gruposCareer = await analyticsRepository.getGruposByIds(grupoIdsCareer, 'id, curso_id')
-    } catch {
-      gruposCareer = []
-    }
-    const cursoIdsCareer = Array.from(new Set((gruposCareer || []).map((g: any) => g.curso_id).filter(Boolean)))
-    let cursosCareer: any[] = []
-    try {
-      cursosCareer = await academicRepository.listCursosByIds(cursoIdsCareer, 'id, carrera_id')
-    } catch {
-      cursosCareer = []
-    }
-    const cursosDeCarrera = new Set(
-      (cursosCareer || [])
-        .filter((c: any) => String(c.carrera_id) === String(careerId))
-        .map((c: any) => c.id)
+    const infoGrupo = await infoCarreraPorGrupo(evaluaciones.map((e: any) => e.grupo_id))
+    evaluaciones = evaluaciones.filter(
+      (e: any) => idComoTexto(infoGrupo.get(Number(e.grupo_id))?.carreraId) === idComoTexto(careerId)
     )
-    const gruposDeCarrera = new Set(
-      (gruposCareer || []).filter((g: any) => cursosDeCarrera.has(g.curso_id)).map((g: any) => g.id)
-    )
-    evaluaciones = (evaluaciones || []).filter((e: any) => gruposDeCarrera.has(e.grupo_id))
 
     const profesoresConResultados = profesores.map((profesor) => {
-      const evaluacionesProfesor =
-        evaluaciones?.filter((evaluacion) => evaluacion.profesor_id === profesor.id) || []
-      const calificaciones = evaluacionesProfesor
-        .map((evaluacion) => evaluacion.calificacion_promedio)
-        .filter((c) => c !== null)
-      const promedioProfesor =
-        calificaciones.length > 0
-          ? calificaciones.reduce((sum, cal) => sum + cal, 0) / calificaciones.length
-          : 0
-      const cursosEvaluados: any[] = []
+      const evaluacionesProfesor = evaluaciones.filter(
+        (e: any) => idComoTexto(e.profesor_id) === idComoTexto(profesor.id)
+      )
+      const cursosEvaluados = Array.from(
+        new Set(
+          evaluacionesProfesor
+            .map((e: any) => infoGrupo.get(Number(e.grupo_id))?.cursoNombre)
+            .filter(Boolean)
+        )
+      )
+      const usuario = profesor.usuarios ?? profesor.usuario ?? {}
       return {
         profesor_id: profesor.id,
-        profesor_nombre: 'Profesor',
-        profesor_email: 'email@ejemplo.com',
+        profesor_nombre: `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim() || `Docente ${profesor.id}`,
+        profesor_email: usuario.email || null,
         total_evaluaciones: evaluacionesProfesor.length,
-        calificacion_promedio: promedioProfesor,
+        calificacion_promedio: promedioRedondeado(evaluacionesProfesor),
         cursos_evaluados: cursosEvaluados,
-        ultima_evaluacion:
-          evaluacionesProfesor.length > 0
-            ? Math.max(
-                ...evaluacionesProfesor.map((evaluacion) => new Date(evaluacion.fecha_creacion).getTime())
-              )
-            : null,
+        ultima_evaluacion: ultimaFecha(evaluacionesProfesor),
       }
     })
-
-    const totalEvaluaciones = evaluaciones?.length || 0
-    const calificacionesGenerales =
-      evaluaciones?.map((evaluacion) => evaluacion.calificacion_promedio).filter((c) => c !== null) || []
-    const promedioGeneral =
-      calificacionesGenerales.length > 0
-        ? calificacionesGenerales.reduce((sum, cal) => sum + cal, 0) / calificacionesGenerales.length
-        : 0
 
     return {
       carrera: {
         id: carrera.id,
         nombre: carrera.nombre,
-        codigo: carrera.codigo,
         descripcion: carrera.descripcion,
         activa: carrera.activa,
       },
-      periodo: '2025-2',
+      periodo: null,
       estadisticas_carrera: {
         total_profesores: profesores.length,
         profesores_evaluados: profesoresConResultados.filter((p) => p.total_evaluaciones > 0).length,
-        total_evaluaciones: totalEvaluaciones,
-        promedio_general: promedioGeneral,
-        cursos_evaluados: 0,
+        total_evaluaciones: evaluaciones.length,
+        promedio_general: promedioRedondeado(evaluaciones),
+        cursos_evaluados: new Set(
+          evaluaciones.map((e: any) => infoGrupo.get(Number(e.grupo_id))?.cursoId).filter(Boolean)
+        ).size,
       },
       profesores: profesoresConResultados,
       fecha_generacion: new Date().toISOString(),

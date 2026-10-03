@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabase-only'
 import { SupabaseDB } from '../../config/supabase-only'
+import { todasLasFilas } from '../../shared/supabase-paginacion'
 
 export class AcademicRepository {
   async listUsersSummary() {
@@ -183,6 +184,20 @@ export class AcademicRepository {
     return data || []
   }
 
+  async listInscritosByGrupoIds(
+    grupoIds: Array<string | number>
+  ): Promise<Array<{ estudiante_id: string | number; grupo_id: number }>> {
+    if (!grupoIds.length) return []
+    return todasLasFilas<any>((desde, hasta) =>
+      supabaseAdmin
+        .from('inscripciones')
+        .select('estudiante_id, grupo_id')
+        .in('grupo_id', grupoIds)
+        .order('id', { ascending: true })
+        .range(desde, hasta)
+    )
+  }
+
   async findEstudianteInfoByUsuarioId(usuarioId: string) {
     const { data, error } = await supabaseAdmin
       .from('estudiantes')
@@ -312,7 +327,7 @@ export class AcademicRepository {
     return data || []
   }
 
-  async getCarreraById(id: string | number, columns = 'id, nombre, codigo, activa, descripcion') {
+  async getCarreraById(id: string | number, columns = 'id, nombre, activa, descripcion') {
     const { data, error } = await supabaseAdmin.from('carreras').select(columns).eq('id', id).single()
     if (error && error.code !== 'PGRST116') throw error
     return data

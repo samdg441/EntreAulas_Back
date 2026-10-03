@@ -147,7 +147,7 @@ export class TeachersRepository {
       .select(`
         id,
         usuario_id,
-        codigo_profesor,
+        codigo_profesor:codigo,
         activo,
         carrera_id,
         usuarios:usuarios(

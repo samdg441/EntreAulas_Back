@@ -38,6 +38,55 @@ function promedioDeEvals(evals: any[]): number {
   return Number((suma / evals.length).toFixed(2))
 }
 
+/** Porcentaje de pares estudiante–grupo inscritos que respondieron (0–100, un decimal). */
+export function calcularTasaRespuesta(respondidas: number, elegibles: number): number {
+  if (!elegibles || elegibles <= 0 || !respondidas || respondidas <= 0) return 0
+  return Math.min(100, Number(((respondidas / elegibles) * 100).toFixed(1)))
+}
+
+async function gruposAsignados(profesorIds: Array<string | number>) {
+  try {
+    const asignaciones = await academicRepository.listAsignacionesByProfesorIds(profesorIds)
+    return (asignaciones || [])
+      .filter((a: any) => a.activa !== false && a.grupo_id != null)
+      .map((a: any) => ({ grupoId: Number(a.grupo_id), cursoId: Number(a.curso_id) }))
+  } catch {
+    return []
+  }
+}
+
+async function tasaRespuestaDe(
+  evals: any[],
+  asignados: Array<{ grupoId: number; cursoId: number }>,
+  filtro: { grupoId?: unknown; cursoId?: unknown; grupoACurso: Map<number, number> }
+): Promise<number> {
+  const grupos = new Set<number>()
+  asignados.forEach((a) => {
+    const cursoId = a.cursoId || filtro.grupoACurso.get(a.grupoId)
+    if (filtro.grupoId != null && String(a.grupoId) !== String(filtro.grupoId)) return
+    if (filtro.cursoId != null && String(cursoId) !== String(filtro.cursoId)) return
+    grupos.add(a.grupoId)
+  })
+  if (!grupos.size) return 0
+
+  const inscritos = new Set<string>()
+  try {
+    for (const chunk of chunkArray(Array.from(grupos), 150)) {
+      const filas = await academicRepository.listInscritosByGrupoIds(chunk)
+      filas.forEach((i) => inscritos.add(`${i.estudiante_id}::${Number(i.grupo_id)}`))
+    }
+  } catch {
+    return 0
+  }
+
+  const respondidas = new Set(
+    evals
+      .map((e: any) => `${e.estudiante_id}::${Number(e.grupo_id)}`)
+      .filter((par: string) => inscritos.has(par))
+  ).size
+  return calcularTasaRespuesta(respondidas, inscritos.size)
+}
+
 function nombreDocente(row: any, fallbackId?: string | number): string {
   const nombre = `${row?.usuario?.nombre || ''} ${row?.usuario?.apellido || ''}`.trim()
   if (nombre) return nombre
@@ -321,17 +370,34 @@ export class CoordinadorService {
     filtros?: { courseId?: unknown; grupoId?: unknown }
   ) {
     const carreraId = await this.carreraDelUsuario(usuarioId)
+    return this.reporteDeCarreras([carreraId], periodQuery, filtros)
+  }
+
+  /** Mismo reporte del coordinador, pero sobre una o varias carreras (lo usa también el decano). */
+  async reporteDeCarreras(
+    carreraIds: number[],
+    periodQuery: unknown,
+    filtros?: { courseId?: unknown; grupoId?: unknown }
+  ) {
     const { period, partes, dateStart, dateEnd, periodId } = await resolverPeriodo(periodQuery)
+
+    const profesoresDe = async (soloActivos: boolean) => {
+      const ids: Array<string | number> = []
+      for (const carreraId of carreraIds) {
+        ids.push(...(await teachersRepository.listIdsByCareer(carreraId, soloActivos)))
+      }
+      return ids
+    }
 
     let profesorIds
     try {
-      profesorIds = await teachersRepository.listIdsByCareer(carreraId, true)
+      profesorIds = await profesoresDe(true)
     } catch (profesoresError) {
       throw internal('Error obteniendo profesores', (profesoresError as Error)?.message ?? profesoresError)
     }
 
     if (profesorIds.length === 0) {
-      profesorIds = await teachersRepository.listIdsByCareer(carreraId, false)
+      profesorIds = await profesoresDe(false)
     }
     if (profesorIds.length === 0) {
       return REPORTE_VACIO
@@ -673,11 +739,17 @@ export class CoordinadorService {
       ? categoryStats
       : await buildCategoryStats(evalsFiltradas)
 
+    const tasaRespuesta = await tasaRespuestaDe(evalsFiltradas, await gruposAsignados(profesorIds), {
+      grupoId: hayGrupo ? grupoFiltro : undefined,
+      cursoId: hayCurso && !hayGrupo ? cursoFiltro : undefined,
+      grupoACurso: groupToCourseId,
+    })
+
     const summaryFiltrado = evalsFiltradas === evalsArray
       ? {
           totalEvaluaciones,
           calificacionPromedio,
-          tasaRespuesta: 0,
+          tasaRespuesta,
           docentesEvaluados,
           cursosEvaluados,
           estudiantesRespondieron,
@@ -685,7 +757,7 @@ export class CoordinadorService {
       : {
           totalEvaluaciones: evalsFiltradas.length,
           calificacionPromedio: promedioDeEvals(evalsFiltradas),
-          tasaRespuesta: 0,
+          tasaRespuesta,
           docentesEvaluados: new Set(evalsFiltradas.map((e: any) => e.profesor_id).filter(Boolean)).size,
           cursosEvaluados: new Set(
             evalsFiltradas
