@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, type GenerationConfig } from '@google/generative-ai'
 import type { AiSummaryProvider, AiSummaryResult, SummaryContext } from '../ai.types'
 import { logger } from '../../../shared/logger'
 
@@ -24,10 +24,13 @@ export class GeminiSummaryProvider implements AiSummaryProvider {
     try {
       const model = this.genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
+        // En 2.5-flash el "pensamiento" consume maxOutputTokens y cortaba el resumen; aquí no aporta.
+        // El SDK aún no tipa thinkingConfig, pero lo envía tal cual a la API.
         generationConfig: {
           temperature: 0.3,
           maxOutputTokens: 1000,
-        },
+          thinkingConfig: { thinkingBudget: 0 },
+        } as GenerationConfig,
       })
 
       const joined = responses.slice(0, 90).join('\n- ')
