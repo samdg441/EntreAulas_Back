@@ -36,8 +36,10 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
       return res.status(401).json({ error: 'Usuario no válido o inactivo', code: 'USER_INVALID' })
     }
 
-    const roles = await RoleService.obtenerRolesUsuario(user.id)
-    const permisos = await RoleService.obtenerPermisosUsuario(user.id)
+    const [roles, permisos] = await Promise.all([
+      RoleService.obtenerRolesUsuario(user.id),
+      RoleService.obtenerPermisosUsuario(user.id),
+    ])
 
     req.user = {
       id: user.id,

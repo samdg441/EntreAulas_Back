@@ -115,29 +115,51 @@ async function resolverPeriodo(period: unknown) {
   return { period: periodStr, partes, dateStart, dateEnd, periodId }
 }
 
-async function listRespuestasPorEvaluaciones(evalIds: any[], conFallbackValor: boolean) {
-  const rows: any[] = []
-  for (const chunk of chunkArray(evalIds, 150)) {
+const LOTES_EN_PARALELO = 4
+
+/** Ejecuta `fn` sobre cada lote, como mucho LOTES_EN_PARALELO a la vez; conserva el orden de los lotes. */
+async function porLotes<T, R>(lotes: T[], fn: (lote: T) => Promise<R>): Promise<R[]> {
+  const salida: R[] = []
+  for (let i = 0; i < lotes.length; i += LOTES_EN_PARALELO) {
+    salida.push(...(await Promise.all(lotes.slice(i, i + LOTES_EN_PARALELO).map(fn))))
+  }
+  return salida
+}
+
+async function respuestasDeLote(chunk: any[], conFallbackValor: boolean): Promise<any[]> {
+  try {
+    const data = await analyticsRepository.listRespuestasByEvaluacionIds(
+      chunk,
+      'evaluacion_id, pregunta_id, respuesta_rating'
+    )
+    return Array.isArray(data) ? data : []
+  } catch {
+    if (!conFallbackValor) return []
     try {
-      const data = await analyticsRepository.listRespuestasByEvaluacionIds(
+      const fallback = await analyticsRepository.listRespuestasByEvaluacionIds(
         chunk,
-        'evaluacion_id, pregunta_id, respuesta_rating'
+        'evaluacion_id, pregunta_id, valor'
       )
-      rows.push(...(Array.isArray(data) ? data : []))
+      return Array.isArray(fallback) ? fallback : []
     } catch {
-      if (!conFallbackValor) continue
-      try {
-        const fallback = await analyticsRepository.listRespuestasByEvaluacionIds(
-          chunk,
-          'evaluacion_id, pregunta_id, valor'
-        )
-        rows.push(...(Array.isArray(fallback) ? fallback : []))
-      } catch {
-        // same as original: ignore fallback errors
-      }
+      return []
     }
   }
-  return rows
+}
+
+async function listRespuestasPorEvaluaciones(evalIds: any[], conFallbackValor: boolean) {
+  const lotes = await porLotes(chunkArray(evalIds, 150), (chunk) => respuestasDeLote(chunk, conFallbackValor))
+  return lotes.flat()
+}
+
+/** Evita repetir dentro de una misma petición la misma consulta con los mismos ids. */
+function memoPorPeticion() {
+  const cache = new Map<string, Promise<any>>()
+  return <T>(tipo: string, ids: Array<string | number>, fn: () => Promise<T>): Promise<T> => {
+    const clave = `${tipo}:${ids.map(String).sort((a, b) => a.localeCompare(b)).join(',')}`
+    if (!cache.has(clave)) cache.set(clave, fn())
+    return cache.get(clave) as Promise<T>
+  }
 }
 
 async function mapPreguntasYCategorias(preguntaIds: string[], dummyCategoriaSiVacio = false) {
@@ -226,7 +248,17 @@ function periodosTendencia(partes: { year: number; semester: number } | null): s
   return trendPeriods
 }
 
-async function buildCategoryStats(evals: any[]) {
+type CargadoresCategorias = {
+  respuestas: (ids: any[]) => Promise<any[]>
+  preguntas: (ids: string[]) => ReturnType<typeof mapPreguntasYCategorias>
+}
+
+const CARGADORES_DIRECTOS: CargadoresCategorias = {
+  respuestas: (ids) => listRespuestasPorEvaluaciones(ids, true),
+  preguntas: (ids) => mapPreguntasYCategorias(ids, true),
+}
+
+async function buildCategoryStats(evals: any[], cargar: CargadoresCategorias = CARGADORES_DIRECTOS) {
   if (!Array.isArray(evals) || !evals.length) {
     return [] as Array<{ categoriaId: string; nombre: string; promedio: number }>
   }
@@ -238,11 +270,11 @@ async function buildCategoryStats(evals: any[]) {
     evaluacionToProfesor.set(String(e.id), String(e.profesor_id || ''))
   })
 
-  const respuestasArray = await listRespuestasPorEvaluaciones(ids, true)
+  const respuestasArray = await cargar.respuestas(ids)
   const preguntaIds = Array.from(new Set(respuestasArray.map((r: any) => String(r.pregunta_id)).filter(Boolean)))
   if (!preguntaIds.length) return []
 
-  const { questionToCategory, categoryNameById } = await mapPreguntasYCategorias(preguntaIds, true)
+  const { questionToCategory, categoryNameById } = await cargar.preguntas(preguntaIds)
 
   const teacherCategoryAcc = new Map<string, { sum: number; count: number }>()
   respuestasArray.forEach((r: any) => {
@@ -381,13 +413,8 @@ export class CoordinadorService {
   ) {
     const { period, partes, dateStart, dateEnd, periodId } = await resolverPeriodo(periodQuery)
 
-    const profesoresDe = async (soloActivos: boolean) => {
-      const ids: Array<string | number> = []
-      for (const carreraId of carreraIds) {
-        ids.push(...(await teachersRepository.listIdsByCareer(carreraId, soloActivos)))
-      }
-      return ids
-    }
+    const profesoresDe = async (soloActivos: boolean): Promise<Array<string | number>> =>
+      (await Promise.all(carreraIds.map((id) => teachersRepository.listIdsByCareer(id, soloActivos)))).flat()
 
     let profesorIds
     try {
@@ -402,6 +429,35 @@ export class CoordinadorService {
     if (profesorIds.length === 0) {
       return REPORTE_VACIO
     }
+
+    const memo = memoPorPeticion()
+    const grupos = (ids: Array<string | number>) => memo('grupos', ids, () => gruposPorIds(ids))
+    const cursos = (ids: Array<string | number>) => memo('cursos', ids, () => cursosPorIds(ids))
+    const docentes = (ids: Array<string | number>) => memo('docentes', ids, () => nombresDocentesPorIds(ids))
+    const cargar: CargadoresCategorias = {
+      respuestas: (ids) => memo('respuestas', ids, () => listRespuestasPorEvaluaciones(ids, true)),
+      preguntas: (ids) => memo('preguntas', ids, () => mapPreguntasYCategorias(ids, true)),
+    }
+
+    const trendPromesa = Promise.all(
+      periodosTendencia(partes).map(async (p) => {
+        const window = rangoFechasPeriodoOTodo(p)
+        let arr: any[] = []
+        try {
+          arr = await analyticsRepository.listEvaluaciones({
+            columns: 'calificacion_promedio',
+            profesorIds,
+            completada: true,
+            gte: window.start,
+            lte: window.end,
+          })
+        } catch {
+          arr = []
+        }
+        return { period: p, rating: promedioDeEvals(arr), totalEvaluations: arr.length }
+      })
+    )
+    const asignadosPromesa = gruposAsignados(profesorIds)
 
     let evalsArray: any[] = []
     let filterSource: 'periodo_id' | 'fecha_creacion' | 'sin_filtro' = 'sin_filtro'
@@ -440,7 +496,7 @@ export class CoordinadorService {
     const docentesEvaluados = new Set(evalsArray.map((e: any) => e.profesor_id).filter(Boolean)).size
     const estudiantesRespondieron = new Set(evalsArray.map((e: any) => e.estudiante_id).filter(Boolean)).size
 
-    const gruposArray = await gruposPorIds(
+    const gruposArray = await grupos(
       Array.from(new Set(evalsArray.map((e: any) => e.grupo_id).filter(Boolean)))
     )
     const cursosEvaluados = new Set(gruposArray.map((g: any) => g.curso_id).filter(Boolean)).size
@@ -475,7 +531,7 @@ export class CoordinadorService {
       teacherAgg.set(pid, prev)
     })
 
-    const teacherNameById = await nombresDocentesPorIds(Array.from(teacherAgg.keys()))
+    const teacherNameById = await docentes(Array.from(teacherAgg.keys()))
     const teacherAverages = Array.from(teacherAgg.entries())
       .map(([profesorId, values]) => ({
         profesorId,
@@ -486,7 +542,7 @@ export class CoordinadorService {
       .filter((t) => t.promedio > 0)
       .sort((a, b) => b.promedio - a.promedio)
 
-    const courseRows = await cursosPorIds(
+    const courseRows = await cursos(
       Array.from(new Set(gruposArray.map((g: any) => g.curso_id).filter(Boolean)))
     )
     const courseNameById = new Map<number, string>()
@@ -557,13 +613,13 @@ export class CoordinadorService {
       evalsForReportRows = syntheticRows
     }
 
-    const exportGroupsArray = await gruposPorIds(
+    const exportGroupsArray = await grupos(
       Array.from(new Set(evalsForReportRows.map((e: any) => Number(e.grupo_id)).filter(Boolean)))
     )
     const exportGroupById = new Map<number, any>()
     exportGroupsArray.forEach((g: any) => exportGroupById.set(Number(g.id), g))
 
-    const exportCourseRows = await cursosPorIds(
+    const exportCourseRows = await cursos(
       Array.from(new Set(exportGroupsArray.map((g: any) => Number(g.curso_id)).filter(Boolean)))
     )
     const exportCourseNameById = new Map<number, string>()
@@ -571,7 +627,7 @@ export class CoordinadorService {
       exportCourseNameById.set(Number(c.id), etiquetaCurso(c))
     })
 
-    const teacherNameByIdForExport = await nombresDocentesPorIds(
+    const teacherNameByIdForExport = await docentes(
       Array.from(new Set(evalsForReportRows.map((e: any) => String(e.profesor_id)).filter(Boolean)))
     )
 
@@ -631,10 +687,7 @@ export class CoordinadorService {
       rowAgg.set(key, prev)
     })
 
-    const responseRows = await listRespuestasPorEvaluaciones(
-      evalsForReportRows.map((e: any) => e.id).filter(Boolean),
-      true
-    )
+    const responseRows = await cargar.respuestas(evalsForReportRows.map((e: any) => e.id).filter(Boolean))
 
     const evalToKey = new Map<string, string>()
     evalsForReportRows.forEach((e: any) => {
@@ -644,7 +697,7 @@ export class CoordinadorService {
       evalToKey.set(String(e.id), keyFor(profesorId, grupoId))
     })
 
-    const { questionToCategory, categoryNameById } = await mapPreguntasYCategorias(
+    const { questionToCategory, categoryNameById } = await cargar.preguntas(
       Array.from(new Set(responseRows.map((r: any) => String(r.pregunta_id)).filter(Boolean)))
     )
 
@@ -671,7 +724,7 @@ export class CoordinadorService {
       teacherNameByIdForExport
     )
 
-    let categoryStats = await buildCategoryStats(evalsArray)
+    let categoryStats = await buildCategoryStats(evalsArray, cargar)
     if (categoryStats.length === 0) {
       let allCareerEvaluations: any[] = []
       try {
@@ -683,27 +736,13 @@ export class CoordinadorService {
       } catch {
         allCareerEvaluations = []
       }
-      categoryStats = await buildCategoryStats(Array.isArray(allCareerEvaluations) ? allCareerEvaluations : [])
+      categoryStats = await buildCategoryStats(
+        Array.isArray(allCareerEvaluations) ? allCareerEvaluations : [],
+        cargar
+      )
     }
 
-    const trend = await Promise.all(
-      periodosTendencia(partes).map(async (p) => {
-        const window = rangoFechasPeriodoOTodo(p)
-        let arr: any[] = []
-        try {
-          arr = await analyticsRepository.listEvaluaciones({
-            columns: 'calificacion_promedio',
-            profesorIds,
-            completada: true,
-            gte: window.start,
-            lte: window.end,
-          })
-        } catch {
-          arr = []
-        }
-        return { period: p, rating: promedioDeEvals(arr), totalEvaluations: arr.length }
-      })
-    )
+    const trend = await trendPromesa
 
     const gruposCatalogo = gruposArray.map((g: any) => ({
       grupoId: g.id,
@@ -737,9 +776,9 @@ export class CoordinadorService {
 
     const categoryFiltrada = evalsFiltradas === evalsArray
       ? categoryStats
-      : await buildCategoryStats(evalsFiltradas)
+      : await buildCategoryStats(evalsFiltradas, cargar)
 
-    const tasaRespuesta = await tasaRespuestaDe(evalsFiltradas, await gruposAsignados(profesorIds), {
+    const tasaRespuesta = await tasaRespuestaDe(evalsFiltradas, await asignadosPromesa, {
       grupoId: hayGrupo ? grupoFiltro : undefined,
       cursoId: hayCurso && !hayGrupo ? cursoFiltro : undefined,
       grupoACurso: groupToCourseId,

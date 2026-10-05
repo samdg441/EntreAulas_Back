@@ -232,7 +232,7 @@ function indexarAsignaciones(asignaciones: any[], gruposPorAsignaciones: any[]):
 }
 
 function grupoDeProfesorYCurso(grupo: any, profesorId: string, cursoId: number) {
-  return grupo.profesor_id === profesorId && Number(grupo.curso_id) === cursoId
+  return String(grupo.profesor_id) === String(profesorId) && Number(grupo.curso_id) === cursoId
 }
 
 function gruposDelCurso(params: {
@@ -284,6 +284,22 @@ function mapearCurso(
   }
 }
 
+/** Cada grupo es una asignación distinta; el curso se muestra una sola vez con todos sus grupos. */
+export function cursosSinRepetir(cursos: any[]) {
+  const porId = new Map<string, any>()
+  for (const curso of cursos) {
+    const clave = String(curso.id)
+    const previo = porId.get(clave)
+    if (!previo) {
+      porId.set(clave, { ...curso, groups: [...curso.groups] })
+      continue
+    }
+    const vistos = new Set(previo.groups.map((g: any) => String(g.id)))
+    previo.groups.push(...curso.groups.filter((g: any) => !vistos.has(String(g.id))))
+  }
+  return [...porId.values()]
+}
+
 function departamentoListado(profesor: any, courses: any[]) {
   if (profesor.departamento) return profesor.departamento
   if (courses.length > 0) return courses[0].department
@@ -301,14 +317,16 @@ function mapearProfesorListado(
   const apellido = profesor.usuario?.apellido || ''
   const email = profesor.usuario?.email || ''
   const asignacionesDeProfesor = indices.asignacionesByProfesor.get(profesor.id) || []
-  const courses = asignacionesDeProfesor
-    .map((a: any) =>
-      mapearCurso(a, cursoById, carreraById, profesor.departamento, {
-        ...groupParams,
-        profesorId: profesor.id,
-      })
-    )
-    .filter(Boolean)
+  const courses = cursosSinRepetir(
+    asignacionesDeProfesor
+      .map((a: any) =>
+        mapearCurso(a, cursoById, carreraById, profesor.departamento, {
+          ...groupParams,
+          profesorId: profesor.id,
+        })
+      )
+      .filter(Boolean)
+  ).filter((curso: any) => !groupParams.esEstudiante || curso.groups.length > 0)
 
   return {
     id: profesor.id,
@@ -337,9 +355,10 @@ function armarListadoProfesores(params: {
     gruposByProfesorCurso: indices.gruposByProfesorCurso,
   }
 
-  return (params.profesores || []).map((profesor: any) =>
+  const listado = (params.profesores || []).map((profesor: any) =>
     mapearProfesorListado(profesor, indices, cursoById, carreraById, groupParams)
   )
+  return groupParams.esEstudiante ? listado.filter((p: any) => p.courses.length > 0) : listado
 }
 
 export async function listarProfesoresConCursos(user: UsuarioListado) {
@@ -348,9 +367,11 @@ export async function listarProfesoresConCursos(user: UsuarioListado) {
 
   const profesores = await cargarProfesoresActivos(alcance.profesorIdsFiltro)
   const asignaciones = await cargarAsignacionesNormalizadas((profesores || []).map((p: any) => p.id))
-  const gruposPorAsignaciones = await cargarGruposDeAsignaciones(asignaciones)
-  const carreras = await cargarCarrerasDeCursos([])
-  const cursos = await cargarCursosSiFaltan(asignaciones, [])
+  const [gruposPorAsignaciones, carreras, cursos] = await Promise.all([
+    cargarGruposDeAsignaciones(asignaciones),
+    cargarCarrerasDeCursos([]),
+    cargarCursosSiFaltan(asignaciones, []),
+  ])
 
   return armarListadoProfesores({
     user,

@@ -10,6 +10,7 @@ vi.mock('../../../config/supabaseClient', () => supabaseModuleMock)
 
 import { app } from '../../../app'
 import { RoleService } from '../../../modules/auth/role.service'
+import { mensajeEvaluacionInvalida } from '../../../modules/academic/teachers.controller'
 
 const findUserById = supabaseModuleMock.SupabaseDB.findUserById as ReturnType<typeof vi.fn>
 
@@ -88,7 +89,28 @@ describe('RQ13 unit — Enviar evaluación docente', () => {
         .send({ ...validBody, answers: [], overallRating: 9 })
 
       expect(res.status).toBe(400)
-      expect(res.body.error).toBe('Datos de evaluación inválidos')
+      expect(res.body.error).toBe('Responde las preguntas de la evaluación antes de enviarla.')
+      expect(fromMock).not.toHaveBeenCalled()
+    })
+
+    it('C2b: calificaciones en 0 → el mensaje dice qué preguntas faltan, sin rutas técnicas', async () => {
+      const token = mockAuthenticatedUser(estudianteUser)
+      const res = await request(app)
+        .post('/api/teachers/evaluations')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          ...validBody,
+          answers: [
+            { questionId: 1, rating: 0 },
+            { questionId: 2, rating: 4 },
+            { questionId: 3, rating: 0 },
+          ],
+          overallRating: 0,
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.error).toBe('Faltan por calificar las preguntas 1 y 3 con un valor de 1 a 5.')
+      expect(res.body.error).not.toMatch(/answers\.|rating/)
       expect(fromMock).not.toHaveBeenCalled()
     })
 
@@ -167,6 +189,19 @@ describe('RQ13 unit — Enviar evaluación docente', () => {
         message: 'Evaluación guardada exitosamente',
         evaluationId: 42,
       })
+    })
+  })
+
+  describe('mensaje de evaluación inválida', () => {
+    it('cubre una sola pregunta, el promedio, los identificadores y el caso genérico', () => {
+      expect(mensajeEvaluacionInvalida([{ path: ['answers', 4, 'rating'] }])).toBe(
+        'Falta calificar la pregunta 5 con un valor de 1 a 5.'
+      )
+      expect(mensajeEvaluacionInvalida([{ path: ['overallRating'] }])).toBe(
+        'Califica las preguntas de 1 a 5 antes de enviar la evaluación.'
+      )
+      expect(mensajeEvaluacionInvalida([{ path: ['courseId'] }])).toMatch(/vuelve a seleccionarlos/i)
+      expect(mensajeEvaluacionInvalida([{ path: ['comments'] }])).toBe('Revisa la evaluación e inténtalo de nuevo.')
     })
   })
 })

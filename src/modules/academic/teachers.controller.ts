@@ -41,6 +41,27 @@ const evaluationSchema = z.object({
   comments: z.string().optional(),
 })
 
+/** Resume los errores de validación en una frase para el estudiante, sin rutas técnicas como answers.0.rating. */
+export function mensajeEvaluacionInvalida(issues: Array<{ path: Array<string | number> }>): string {
+  const sinCalificar = [
+    ...new Set(
+      issues
+        .filter((i) => i.path[0] === 'answers' && i.path[2] === 'rating')
+        .map((i) => Number(i.path[1]) + 1)
+    ),
+  ].sort((a, b) => a - b)
+  if (sinCalificar.length === 1) return `Falta calificar la pregunta ${sinCalificar[0]} con un valor de 1 a 5.`
+  if (sinCalificar.length > 1) {
+    return `Faltan por calificar las preguntas ${sinCalificar.slice(0, -1).join(', ')} y ${sinCalificar.at(-1)} con un valor de 1 a 5.`
+  }
+  if (issues.some((i) => i.path[0] === 'answers')) return 'Responde las preguntas de la evaluación antes de enviarla.'
+  if (issues.some((i) => i.path[0] === 'overallRating')) return 'Califica las preguntas de 1 a 5 antes de enviar la evaluación.'
+  if (issues.some((i) => ['teacherId', 'courseId', 'groupId'].includes(String(i.path[0])))) {
+    return 'No se identificó el profesor, el curso o el grupo. Vuelve a seleccionarlos e inténtalo de nuevo.'
+  }
+  return 'Revisa la evaluación e inténtalo de nuevo.'
+}
+
 function esDecano(user: { roles?: string[] } | undefined) {
   return Boolean(user?.roles?.includes('decano'))
 }
@@ -63,7 +84,7 @@ export class TeachersController {
 
   static async listGroups(req: Request, res: Response) {
     try {
-      res.json(await teachersService.listGroups(req.params.profesorId, req.params.courseId))
+      res.json(await teachersService.listGroups(req.params.profesorId, req.params.courseId, req.user as any))
     } catch (error) {
       return sendError(res, error)
     }
@@ -78,7 +99,7 @@ export class TeachersController {
         return sendError(
           res,
           badRequest(
-            'Datos de evaluación inválidos',
+            mensajeEvaluacionInvalida(error.errors),
             error.errors.map((err) => ({ field: err.path.join('.'), message: err.message }))
           )
         )

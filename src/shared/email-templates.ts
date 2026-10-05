@@ -11,6 +11,7 @@ const ROSA_TEXTO = '#9B3D4A'
 const ROSA_ACENTO = '#F2A7B0'
 const ROSA_BORDE = '#F8D3D8'
 const ROSA_FONDO = '#FFF5F6'
+const ROJO_UNIVERSIDAD = '#E30613'
 const GRIS_TEXTO = '#374151'
 const GRIS_SUAVE = '#6B7280'
 const FONDO = '#F3F4F6'
@@ -183,23 +184,31 @@ export type QrCurso = {
   profesorNombre: string
 }
 
+/** Misma tarjeta que CourseQrPoster en la app: marco rojo, materia, grupo, QR con logo y docente. */
 function tarjetaQr(qr: QrCurso): string {
-  const titulo = qr.cursoCodigo
-    ? `${escapeHtml(qr.cursoCodigo)} - ${escapeHtml(qr.cursoNombre.toUpperCase())}`
-    : escapeHtml(qr.cursoNombre.toUpperCase())
   return `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 12px;width:280px;">
   <tr>
-    <td align="center" style="padding:20px;border:2px solid ${ROSA_BORDE};border-radius:10px;background-color:#FFFFFF;">
-      <div style="font-size:13px;font-weight:bold;letter-spacing:0.5px;color:${ROSA_TEXTO};">${titulo}</div>
-      <div style="margin:2px 0 14px;font-size:13px;color:${GRIS_SUAVE};">Grupo ${escapeHtml(qr.grupoNumero)} · ${escapeHtml(qr.profesorNombre)}</div>
-      <img src="${escapeHtml(qr.imagenUrl)}" width="200" height="200" alt="Código QR de la evaluación"
-           style="display:block;margin:0 auto 16px;width:200px;height:200px;border:0;">
-      ${boton(qr.descargaUrl, 'Descargar QR para Clase')}
-      <div style="margin-top:12px;font-size:12px;"><a href="${escapeHtml(qr.url)}" target="_blank" style="color:${ROSA_TEXTO};">Abrir el enlace de la encuesta</a></div>
+    <td align="center" style="padding:16px 14px 14px;border:4px solid ${ROJO_UNIVERSIDAD};border-radius:24px;background-color:#FFFFFF;">
+      <div style="font-size:14px;font-weight:800;line-height:1.25;letter-spacing:0.5px;color:${ROJO_UNIVERSIDAD};text-transform:uppercase;">${escapeHtml(qr.cursoNombre.toUpperCase())}</div>
+      <div style="margin:2px 0 10px;font-size:11px;font-weight:500;letter-spacing:0.5px;color:#1F2937;">GRUPO ${escapeHtml(qr.grupoNumero)}</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+        <tr>
+          <td style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;background-color:#FFFFFF;">
+            <img src="${escapeHtml(qr.imagenUrl)}" width="200" height="200" alt="Código QR de la evaluación"
+                 style="display:block;width:200px;height:200px;border:0;">
+          </td>
+        </tr>
+      </table>
+      <div style="margin-top:10px;font-size:10px;letter-spacing:0.5px;color:${GRIS_SUAVE};">DOCENTE</div>
+      <div style="margin-top:2px;font-size:14px;font-weight:bold;line-height:1.3;color:#111827;">${escapeHtml(qr.profesorNombre)}</div>
     </td>
   </tr>
-</table>`
+</table>
+<div style="margin:0 0 24px;text-align:center;">
+  ${boton(qr.descargaUrl, 'Descargar QR para Clase')}
+  <div style="margin-top:12px;font-size:12px;"><a href="${escapeHtml(qr.url)}" target="_blank" style="color:${ROSA_TEXTO};">Abrir el enlace de la encuesta</a></div>
+</div>`
 }
 
 export type CorreoQrDocente = {

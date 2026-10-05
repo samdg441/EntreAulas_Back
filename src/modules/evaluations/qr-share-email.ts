@@ -9,7 +9,7 @@ import {
   urlImagenQr,
   type QrCurso,
 } from '../../shared/email-templates'
-import QRCode from 'qrcode'
+import { pngQrConLogo } from './qr-imagen'
 
 const EMAIL_REGEX = /^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{1,63}$/
 const TOKEN_QR_REGEX = /^[A-Za-z0-9-]{1,64}$/
@@ -104,7 +104,7 @@ export function urlEncuestaQr(token: string, baseUrl = appBaseUrl()) {
 /** PNG del QR que apunta a la encuesta. Se sirve por URL porque los correos bloquean imágenes en base64. */
 export async function generarPngQr(token: string): Promise<Buffer> {
   if (!TOKEN_QR_REGEX.test(token)) throw badRequest('Token de QR inválido.')
-  return QRCode.toBuffer(urlEncuestaQr(token), { type: 'png', errorCorrectionLevel: 'M', width: 400, margin: 2 })
+  return pngQrConLogo(urlEncuestaQr(token))
 }
 
 function linkDesdeFila(row: Record<string, unknown>, baseUrl: string): QrCurso {

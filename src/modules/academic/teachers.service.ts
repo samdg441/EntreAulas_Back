@@ -66,7 +66,19 @@ export class TeachersService {
     return listarProfesoresConCursos(user)
   }
 
-  async listGroups(profesorId: string, courseId: string) {
+  async listGroups(profesorId: string, courseId: string, user?: { id: string; tipo_usuario?: string; roles?: string[] }) {
+    const grupos = await this.gruposDelProfesorEnCurso(profesorId, courseId)
+    if (!user || !tieneRol(user, 'estudiante')) return grupos
+
+    const estudiante = await academicRepository.findEstudianteByUsuarioId(user.id)
+    if (!estudiante) return []
+    const inscritos = new Set(
+      (await academicRepository.listInscripcionesActivas(estudiante.id)).map((i: any) => String(i.grupo_id))
+    )
+    return grupos.filter((g: any) => inscritos.has(String(g.id)))
+  }
+
+  private async gruposDelProfesorEnCurso(profesorId: string, courseId: string) {
     const profesor = await teachersRepository.findActiveProfessor(profesorId)
     if (!profesor) {
       throw notFound('Profesor no encontrado')
