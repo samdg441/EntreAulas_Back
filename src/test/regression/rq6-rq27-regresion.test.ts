@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { expect } from 'chai'
 import jwt from 'jsonwebtoken'
 import type { NextFunction, Request, Response } from 'express'
-import { fromMock, supabaseModuleMock } from '../../helpers/supabase-mock'
-import { queueFrom } from '../../helpers/query-builder'
-import { adminUser, coordinadorUser, estudianteUser, profesorUser } from '../../fixtures/users'
+import { fromMock, supabaseModuleMock } from '../helpers/supabase-mock'
+import { queueFrom } from '../helpers/query-builder'
+import { adminUser, coordinadorUser, estudianteUser, profesorUser } from '../fixtures/users'
 
 const academicRepository = vi.hoisted(() => ({
   findEstudianteByUsuarioId: vi.fn(),
@@ -32,20 +32,20 @@ const RoleService = vi.hoisted(() => ({
 
 const sendMail = vi.hoisted(() => vi.fn())
 
-vi.mock('../../../config/supabase-only', () => supabaseModuleMock)
-vi.mock('../../../config/supabaseClient', () => supabaseModuleMock)
-vi.mock('../../../modules/academic/academic.repository', () => ({ academicRepository }))
-vi.mock('../../../modules/evaluations/qr.repository', () => ({ qrRepository }))
-vi.mock('../../../modules/auth/role.service', () => ({ RoleService, default: RoleService }))
-vi.mock('../../../shared/adapters/mailer.adapter', () => ({ sendMail }))
+vi.mock('../../config/supabase-only', () => supabaseModuleMock)
+vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
+vi.mock('../../modules/academic/academic.repository', () => ({ academicRepository }))
+vi.mock('../../modules/evaluations/qr.repository', () => ({ qrRepository }))
+vi.mock('../../modules/auth/role.service', () => ({ RoleService, default: RoleService }))
+vi.mock('../../shared/adapters/mailer.adapter', () => ({ sendMail }))
 
-import { authenticateToken, requirePermission, requireRole } from '../../../middleware/auth'
-import { autoEnrollPorQr } from '../../../modules/evaluations/qr-auto-enroll'
-import { generarQrsBatch } from '../../../modules/evaluations/qr-batch'
-import { compartirQrsPorEmail } from '../../../modules/evaluations/qr-share-email'
-import { mapearRespuestaQr, resolverEvaluacionQr } from '../../../modules/evaluations/qr-resolucion'
-import { decidirRelacionEstudianteMateria } from '../../../modules/academic/estudiante-materias'
-import { AppError } from '../../../shared/errors'
+import { authenticateToken, requirePermission, requireRole } from '../../middleware/auth'
+import { autoEnrollPorQr } from '../../modules/evaluations/qr-auto-enroll'
+import { generarQrsBatch } from '../../modules/evaluations/qr-batch'
+import { compartirQrsPorEmail } from '../../modules/evaluations/qr-share-email'
+import { mapearRespuestaQr, resolverEvaluacionQr } from '../../modules/evaluations/qr-resolucion'
+import { decidirRelacionEstudianteMateria } from '../../modules/academic/estudiante-materias'
+import { AppError } from '../../shared/errors'
 
 /**
  * Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27.

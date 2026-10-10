@@ -1,21 +1,21 @@
 import { beforeAll, describe, it } from 'vitest'
 import { expect } from 'chai'
-import { calcularStatsEstudiante, decidirStudentStats } from '../../helpers/estudiante-stats'
-import { BODY_EVALUACION_VALIDO, decidirEnvioEvaluacion } from '../../helpers/evaluacion-docente'
+import { calcularStatsEstudiante, decidirStudentStats } from '../helpers/estudiante-stats'
+import { BODY_EVALUACION_VALIDO, decidirEnvioEvaluacion } from '../helpers/evaluacion-docente'
 import {
   BODY_ALTA_VALIDO,
   decidirActualizacionUsuario,
   decidirCreacionUsuario,
   decidirDesactivacionUsuario,
   usuarioSinPassword,
-} from '../../helpers/gestionar-usuarios'
-import { AVISO_SIN_DATOS, decidirResumenByProfessor } from '../../helpers/resumen-ia'
-import { AVISO_POR_ALCANCE, decidirResumenPorAlcance } from '../../helpers/resumen-alcance'
+} from '../helpers/gestionar-usuarios'
+import { AVISO_SIN_DATOS, decidirResumenByProfessor } from '../helpers/resumen-ia'
+import { AVISO_POR_ALCANCE, decidirResumenPorAlcance } from '../helpers/resumen-alcance'
 import {
   construirAcosoProfesores,
   decidirResumenByCareer,
   detectarAcosoEnTextos,
-} from '../../helpers/alerta-acoso'
+} from '../helpers/alerta-acoso'
 
 /**
  * Igual que rq18-rq25-regresion.test.ts: primero el camino que sí funciona

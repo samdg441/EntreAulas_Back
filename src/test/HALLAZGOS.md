@@ -1,6 +1,6 @@
 # Registro de defectos (V&V)
 
-Defectos detectados durante la validación de los requisitos RQ6, RQ10–RQ13, RQ14–RQ17, RQ18–RQ24, RQ29 y RQ31.
+Defectos detectados durante la validación de los requisitos RQ6, RQ10–RQ13, RQ14–RQ17, RQ18–RQ25, RQ29 y RQ31.
 Cada uno tiene una prueba ejecutable que **falla mientras el defecto siga abierto**.
 
 ```bash
@@ -17,10 +17,10 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 |----|---------|----|-----------|--------|
 | DEF-01 | Rango de fechas inválido (`2026-06-31`) | RQ23 | Media | ABIERTO |
 | DEF-02 | Un profesor lee estadísticas de otro | RQ22 | **Alta** | ABIERTO |
-| DEF-03 | Paginación no numérica devuelve `null` | RQ24 | Media | ABIERTO |
-| DEF-04 | `period` no se valida (vacío, 2026, 2026-9, DROP-TABLE) | RQ23 | Media | ABIERTO |
+| DEF-03 | Paginación no numérica devuelve `null` | RQ24 | Media | CERRADO |
+| DEF-04 | `period` no se valida (vacío, 2026, 2026-9, DROP-TABLE) | RQ23 | Media | PARCIAL (3/5) |
 | DEF-05 | Roles sensibles a mayúsculas | RQ19 | Media | ABIERTO |
-| DEF-06 | Un `docente` no accede a sus métricas | RQ22 | Media | ABIERTO |
+| DEF-06 | Un `docente` no accede a sus métricas | RQ22 | Media | CERRADO |
 | DEF-07 | Dos promedios distintos para el mismo profesor | RQ22/RQ24 | **Alta** | ABIERTO |
 | DEF-08 | Evaluaciones anónimas cuentan como 1 estudiante | RQ23 | Baja | ABIERTO |
 | DEF-13 | El endpoint de QR no exige autenticación | RQ18 | Media | ABIERTO |
@@ -28,21 +28,31 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-15 | Fechas imposibles aceptadas al generar QR | RQ18 | Media | ABIERTO |
 | DEF-16 | login-with-role sin rol responde 401 de credenciales | RQ19 | Media | ABIERTO |
 | DEF-17 | Promedio fuera de escala (null, negativo, 99) | RQ22 | **Alta** | ABIERTO |
-| DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | ABIERTO |
-| DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | ABIERTO |
+| DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | CERRADO |
+| DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | CERRADO |
 | DEF-20 | Rol `Coordinador` recibe 403 en el resumen | RQ24 | Media | ABIERTO |
 | DEF-21 | `create-user` acepta `tipo_usuario` inválido | RQ10 | **Alta** | ABIERTO |
 | DEF-22 | Promedio student-stats fuera de escala | RQ11 | **Alta** | ABIERTO |
 | DEF-22 | Rol `Admin` recibe 403 en POST `/batch` | RQ6 | Media | ABIERTO |
 | DEF-23 | Se evalúa un grupo sin inscripción | RQ13 | **Alta** | ABIERTO |
-| DEF-23 | `Estudiante` no puede auto-inscribirse | RQ14 | Media | ABIERTO |
+| DEF-23 | `Estudiante` no puede auto-inscribirse | RQ14 | Media | CERRADO |
 | DEF-24 | Un docente lee el resumen IA de otro profesor | RQ29 | **Alta** | ABIERTO |
 | DEF-24 | Grupo inexistente se omite en silencio | RQ15 | Media | ABIERTO |
 | DEF-25 | Decano/admin reciben 400 de coordinador en by-career | RQ31 | **Alta** | ABIERTO |
-| DEF-25 | HTML del correo QR no escapa el mensaje | RQ16 | Media | ABIERTO |
+| DEF-25 | HTML del correo QR no escapa el mensaje | RQ16 | Media | CERRADO |
 | DEF-26 | GET `/qr-evaluaciones/` vacío responde 404 | RQ17 | Baja | ABIERTO |
+| DEF-31 | Los 500 exponen el mensaje interno (`bigint`) | RQ22/RQ24 | Media | ABIERTO |
+| DEF-32 | Batch QR acepta grupoIds negativos, 0 y decimales | RQ18 | Baja | ABIERTO |
+| DEF-33 | Coordinador: periodo inválido devuelve todos los periodos | RQ23/RQ25 | Media | ABIERTO |
+| DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | ABIERTO |
+| DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | ABIERTO |
+| DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
+| DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | ABIERTO |
+| DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | ABIERTO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
+DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con Cypress desde el
+front, donde figuran como DEF-API-01 a DEF-API-04 (`EntreAulas_Front/docs/pruebas/INFORME-RQ18-RQ25.md`).
 
 Camino fallido por requisito asignado: RQ6 → DEF-22 (`DEF-22-rbac-mayusculas`) · RQ14 → DEF-23 (`DEF-23-auto-enroll-mayusculas`) · RQ15 → DEF-24 (`DEF-24-grupo-inexistente-silencioso`) · RQ16 → DEF-25 (`DEF-25-correo-html-sin-escapar`) · RQ17 → DEF-26.
 
@@ -121,7 +131,7 @@ coordinador, decano o admin.
 |---|---|
 | Requisito afectado | RQ24 — Ver resumen del coordinador |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CERRADO (su prueba pasa en la verificación del 10/10/2026) |
 | Evidencia | `defects/DEF-03-paginacion-no-numerica.test.ts` |
 | Archivo | `src/modules/analytics/coordinador.routes.ts:62` |
 
@@ -144,7 +154,7 @@ límites, y caer al valor por defecto si la entrada no es un número.
 |---|---|
 | Requisito afectado | RQ23 — Consultar estadísticas históricas |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | PARCIAL: 3 de 5 casos corregidos |
 | Evidencia | `defects/DEF-04-periodo-sin-validar.test.ts` |
 | Archivo | `src/modules/analytics/teachers-analytics.routes.ts:218` |
 
@@ -199,7 +209,7 @@ con `roles.some(r => r.toLowerCase() === 'admin')`.
 |---|---|
 | Requisito afectado | RQ22 — Calcular métricas de evaluación |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CERRADO (su prueba pasa en la verificación del 10/10/2026) |
 | Evidencia | `defects/DEF-06-docente-rechazado.test.ts` |
 | Archivo | `src/modules/analytics/teachers-analytics.routes.ts:810` |
 
@@ -463,7 +473,7 @@ con filas inválidas.
 |---|---|
 | Requisito afectado | RQ23 — Consultar estadísticas históricas |
 | Severidad | Alta |
-| Estado | ABIERTO |
+| Estado | CERRADO (su prueba pasa en la verificación del 10/10/2026) |
 | Evidencia | `defects/DEF-18-historico-fuera-de-escala.test.ts` |
 | Archivo | `src/modules/analytics/teachers-analytics.routes.ts:253` |
 | Relacionado | DEF-17 (mismo cálculo en `teacher-stats`) |
@@ -487,7 +497,7 @@ antes de promediar.
 |---|---|
 | Requisito afectado | RQ24 — Ver resumen del coordinador |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CERRADO (su prueba pasa en la verificación del 10/10/2026) |
 | Evidencia | `defects/DEF-19-coordinador-promedio-99.test.ts` |
 | Archivo | `src/modules/analytics/coordinador.routes.ts:140` |
 | Relacionado | DEF-17 / DEF-18 |
@@ -696,7 +706,7 @@ minúsculas antes de `includes`.
 |---|---|
 | Requisito afectado | RQ14 — Auto-inscripción por QR |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CERRADO (su prueba pasa en la verificación del 10/10/2026) |
 | Evidencia | `defects/DEF-23-auto-enroll-mayusculas.test.ts` |
 | Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts` (`POST /:token/auto-enroll`) |
 
@@ -747,7 +757,7 @@ del mismo bucle sí hacen `skipped.push`.
 |---|---|
 | Requisito afectado | RQ16 — Distribución de QR por correo |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CERRADO (su prueba pasa en la verificación del 10/10/2026) |
 | Evidencia | `defects/DEF-25-correo-html-sin-escapar.test.ts` |
 | Archivo | `src/modules/evaluations/qr-evaluaciones.routes.ts` (`htmlBody`) |
 
@@ -789,6 +799,172 @@ final vacía; ese path no entra al router `/:token`.
 **Corrección propuesta.** Registrar explícitamente `GET /` (o `GET ''`) en el
 router de QR y devolver 400, o documentar que el contrato solo aplica a
 `params.token` vacío en el handler (no a la URL sin segmento).
+
+---
+
+## DEF-31 — Los 500 exponen el mensaje interno del error
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ22/RQ24 — Estadísticas del coordinador (afecta a toda la API) |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-31-error-500-expone-detalles.test.ts` · Cypress `defectos-api.cy.ts` (DEF-API-01) |
+| Archivo | `src/shared/errors.ts` (`sendError`), `coordinador.routes.ts` (`/profesor-stats/:profesorId`) |
+
+**Descripción.** Todo error que no es `AppError` responde `{ error, details: error.message }`.
+En Render, `GET /api/coordinador/profesor-stats/abc` devuelve
+`invalid input syntax for type bigint`: motor de base de datos, tipos y a veces columnas.
+
+**Resultado esperado.** `profesorId` no numérico → 400 sin consultar; cualquier 500 → solo
+`{ error: 'Error interno del servidor' }` (el detalle va al log).
+**Resultado obtenido.** 500 con el texto de PostgreSQL.
+
+**Causa raíz.** `sendError` copia `error.message` a la respuesta; la ruta no valida el parámetro.
+
+**Corrección propuesta.** Quitar `details` del 500 (dejarlo en `logger.error`) y validar
+`profesorId` con `/^\d+$/` antes de llamar al servicio.
+
+---
+
+## DEF-32 — El batch de QR acepta IDs de grupo negativos, 0 y decimales
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18 — Generación de QR |
+| Severidad | Baja |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-32-grupo-ids-negativos.test.ts` |
+| Archivo | `src/modules/evaluations/qr-batch.ts` (`parseGrupoIds`) |
+
+**Descripción.** `parseGrupoIds` solo filtra `Number.isFinite`; `-1`, `0` y `1.5` pasan y se
+consultan. Existe `parsearGrupoIds` en `helpers/qr.ts` con la regla correcta (enteros
+positivos), pero ninguna ruta la usa: las pruebas unitarias de RQ18 validaban una copia.
+
+**Resultado esperado.** Solo enteros positivos; si no queda ninguno, 400.
+**Resultado obtenido.** `[63, -1, 0, 2.5, 64]` se conserva completo.
+
+**Corrección propuesta.** `parseGrupoIds` debe delegar en `parsearGrupoIds` (una sola regla).
+
+---
+
+## DEF-33 — Coordinador: un periodo inválido devuelve datos de todos los periodos
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ23 — Histórico por periodo · RQ25 — Reportes |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-33-periodo-coordinador-sin-validar.test.ts` · Cypress DEF-API-02/03 |
+| Archivo | `coordinador.routes.ts`, `calificaciones.ts` (`rangoFechasPeriodoOTodo`) |
+
+**Descripción.** `reports-overview` y `profesor-stats` aceptan `period=2026-9`, `2026`,
+`abc` o `2026-1' OR '1'='1` y responden 200 con el rango 2020–2030. En Render:
+708 evaluaciones con `2026-9` frente a 695 con `2026-1`. No es inyección SQL (PostgREST
+parametriza), pero el coordinador recibe cifras de otro alcance sin aviso. DEF-04 es el
+mismo caso en `/teachers`.
+
+**Resultado esperado.** 400 `Periodo inválido` sin consultar; sin `period`, todos los periodos.
+**Resultado obtenido.** 200 con todos los periodos.
+
+**Corrección propuesta.** En la ruta: `if (period !== undefined && !esPeriodoValido(period)) throw badRequest(...)`.
+
+---
+
+## DEF-34 — El login no limita intentos fallidos
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ19 — Autenticación y roles |
+| Severidad | **Alta** |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-34-login-sin-limite-intentos.test.ts` |
+| Archivo | `src/app.ts`, `modules/auth/auth.routes.ts` |
+
+**Descripción.** 30 intentos fallidos seguidos desde la misma IP responden 30 veces 401.
+Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de banda.
+
+**Resultado esperado.** 429 tras N fallos por IP/correo en una ventana (p. ej. 10 en 15 min).
+**Resultado obtenido.** 401 indefinidamente.
+
+**Corrección propuesta.** `express-rate-limit` sobre `/api/auth/login` y `/login-with-role`
+(con `app.set('trust proxy', 1)` en Render para leer la IP real).
+
+---
+
+## DEF-35 — La API no envía cabeceras de seguridad HTTP
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18–RQ25 (transversal) |
+| Severidad | Baja |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-35-sin-cabeceras-seguridad.test.ts` · Cypress DEF-API-04 |
+| Archivo | `src/app.ts` |
+
+**Descripción.** Solo se desactiva `x-powered-by`. Faltan `X-Content-Type-Options: nosniff`,
+`Strict-Transport-Security`, `X-Frame-Options` y `Referrer-Policy`.
+
+**Corrección propuesta.** `app.use(helmet())` antes de las rutas (revisar `contentSecurityPolicy`
+para Swagger en `/api/docs`).
+
+---
+
+## DEF-36 — El nombre del archivo de reporte usa el periodo sin sanear
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ25 — Exportación de reportes |
+| Severidad | Baja (latente: hoy ninguna ruta lo pone en `Content-Disposition`) |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-36-nombre-reporte-sin-sanear.test.ts` |
+| Archivo | `src/modules/analytics/reporte-exportacion.ts` (`nombreArchivoReporte`) |
+
+**Descripción.** El periodo se concatena tal cual: `../../etc/passwd`, `\r\nSet-Cookie` o
+`"; filename="otro.exe` terminan en el nombre del archivo.
+
+**Corrección propuesta.** Usar el periodo solo si `esPeriodoValido(period)`; si no, `todo`.
+
+---
+
+## DEF-37 — Un token de QR que no es UUID responde 500 en vez de 404
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18 — QR de evaluación |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-37-token-qr-no-uuid-500.test.ts` · `e2e/cypress/e2e/defectos/defectos-api.cy.ts` |
+| Archivo | `qr-evaluaciones.routes.ts` (`responderEvaluacionQr`) |
+
+**Descripción.** Encontrado con Cypress contra Render: `GET /api/qr-evaluaciones/token-que-no-existe`
+→ 500 `Error al resolver el token.`; un UUID inexistente → 404 correcto. La columna `token`
+es `uuid` y PostgreSQL rechaza el texto (`22P02`). El doble de Supabase no conoce tipos, por eso
+las pruebas de API con base simulada no lo detectaban: es el caso que justifica correr Cypress
+contra la base real.
+
+**Resultado esperado.** Formato distinto de UUID → 404 `QR inválido o expirado.` sin consultar.
+**Resultado obtenido.** 500.
+
+**Corrección propuesta.** Validar `token` con una regex de UUID antes de `findActivoByToken`.
+
+---
+
+## DEF-38 — JSON malformado y cuerpo demasiado grande responden HTML
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18/RQ19 (transversal: todos los POST) |
+| Severidad | Baja |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-38-errores-de-cuerpo-en-html.test.ts` |
+| Archivo | `src/app.ts` (falta manejador de errores de Express) |
+
+**Descripción.** El estado es correcto (400 / 413) pero el cuerpo es la página HTML por defecto
+de Express. El front espera `{ error }` y termina mostrando un mensaje genérico.
+
+**Corrección propuesta.** Un manejador final `app.use((err, req, res, next) => ...)` que responda
+`{ error: 'JSON inválido' }` (400) o `{ error: 'Cuerpo demasiado grande' }` (413).
 
 ---
 

@@ -1,0 +1,19 @@
+{
+  "name": "entre-aulas-back-e2e",
+  "private": true,
+  "description": "Pruebas de la API con Cypress (caja negra). Proyecto aparte para que npm ci del back no descargue Cypress.",
+  "scripts": {
+    "back": "npm --prefix .. run dev",
+    "cy:open": "cypress open --e2e",
+    "cy:run": "cypress run --e2e",
+    "cy:defectos": "cypress run --e2e --config-file cypress.defectos.config.ts",
+    "cy:ci": "cypress run --e2e --reporter junit --reporter-options mochaFile=../reports/cypress/junit-[hash].xml",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:e2e": "start-server-and-test back http://localhost:3000/health cy:run"
+  },
+  "devDependencies": {
+    "cypress": "^16.1.1",
+    "start-server-and-test": "^3.0.13",
+    "typescript": "^7.0.2"
+  }
+}

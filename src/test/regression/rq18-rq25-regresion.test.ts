@@ -1,19 +1,19 @@
 import { beforeAll, describe, it } from 'vitest'
 import { expect } from 'chai'
-import { resolverEvaluacionQr } from '../../../modules/evaluations/qr-resolucion'
+import { resolverEvaluacionQr } from '../../modules/evaluations/qr-resolucion'
 import {
   dashboardDesdeRoles,
   dashboardDesdeRolSeleccionado,
   dashboardParaUsuario,
-} from '../../../modules/auth/dashboard'
-import { calcularPromedio, resumenHistorico } from '../../../modules/analytics/calificaciones'
-import { armarResumenCoordinador } from '../../../modules/analytics/coordinador-resumen'
+} from '../../modules/auth/dashboard'
+import { calcularPromedio, resumenHistorico } from '../../modules/analytics/calificaciones'
+import { armarResumenCoordinador } from '../../modules/analytics/coordinador-resumen'
 import {
   decidirExportacionReporte,
   MIME_EXCEL,
   nombreArchivoReporte,
-} from '../../../modules/analytics/reporte-exportacion'
-import { coordinadorUser, estudianteUser } from '../../fixtures/users'
+} from '../../modules/analytics/reporte-exportacion'
+import { coordinadorUser, estudianteUser } from '../fixtures/users'
 
 /**
  * Igual que rq1-rq5-regresion-flujo-autenticacion.test.ts:

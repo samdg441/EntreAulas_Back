@@ -56,8 +56,8 @@ import { app } from '../../app'
 import { RoleService } from '../../modules/auth/role.service'
 
 const createBody = {
-  email: 'nuevo@test.com',
-  password: 'password123',
+  email: 'nuevo@soyudemedellin.edu.co',
+  password: 'Clave-Segura2026!',
   nombre: 'Luis',
   apellido: 'Gomez',
   tipo_usuario: 'estudiante',

@@ -1,62 +1,72 @@
-# Pruebas Backend (unitarias)
+# Pruebas Backend
 
-Cada requisito vive en **un archivo** y **una clase** con todos sus casos.
-No hay mocks: se llaman funciones con datos y se revisa el resultado.
-
-El alcance cubre valores comunes, vacíos y valores inválidos (negativos, fuera de escala, mal formados). Todas las pruebas de esta suite deben pasar.
+Framework: **Vitest** + **Supertest** (HTTP sobre la `app` real de Express, con Supabase simulado)
+y **Cypress** para la API real (`e2e/`, caja negra contra el back local o Render).
 
 ```
-src/test/
-├── unit/                 → Una clase por requisito (C1…Cn)
-├── helpers/              → Validaciones y cálculos
-├── fixtures/             → Datos estáticos + casos-datos.ts
-├── COBERTURA-RQ18-24.md  → Alcance y datos inválidos de esta entrega
-└── setup.ts
+EntreAulas_Back/
+├── src/test/
+│   ├── unit/            → Lógica por requisito, agrupada por dominio (acceso, qr, reportes, ...)
+│   ├── integration/     → Flujos HTTP completos de RQ10, RQ11, RQ13, RQ29, RQ31
+│   ├── regression/      → Una prueba por requisito que protege lo ya entregado (RQ6–RQ31)
+│   ├── api/             → Contrato HTTP de RQ18, RQ19, RQ22–RQ25: estados, cuerpos y
+│   │                      argumentos exactos que llegan al servicio
+│   ├── security/        → JWT manipulado, roles, enumeración en login, inyección en
+│   │                      entradas, CORS, límite de tamaño, cabeceras
+│   ├── performance/     → Presupuestos de tiempo (config propia, no corre en CI)
+│   ├── defects/         → Defectos abiertos: fallan a propósito (config propia)
+│   ├── helpers/         → sesion-http.ts (JWT real + usuario simulado), medicion.ts,
+│   │                      supabase-mock.ts, dobles y validadores
+│   ├── fixtures/        → Usuarios y datos estáticos
+│   ├── HALLAZGOS.md     → Registro de defectos DEF-01…DEF-38
+│   └── setup.ts
+├── e2e/                 → Cypress (proyecto aparte: npm ci del back no lo descarga)
+│   └── cypress/e2e/{api,regresion,defectos}
+├── carga/               → Prueba de carga sin dependencias (usuarios concurrentes por etapas)
+├── reports/             → Salida de rendimiento, carga y Cypress (excluida de Git)
+└── docs/pruebas/INFORME-RQ18-RQ25.md → Resultados, métricas e interpretación
 ```
 
-**No hay `e2e/` en backend** (los flujos de usuario viven en el Front).  
-Si más adelante hay pruebas contra BD real, convienen en `integration/` con un perfil/env aparte, no mezcladas con unit.
+## Qué corre en cada comando
 
-## Niveles
+| Comando | Qué ejecuta | ¿En `npm test` / Jenkins? |
+|---|---|---|
+| `npm test` / `npm run test:coverage` | unit, integration, regression, api, security | Sí |
+| `npm run test:regression` · `test:api` · `test:security` | Una sola carpeta | — |
+| `npm run test:performance` | `performance/` → `reports/rendimiento/*.json` | No: depende del equipo |
+| `npm run test:defects` | `defects/` (rojo esperado mientras el defecto siga abierto) | No |
+| `npm run test:carga` | `carga/carga-api.mjs` contra Render o `API_URL` → `reports/carga/` | No: usa la red real |
+| `npm run test:e2e` | Levanta el back local y corre Cypress | No |
 
-| Nivel | Qué prueba | Cobertura de caminos |
-|-------|------------|----------------------|
-| **unit/** | Grafo completo del requisito (C1…Cn) | Completa |
-| **integration/** | Contrato HTTP / login sin stubear el SUT; smoke del camino feliz | Complementaria |
-| **defects/** | Defectos abiertos detectados durante la validación | Rojo esperado |
+`api/` y `security/` usan el JWT real (`authenticateToken` firma y verifica de verdad); solo se
+simula la base. Por eso los roles se prueban como en producción: salen de la base, no del token.
 
-No se añaden datos “de relleno” solo para poner verde. Si un camino falla, se investiga el código o el mock mínimo necesario para ejercitar ese camino.
+## Matriz requisito → nivel (RQ18–RQ25)
 
-## Matriz requisito → archivo
-
-| Requisito | Unit | Integration |
-|-----------|------|-------------|
-| RQ1 Crear usuario (admin) | `unit/rq1-crear-usuario-admin.test.ts` | — |
-| RQ2 Login | `unit/rq2-login.test.ts` | — |
-| RQ6 Control de acceso por roles | `unit/rq6-rbac.test.ts` | — |
-| RQ10 Gestionar usuarios | `unit/rq10-gestionar-usuarios.test.ts` | `integration/rq10-gestionar-usuarios.integration.test.ts` |
-| RQ11 Evaluaciones del estudiante | `unit/rq11-evaluaciones-estudiante.test.ts` | `integration/rq11-evaluaciones-estudiante.integration.test.ts` |
-| RQ13 Enviar evaluación docente | `unit/rq13-enviar-evaluacion.test.ts` | `integration/rq13-enviar-evaluacion.integration.test.ts` |
-| RQ14 Auto-inscripción por QR | `unit/rq14-auto-inscripcion.test.ts` | — |
-| RQ15 Generación masiva de QR | `unit/rq15-generar-qr.test.ts` | — |
-| RQ16 Distribución de QR por correo | `unit/rq16-correo-qr.test.ts` | — |
-| RQ17 Resolución de token QR | `unit/rq17-resolucion-token.test.ts` | — |
-| RQ18 Validar QR | `unit/rq18-validar-qr.test.ts` | `integration/rq18-validar-qr.integration.test.ts` |
-| RQ19 Dashboard por rol | `unit/rq19-redirigir-dashboard.test.ts` | `integration/rq19-redirigir-dashboard.integration.test.ts` |
-| RQ22 Métricas evaluación | `unit/rq22-metricas-evaluacion.test.ts` | `integration/rq22-metricas-evaluacion.integration.test.ts` |
-| RQ23 Stats históricas | `unit/rq23-estadisticas-historicas.test.ts` | `integration/rq23-estadisticas-historicas.integration.test.ts` |
-| RQ24 Resumen coordinador | `unit/rq24-resumen-coordinador.test.ts` | `integration/rq24-resumen-coordinador.integration.test.ts` |
-| RQ29 Resumen generado con IA | `unit/rq29-resumen-generado-ia.test.ts` | `integration/rq29-resumen-generado-ia.integration.test.ts` |
-| RQ31 Alerta de acoso con IA | `unit/rq31-alerta-acoso-ia.test.ts` | `integration/rq31-alerta-acoso-ia.integration.test.ts` |
-
-Framework: **Vitest** + **Supertest**.  
-Cobertura: `coverage/` (excluida de Git).
+| Requisito | unit | regression | api | security | performance | Cypress (API real) | Defectos |
+|---|---|---|---|---|---|---|---|
+| RQ18 QR | `qr/rq18-validar-qr` | ✓ | `rq18-qr` | CRLF/Bcc en correo, 413 | PNG con logo | `api/rq18-qr` | DEF-32, DEF-37 |
+| RQ19 Acceso por rol | `acceso/rq19-redirigir-dashboard` | ✓ | `rq19-login-dashboard` | JWT, roles, login | middleware x50 | `api/rq19-autenticacion` | DEF-34, DEF-38 |
+| RQ22 Métricas | `evaluaciones/rq22-metricas-evaluacion` | ✓ | `rq22-rq25-coordinador` | escala de promedios | 100k notas | contrato + coherencia | DEF-31 |
+| RQ23 Histórico | `evaluaciones/rq23-estadisticas-historicas` | ✓ | ✓ | periodos maliciosos | 100k evaluaciones | coherencia RQ22≡RQ23 | DEF-33 |
+| RQ24 Resumen coordinador | `reportes/rq24-resumen-coordinador` | ✓ | ✓ | paginación, búsqueda | 500 docentes / 50k, escala lineal | contrato | — |
+| RQ25 Reporte | `reportes/rq25-exportar-reporte` | ✓ | ✓ | permisos de exportación | 5k filas | filas exportables | DEF-36 |
+| Transversal | — | — | — | CORS, `x-powered-by` | — | CORS | DEF-35 |
 
 ## Cómo correrlas
 
-Desde **EntreAulas_Back**:
-
 ```bash
 npm test
-npm run test:unit
+npm run test:coverage
+npm run test:performance
+npm run test:defects
+
+# Carga: el token va en un archivo, nunca en la línea de comandos
+TOKEN_FILE=/ruta/token.txt PROFESOR_ID=13 ETAPAS=1,5,10 DURACION_S=20 npm run test:carga
+
+# Cypress (una vez): instalar el binario
+cd e2e && npm install && npx cypress install
+npm run test:e2e                                   # back local
+API_URL=https://entreaulas-back.onrender.com CYPRESS_TOKEN_COORDINADOR="$(cat /ruta/token.txt)" npm --prefix e2e run cy:run
+npm --prefix e2e run cy:defectos                   # rojo esperado
 ```

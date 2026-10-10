@@ -3,8 +3,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/test/unit/**/*.test.ts'],
-    // Integración, defects y *.test.ts colocalizados usan vi.mock: no van en npm test.
+    include: ['src/test/{unit,integration,regression,api,security}/**/*.test.ts'],
+    // defects/ falla a propósito y performance/ depende del equipo: cada una tiene su propia config.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
