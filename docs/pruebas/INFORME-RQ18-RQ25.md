@@ -2,11 +2,11 @@
 
 > Seguridad y rendimiento de RQ1–RQ5 (métricas, criterios de aceptación, resultados y mejoras): [METRICAS-SEGURIDAD-RENDIMIENTO-RQ1-RQ5.md](METRICAS-SEGURIDAD-RENDIMIENTO-RQ1-RQ5.md)
 
-Fecha de ejecución: 10/10/2026 · Node 22.15 · Vitest 2.1.9 · Cypress 16.1.1
+Fecha de ejecución: 10/10/2026 · Node 22.15 · Vitest 2.1.9
 Back en producción: https://entreaulas-back.onrender.com (Render, plan gratuito) · Base: Supabase
 
 Complementa `EntreAulas_Front/docs/pruebas/INFORME-RQ18-RQ25.md` (pantallas, componentes y
-Cypress de interfaz). Aquí se prueba la API: lo que el back acepta, rechaza, calcula y aguanta.
+E2E con Screenplay). Aquí se prueba la API: lo que el back acepta, rechaza, calcula y aguanta.
 
 ## 1. Estrategia
 
@@ -18,12 +18,12 @@ Cypress de interfaz). Aquí se prueba la API: lo que el back acepta, rechaza, ca
 | Seguridad | `src/test/security` | ¿Un atacante consigue algo con JWT, roles o entradas raras? | Cada commit |
 | Rendimiento | `src/test/performance` | ¿La lógica y la app caben en su presupuesto de tiempo? | A demanda |
 | Carga | `carga/` | ¿Cómo se comporta el back real con usuarios simultáneos? | A demanda |
-| API real (Cypress) | `e2e/` | ¿El contrato se cumple contra la base real? | A demanda / antes de entregar |
 | Defectos | `src/test/defects` | ¿Siguen abiertos los defectos registrados? | A demanda (rojo esperado) |
 
 Las pruebas de API y seguridad levantan la `app` real de Express y firman JWT reales; solo se
-simula Supabase. Cypress cubre lo que el doble no puede ver: tipos de PostgreSQL, datos reales,
-CORS y cabeceras del despliegue. DEF-37 (token no UUID → 500) solo apareció ahí.
+simula Supabase. Lo que el doble no puede ver (tipos de PostgreSQL, datos reales, CORS y
+cabeceras del despliegue) se verificó con peticiones HTTP contra Render. DEF-37 (token no UUID → 500)
+solo apareció ahí.
 
 ## 2. Resultados
 
@@ -37,7 +37,6 @@ CORS y cabeceras del despliegue. DEF-37 (token no UUID → 500) solo apareció a
 | **Total `npm test`** | **723** | **✓ 0 fallos** |
 | performance | 10 | ✓ (presupuestos cumplidos) |
 | defects | 72 | 59 fallan (defectos abiertos), 13 pasan (casos ya corregidos) |
-| Cypress (`e2e/`) | 33 + 6 de defectos | Tipado OK; aserciones verificadas contra Render con Node. Falta ejecutar con el binario |
 
 Cobertura de los archivos incluidos en Sonar: **96,52 % líneas · 98,78 % funciones · 88,57 % ramas**.
 `tsc --noEmit`: sin errores.
@@ -115,14 +114,14 @@ Detalle completo en `src/test/HALLAZGOS.md`.
 
 | ID | Defecto | Req. | Severidad | Cómo se encontró |
 |---|---|---|---|---|
-| DEF-31 | Los 500 devuelven el mensaje de PostgreSQL (`bigint`) | RQ22/24 | Media | Cypress contra Render + prueba de defecto |
+| DEF-31 | Los 500 devuelven el mensaje de PostgreSQL (`bigint`) | RQ22/24 | Media | Petición contra Render + prueba de defecto |
 | DEF-32 | Batch QR acepta grupoIds -1, 0 y 1,5 | RQ18 | Baja | Prueba de API (la regla correcta existía en otra función sin usar) |
-| DEF-33 | Periodo inválido → datos de todos los periodos (708 vs 695) | RQ23/25 | Media | Cypress contra Render |
+| DEF-33 | Periodo inválido → datos de todos los periodos (708 vs 695) | RQ23/25 | Media | Petición contra Render |
 | DEF-34 | Login sin límite de intentos: 30 fallos seguidos, 30 veces 401 | RQ19 | **Alta** | Prueba de seguridad |
-| DEF-35 | Sin cabeceras de seguridad (helmet) | Transversal | Baja | Cypress contra Render |
+| DEF-35 | Sin cabeceras de seguridad (helmet) | Transversal | Baja | Petición contra Render |
 | DEF-36 | Nombre del archivo del reporte sin sanear (latente) | RQ25 | Baja | Revisión + prueba de seguridad |
-| DEF-37 | Token de QR no UUID → 500 en vez de 404 | RQ18 | Media | Cypress contra Render (el doble de la base no lo podía ver) |
-| DEF-38 | JSON malformado / cuerpo > 100 KB → página HTML | RQ18/19 | Baja | Cypress contra Render |
+| DEF-37 | Token de QR no UUID → 500 en vez de 404 | RQ18 | Media | Petición contra Render (el doble de la base no lo podía ver) |
+| DEF-38 | JSON malformado / cuerpo > 100 KB → página HTML | RQ18/19 | Baja | Petición contra Render |
 
 En la misma corrida se confirmó que **DEF-03, DEF-06, DEF-18, DEF-19, DEF-23 (auto-inscripción) y
 DEF-25 (HTML del correo)** ya están corregidos (sus pruebas pasan) y DEF-04 está corregido en 3 de 5 casos.
@@ -139,5 +138,4 @@ npm test && npm run test:coverage
 npm run test:performance
 npm run test:defects
 TOKEN_FILE=/ruta/token.txt PROFESOR_ID=13 ETAPAS=1,5,10 DURACION_S=20 npm run test:carga
-cd e2e && npm install && npx cypress install && npm run test:e2e
 ```

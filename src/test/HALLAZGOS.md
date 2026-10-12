@@ -59,7 +59,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
-DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con Cypress desde el
+DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con peticiones HTTP desde el
 front, donde figuran como DEF-API-01 a DEF-API-04 (`EntreAulas_Front/docs/pruebas/INFORME-RQ18-RQ25.md`).
 
 Camino fallido por requisito asignado: RQ6 → DEF-22 (`DEF-22-rbac-mayusculas`) · RQ14 → DEF-23 (`DEF-23-auto-enroll-mayusculas`) · RQ15 → DEF-24 (`DEF-24-grupo-inexistente-silencioso`) · RQ16 → DEF-25 (`DEF-25-correo-html-sin-escapar`) · RQ17 → DEF-26.
@@ -817,7 +817,7 @@ router de QR y devolver 400, o documentar que el contrato solo aplica a
 | Requisito afectado | RQ22/RQ24 — Estadísticas del coordinador (afecta a toda la API) |
 | Severidad | Media |
 | Estado | ABIERTO |
-| Evidencia | `defects/DEF-31-error-500-expone-detalles.test.ts` · Cypress `defectos-api.cy.ts` (DEF-API-01) |
+| Evidencia | `defects/DEF-31-error-500-expone-detalles.test.ts` · front DEF-API-01 |
 | Archivo | `src/shared/errors.ts` (`sendError`), `coordinador.routes.ts` (`/profesor-stats/:profesorId`) |
 
 **Descripción.** Todo error que no es `AppError` responde `{ error, details: error.message }`.
@@ -863,7 +863,7 @@ positivos), pero ninguna ruta la usa: las pruebas unitarias de RQ18 validaban un
 | Requisito afectado | RQ23 — Histórico por periodo · RQ25 — Reportes |
 | Severidad | Media |
 | Estado | ABIERTO |
-| Evidencia | `defects/DEF-33-periodo-coordinador-sin-validar.test.ts` · Cypress DEF-API-02/03 |
+| Evidencia | `defects/DEF-33-periodo-coordinador-sin-validar.test.ts` · front DEF-API-02/03 |
 | Archivo | `coordinador.routes.ts`, `calificaciones.ts` (`rangoFechasPeriodoOTodo`) |
 
 **Descripción.** `reports-overview` y `profesor-stats` aceptan `period=2026-9`, `2026`,
@@ -907,7 +907,7 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 | Requisito afectado | RQ18–RQ25 (transversal) |
 | Severidad | Baja |
 | Estado | ABIERTO |
-| Evidencia | `defects/DEF-35-sin-cabeceras-seguridad.test.ts` · Cypress DEF-API-04 |
+| Evidencia | `defects/DEF-35-sin-cabeceras-seguridad.test.ts` · front DEF-API-04 |
 | Archivo | `src/app.ts` |
 
 **Descripción.** Solo se desactiva `x-powered-by`. Faltan `X-Content-Type-Options: nosniff`,
@@ -942,13 +942,13 @@ para Swagger en `/api/docs`).
 | Requisito afectado | RQ18 — QR de evaluación |
 | Severidad | Media |
 | Estado | CERRADO |
-| Evidencia | `defects/DEF-37-token-qr-no-uuid-500.test.ts` · `e2e/cypress/e2e/defectos/defectos-api.cy.ts` |
+| Evidencia | `defects/DEF-37-token-qr-no-uuid-500.test.ts` |
 | Archivo | `qr-evaluaciones.routes.ts` (`responderEvaluacionQr`) |
 
-**Descripción.** Encontrado con Cypress contra Render: `GET /api/qr-evaluaciones/token-que-no-existe`
+**Descripción.** Encontrado con una petición contra Render: `GET /api/qr-evaluaciones/token-que-no-existe`
 → 500 `Error al resolver el token.`; un UUID inexistente → 404 correcto. La columna `token`
 es `uuid` y PostgreSQL rechaza el texto (`22P02`). El doble de Supabase no conoce tipos, por eso
-las pruebas de API con base simulada no lo detectaban: es el caso que justifica correr Cypress
+las pruebas de API con base simulada no lo detectaban: es el caso que justifica probar también
 contra la base real.
 
 **Resultado esperado.** Formato distinto de UUID → 404 `QR inválido o expirado.` sin consultar.

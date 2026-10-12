@@ -1,7 +1,7 @@
 /**
  * DEF-37 — Un token de QR que no es UUID responde 500 en vez de 404 (RQ18)
  *
- * Severidad: Media | Estado: CERRADO | Encontrado con Cypress contra Render
+ * Severidad: Media | Estado: CERRADO | Encontrado con una petición contra Render
  *
  * En producción, GET /api/qr-evaluaciones/token-que-no-existe → 500 "Error al resolver el
  * token.", mientras que un UUID inexistente → 404 "QR inválido o expirado.". La columna

@@ -1,7 +1,7 @@
 /**
  * DEF-31 — Los 500 exponen el mensaje interno del error (RQ22/RQ24)
  *
- * Severidad: Media | Estado: ABIERTO | Visto en producción como DEF-API-01 (Cypress, front)
+ * Severidad: Media | Estado: ABIERTO | Visto en producción como DEF-API-01 (front)
  *
  * `sendError` responde `{ error, details: error.message }` ante cualquier error que no sea
  * AppError. En Render, `profesor-stats/abc` devuelve el texto de PostgreSQL

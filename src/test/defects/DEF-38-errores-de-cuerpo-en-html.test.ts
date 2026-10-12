@@ -1,7 +1,7 @@
 /**
  * DEF-38 — JSON malformado y cuerpo demasiado grande responden HTML (RQ19/RQ18)
  *
- * Severidad: Baja | Estado: ABIERTO | Encontrado con Cypress contra Render
+ * Severidad: Baja | Estado: ABIERTO | Encontrado con una petición contra Render
  *
  * El código de estado es correcto (400 / 413), pero el cuerpo es la página HTML por defecto
  * de Express (`<pre>Bad Request</pre>`), no `{ error }`. El front espera JSON en todos los
