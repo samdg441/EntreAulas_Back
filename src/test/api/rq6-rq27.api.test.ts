@@ -20,7 +20,7 @@ import { academicService } from '../../modules/academic/academic.service'
 import { roleRepository } from '../../modules/auth/role.repository'
 
 const filaQr = {
-  token: 'tok-14',
+  token: '00000000-0000-4000-8000-000000000014',
   profesor_id: 13,
   curso_id: 12,
   grupo_id: 63,
@@ -77,7 +77,7 @@ describe('RQ6, RQ14–RQ17 y RQ27 — API', () => {
     it('un profesor no puede matricularse por QR', async () => {
       const auth = iniciarSesion(profesorUser)
 
-      const res = await request(app).post('/api/qr-evaluaciones/tok-14/auto-enroll').set('Authorization', auth)
+      const res = await request(app).post('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000014/auto-enroll').set('Authorization', auth)
 
       expect(res.status).toBe(403)
       expect(res.body.error).toMatch(/estudiantes/i)
@@ -90,7 +90,7 @@ describe('RQ6, RQ14–RQ17 y RQ27 — API', () => {
         body: { enrolled: true, created: true, estudianteId: 'est-1', grupoId: 63 },
       })
 
-      const res = await request(app).post('/api/qr-evaluaciones/tok-14/auto-enroll').set('Authorization', auth)
+      const res = await request(app).post('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000014/auto-enroll').set('Authorization', auth)
 
       expect(res.status).toBe(201)
       expect(res.body).toMatchObject({ enrolled: true, created: true, grupoId: 63 })
@@ -111,7 +111,7 @@ describe('RQ6, RQ14–RQ17 y RQ27 — API', () => {
     it('un administrador genera el lote', async () => {
       const auth = iniciarSesion(adminUser)
       vi.spyOn(qrBatch, 'generarQrsBatch').mockResolvedValue({
-        created: [{ grupoId: 63, token: 'tok-14' }],
+        created: [{ grupoId: 63, token: '00000000-0000-4000-8000-000000000014' }],
         skipped: [],
       })
 
@@ -121,7 +121,7 @@ describe('RQ6, RQ14–RQ17 y RQ27 — API', () => {
         .send({ grupoIds: [63] })
 
       expect(res.status).toBe(201)
-      expect(res.body.created).toEqual([{ grupoId: 63, token: 'tok-14' }])
+      expect(res.body.created).toEqual([{ grupoId: 63, token: '00000000-0000-4000-8000-000000000014' }])
     })
   })
 
@@ -155,7 +155,7 @@ describe('RQ6, RQ14–RQ17 y RQ27 — API', () => {
     it('un token activo devuelve el grupo de la encuesta', async () => {
       vi.spyOn(qrRepository, 'findActivoByToken').mockResolvedValue(filaQr as never)
 
-      const res = await request(app).get('/api/qr-evaluaciones/tok-14')
+      const res = await request(app).get('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000014')
 
       expect(res.status).toBe(200)
       expect(res.body).toMatchObject({ grupoId: 63, cursoCodigo: 'SIS-101', profesorNombre: 'Ana Pérez' })

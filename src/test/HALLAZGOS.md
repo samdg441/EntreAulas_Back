@@ -47,7 +47,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | ABIERTO |
 | DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | ABIERTO |
 | DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
-| DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | ABIERTO |
+| DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | CERRADO |
 | DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | ABIERTO |
 | DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | ABIERTO |
 | DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | ABIERTO |
@@ -56,6 +56,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | ABIERTO |
 | DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
 | DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | ABIERTO |
+| DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
 DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con Cypress desde el
@@ -940,7 +941,7 @@ para Swagger en `/api/docs`).
 |---|---|
 | Requisito afectado | RQ18 — QR de evaluación |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CERRADO |
 | Evidencia | `defects/DEF-37-token-qr-no-uuid-500.test.ts` · `e2e/cypress/e2e/defectos/defectos-api.cy.ts` |
 | Archivo | `qr-evaluaciones.routes.ts` (`responderEvaluacionQr`) |
 
@@ -953,7 +954,7 @@ contra la base real.
 **Resultado esperado.** Formato distinto de UUID → 404 `QR inválido o expirado.` sin consultar.
 **Resultado obtenido.** 500.
 
-**Corrección propuesta.** Validar `token` con una regex de UUID antes de `findActivoByToken`.
+**Corrección aplicada.** `esTokenQrValido` (regex de UUID) en `qr-resolucion.ts`; la ruta GET y la auto-inscripción responden 404 sin consultar la base.
 
 ---
 
@@ -1108,3 +1109,25 @@ tabla. Por lo tanto **las pruebas unitarias no verifican la corrección de las c
 solo la lógica de decisión y de cálculo del endpoint. Detectar un filtro mal escrito
 requiere pruebas de integración contra una base de datos real, nivel de prueba que hoy
 no está implementado.
+
+---
+
+## DEF-46 — Un QR vencido se sigue aceptando
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ18 — validar el token del QR · RQ14 — auto-inscripción |
+| Severidad | Media |
+| Estado | CERRADO |
+| Evidencia | `unit/qr/rq18-qr-vencido.test.ts` |
+| Archivo | `qr-resolucion.ts` · `qr.repository.ts` · `qr-auto-enroll.ts` |
+
+**Descripción.** La tabla `qr_evaluaciones` tiene `expires_at`, pero el back solo revisaba
+`activo`: un QR con fecha de vencimiento pasada abría la evaluación y matriculaba al estudiante.
+Los listados para generar en lote y compartir por correo también devolvían QR vencidos.
+
+**Resultado esperado.** QR con `expires_at` pasada → 404 `QR inválido o expirado.`; sin fecha no vence.
+**Resultado obtenido.** 200 con los datos del QR.
+
+**Corrección aplicada.** `qrVencido` y `sinVencer` en `qr-resolucion.ts`; se usan en GET /:token,
+en la auto-inscripción y en `listActivosByGrupoIds` / `listActivosParaShare`.

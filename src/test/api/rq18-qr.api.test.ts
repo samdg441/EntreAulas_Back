@@ -16,7 +16,7 @@ import { app } from '../../app'
 import { qrRepository } from '../../modules/evaluations/qr.repository'
 
 const filaQr = {
-  token: 'tok-63',
+  token: '00000000-0000-4000-8000-000000000063',
   profesor_id: 13,
   curso_id: 12,
   grupo_id: 63,
@@ -40,7 +40,7 @@ describe('RQ18 — API de QR', () => {
     it('un token activo devuelve profesor, curso, grupo y periodo', async () => {
       vi.spyOn(qrRepository, 'findActivoByToken').mockResolvedValue(filaQr as never)
 
-      const res = await request(app).get('/api/qr-evaluaciones/tok-63')
+      const res = await request(app).get('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000063')
 
       expect(res.status).toBe(200)
       expect(res.headers['content-type']).toMatch(/application\/json/)
@@ -68,7 +68,7 @@ describe('RQ18 — API de QR', () => {
     it('Regresión RQ18: si la base falla → 500 genérico, nunca 200 ni el error interno', async () => {
       vi.spyOn(qrRepository, 'findActivoByToken').mockRejectedValue(new Error('connection terminated unexpectedly'))
 
-      const res = await request(app).get('/api/qr-evaluaciones/tok-63')
+      const res = await request(app).get('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000063')
 
       expect(res.status).toBe(500)
       expect(res.body).toEqual({ error: 'Error al resolver el token.' })
@@ -77,7 +77,7 @@ describe('RQ18 — API de QR', () => {
 
   describe('GET /api/qr-evaluaciones/:token/imagen.png (público, lo usan los correos)', () => {
     it('devuelve un PNG cacheable', async () => {
-      const res = await request(app).get('/api/qr-evaluaciones/tok-63/imagen.png').buffer(true)
+      const res = await request(app).get('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000063/imagen.png').buffer(true)
 
       expect(res.status).toBe(200)
       expect(res.headers['content-type']).toBe('image/png')
@@ -86,7 +86,7 @@ describe('RQ18 — API de QR', () => {
     })
 
     it('con ?descargar=1 se descarga como archivo', async () => {
-      const res = await request(app).get('/api/qr-evaluaciones/tok-63/imagen.png?descargar=1').buffer(true)
+      const res = await request(app).get('/api/qr-evaluaciones/00000000-0000-4000-8000-000000000063/imagen.png?descargar=1').buffer(true)
 
       expect(res.headers['content-disposition']).toBe('attachment; filename="qr-evaluacion.png"')
     })

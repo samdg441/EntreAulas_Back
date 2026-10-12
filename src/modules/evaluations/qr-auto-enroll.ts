@@ -1,5 +1,6 @@
 import { academicRepository } from '../academic/academic.repository'
 import { qrRepository } from './qr.repository'
+import { esTokenQrValido, qrVencido } from './qr-resolucion'
 import { AppError, badRequest, forbidden, internal, notFound } from '../../shared/errors'
 import { tieneRol } from '../../shared/tiene-rol'
 
@@ -40,9 +41,10 @@ function esEstudiante(
 }
 
 async function grupoIdDesdeQr(token: string): Promise<number> {
+  if (!esTokenQrValido(token)) throw notFound('QR inválido o expirado.')
   try {
     const qrRow = await qrRepository.findActivoGrupoByToken(token)
-    if (!qrRow?.grupo_id) throw notFound('QR inválido o expirado.')
+    if (!qrRow?.grupo_id || qrVencido(qrRow.expires_at)) throw notFound('QR inválido o expirado.')
     return Number(qrRow.grupo_id)
   } catch (error) {
     if (error instanceof AppError) throw error

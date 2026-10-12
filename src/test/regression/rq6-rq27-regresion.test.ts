@@ -322,7 +322,7 @@ describe('Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27', () => {
       academicRepository.findInscripcion.mockResolvedValueOnce(null)
 
       // Act: una sola operación principal.
-      const resultado = await autoEnrollPorQr('qr-grupo-11', estudianteUser)
+      const resultado = await autoEnrollPorQr('00000000-0000-4000-8000-000000000011', estudianteUser)
 
       // Assert: la prueba se valida automáticamente.
       expect(resultado.status, 'código').to.equal(201)
@@ -338,11 +338,11 @@ describe('Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27', () => {
       // Arrange
       prepararInscripcion()
       academicRepository.findInscripcion.mockResolvedValueOnce(null)
-      await autoEnrollPorQr('qr-grupo-11', estudianteUser)
+      await autoEnrollPorQr('00000000-0000-4000-8000-000000000011', estudianteUser)
       academicRepository.findInscripcion.mockResolvedValueOnce({ id: 100, activa: true })
 
       // Act
-      const resultado = await autoEnrollPorQr('qr-grupo-11', estudianteUser)
+      const resultado = await autoEnrollPorQr('00000000-0000-4000-8000-000000000011', estudianteUser)
 
       // Assert: aserciones expresivas sobre una colección.
       expect(academicRepository.insertInscripcion.mock.calls, 'inserciones').to.have.lengthOf(1)
@@ -356,7 +356,7 @@ describe('Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27', () => {
       academicRepository.findInscripcion.mockResolvedValueOnce({ id: 100, activa: false })
 
       // Act
-      const resultado = await autoEnrollPorQr('qr-grupo-11', estudianteUser)
+      const resultado = await autoEnrollPorQr('00000000-0000-4000-8000-000000000011', estudianteUser)
 
       // Assert
       expect(resultado.status, 'código').to.equal(200)
@@ -371,7 +371,7 @@ describe('Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27', () => {
       const usuario = { id: 'user-estudiante', tipo_usuario: tipo, roles: [tipo] }
 
       // Act
-      const resultado = await autoEnrollPorQr('qr-grupo-11', usuario)
+      const resultado = await autoEnrollPorQr('00000000-0000-4000-8000-000000000011', usuario)
 
       // Assert
       expect(resultado.status, 'código').to.equal(201)
@@ -383,7 +383,7 @@ describe('Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27', () => {
       prepararInscripcion()
 
       // Act y Assert
-      const error = await rechazoDe(() => autoEnrollPorQr('qr-grupo-11', profesorUser))
+      const error = await rechazoDe(() => autoEnrollPorQr('00000000-0000-4000-8000-000000000011', profesorUser))
       expect(error, 'profesor')
         .to.be.instanceOf(AppError)
         .and.include({ status: 403, message: 'Solo los estudiantes pueden matricularse por QR.' })
@@ -395,7 +395,7 @@ describe('Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27', () => {
       qrRepository.findActivoGrupoByToken.mockResolvedValueOnce(null)
 
       // Act y Assert
-      const error = await rechazoDe(() => autoEnrollPorQr('qr-apagado', estudianteUser))
+      const error = await rechazoDe(() => autoEnrollPorQr('00000000-0000-4000-8000-0000000000ff', estudianteUser))
       expect(error, 'QR apagado')
         .to.be.instanceOf(AppError)
         .and.include({ status: 404, message: 'QR inválido o expirado.' })

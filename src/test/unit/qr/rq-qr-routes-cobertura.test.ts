@@ -77,7 +77,7 @@ describe('RQ14–RQ17 — rutas QR', () => {
       curso: { nombre: 'Álgebra', codigo: 'MAT-1' },
       grupo: { numero_grupo: 'A', horario: 'Lun 8-10', aula: '101' },
     })
-    const res = await request(appQr()).get('/tok-ok')
+    const res = await request(appQr()).get('/00000000-0000-4000-8000-0000000000aa')
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({ profesorId: 'p1', materiaId: 10, grupoId: 3 })
   })
@@ -87,20 +87,20 @@ describe('RQ14–RQ17 — rutas QR', () => {
       status: 201,
       body: { enrolled: true, created: true, grupoId: 3 },
     })
-    const res = await request(appQr()).post('/tok-ok/auto-enroll')
+    const res = await request(appQr()).post('/00000000-0000-4000-8000-0000000000aa/auto-enroll')
     expect(res.status).toBe(201)
     expect(res.body.created).toBe(true)
   })
 
   it('GET /:token inexistente → 404', async () => {
     qrRepository.findActivoByToken.mockResolvedValueOnce(null)
-    const res = await request(appQr()).get('/tok-no')
+    const res = await request(appQr()).get('/00000000-0000-4000-8000-0000000000bb')
     expect(res.status).toBe(404)
   })
 
   it('GET /:token con error de BD → 500', async () => {
     qrRepository.findActivoByToken.mockRejectedValueOnce(new Error('db'))
-    const res = await request(appQr()).get('/tok-err')
+    const res = await request(appQr()).get('/00000000-0000-4000-8000-0000000000ee')
     expect(res.status).toBe(500)
   })
 

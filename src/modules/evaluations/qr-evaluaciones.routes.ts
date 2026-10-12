@@ -4,7 +4,7 @@ import { qrRepository } from './qr.repository'
 import { generarQrsBatch } from './qr-batch'
 import { autoEnrollPorQr } from './qr-auto-enroll'
 import { compartirQrsPorEmail, errorEnvioCorreo, generarPngQr } from './qr-share-email'
-import { mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
+import { esTokenQrValido, mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
 import { AppError, sendError } from '../../shared/errors'
 
 const router = Router()
@@ -93,6 +93,8 @@ async function responderEvaluacionQr(token: string | undefined) {
     if (!r.ok) throw new AppError(r.status, r.error)
   }
 
+  if (!esTokenQrValido(token)) throw new AppError(404, 'QR inválido o expirado.')
+
   const { row, errorBd } = await cargarQrPorToken(token)
   const resultado = resolverEvaluacionQr({
     token,
@@ -100,6 +102,7 @@ async function responderEvaluacionQr(token: string | undefined) {
     qr: row
       ? {
           activo: true,
+          expires_at: row.expires_at,
           profesor_id: row.profesor_id,
           curso_id: row.curso_id,
           grupo_id: row.grupo_id,

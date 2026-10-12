@@ -8,6 +8,24 @@ export type ResultadoQr =
 
 type Relacion<T> = T | T[] | null | undefined
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** La columna `token` es uuid: cualquier otro texto hace fallar la consulta en PostgreSQL. */
+export function esTokenQrValido(token: unknown): token is string {
+  return typeof token === 'string' && UUID_RE.test(token)
+}
+
+/** Sin `expires_at` el QR no vence; una fecha ilegible se trata como vencida. */
+export function qrVencido(expiresAt: unknown, ahora: Date = new Date()): boolean {
+  if (expiresAt == null || expiresAt === '') return false
+  const fecha = new Date(String(expiresAt)).getTime()
+  return Number.isNaN(fecha) || fecha <= ahora.getTime()
+}
+
+export function sinVencer<T extends { expires_at?: unknown }>(rows: T[], ahora: Date = new Date()): T[] {
+  return rows.filter((row) => !qrVencido(row.expires_at, ahora))
+}
+
 /**
  * Decide si un token QR se puede usar. Lo llama GET /qr-evaluaciones/:token
  * después de consultar la fila (o con el resultado vacío).
@@ -15,7 +33,14 @@ type Relacion<T> = T | T[] | null | undefined
 export function resolverEvaluacionQr(params: {
   token?: string
   errorBd?: boolean
-  qr?: { activo?: boolean; profesor_id?: unknown; curso_id?: unknown; grupo_id?: unknown } | null
+  ahora?: Date
+  qr?: {
+    activo?: boolean
+    expires_at?: unknown
+    profesor_id?: unknown
+    curso_id?: unknown
+    grupo_id?: unknown
+  } | null
 }): ResultadoQr {
   if (!params.token) {
     return { ok: false, status: 400, error: 'Token requerido.' }
@@ -23,7 +48,7 @@ export function resolverEvaluacionQr(params: {
   if (params.errorBd) {
     return { ok: false, status: 500, error: 'Error al resolver el token.' }
   }
-  if (!params.qr || params.qr.activo === false) {
+  if (!params.qr || params.qr.activo === false || qrVencido(params.qr.expires_at, params.ahora)) {
     return { ok: false, status: 404, error: 'QR inválido o expirado.' }
   }
   return {
