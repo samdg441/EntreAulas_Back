@@ -21,6 +21,7 @@ const TOKEN = '00000000-0000-4000-8000-000000000018'
 const AHORA = new Date('2026-10-12T12:00:00Z')
 const AYER = '2026-10-11T12:00:00Z'
 const MANANA = '2026-10-13T12:00:00Z'
+const HACE_ANOS = '2020-01-01T00:00:00Z'
 
 function filaQr(expires_at: string | null) {
   return { id: 1, token: TOKEN, profesor_id: 10, curso_id: 20, grupo_id: 30, periodo_id: 1, expires_at }
@@ -46,6 +47,8 @@ describe('RQ18 — QR vencido y token con formato inválido', () => {
     [AYER, true],
     ['2026-10-12T12:00:00Z', true],
     ['no-es-fecha', true],
+    [new Date(AYER), true],
+    [{ fecha: AYER }, true],
   ])('qrVencido(%s) → %s', (expiresAt, esperado) => {
     expect(qrVencido(expiresAt, AHORA)).toBe(esperado)
   })
@@ -63,7 +66,7 @@ describe('RQ18 — QR vencido y token con formato inválido', () => {
   })
 
   it('GET /api/qr-evaluaciones/:token con QR vencido → 404', async () => {
-    vi.spyOn(qrRepository, 'findActivoByToken').mockResolvedValue(filaQr('2020-01-01T00:00:00Z') as never)
+    vi.spyOn(qrRepository, 'findActivoByToken').mockResolvedValue(filaQr(HACE_ANOS) as never)
 
     const res = await request(app).get(`/api/qr-evaluaciones/${TOKEN}`)
 
@@ -83,7 +86,7 @@ describe('RQ18 — QR vencido y token con formato inválido', () => {
   it('auto-inscripción con QR vencido → 404', async () => {
     vi.spyOn(academicRepository, 'findEstudianteByUsuarioId').mockResolvedValue({ id: 'est-1' } as never)
     vi.spyOn(qrRepository, 'findActivoGrupoByToken').mockResolvedValue(
-      { id: 1, token: TOKEN, grupo_id: 30, activo: true, expires_at: '2020-01-01T00:00:00Z' } as never
+      { id: 1, token: TOKEN, grupo_id: 30, activo: true, expires_at: HACE_ANOS } as never
     )
 
     await expect(autoEnrollPorQr(TOKEN, estudianteUser)).rejects.toMatchObject({ status: 404 })
@@ -101,7 +104,7 @@ describe('RQ18 — QR vencido y token con formato inválido', () => {
     '%s no devuelve QR vencidos',
     async (metodo) => {
       const filas = [
-        { grupo_id: 1, token: 'a', expires_at: '2020-01-01T00:00:00Z' },
+        { grupo_id: 1, token: 'a', expires_at: HACE_ANOS },
         { grupo_id: 2, token: 'b', expires_at: null },
       ]
       const consulta = { select: () => consulta, eq: () => consulta, in: async () => ({ data: filas, error: null }) }

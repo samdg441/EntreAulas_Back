@@ -18,7 +18,8 @@ export function esTokenQrValido(token: unknown): token is string {
 /** Sin `expires_at` el QR no vence; una fecha ilegible se trata como vencida. */
 export function qrVencido(expiresAt: unknown, ahora: Date = new Date()): boolean {
   if (expiresAt == null || expiresAt === '') return false
-  const fecha = new Date(String(expiresAt)).getTime()
+  const fecha =
+    typeof expiresAt === 'string' || expiresAt instanceof Date ? new Date(expiresAt).getTime() : Number.NaN
   return Number.isNaN(fecha) || fecha <= ahora.getTime()
 }
 
