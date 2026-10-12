@@ -12,6 +12,14 @@
  *   PROFESOR_ID     Opcional: agrega profesor-stats (RQ22).
  *   QR_TOKEN        Opcional: agrega la imagen PNG del QR (RQ18).
  *   TIMEOUT_MS      Tiempo máximo por petición (por defecto 30000, igual que el front).
+ *   ESCENARIOS      "rq1-rq5" ejecuta solo login, recuperación de contraseña y alta de usuarios;
+ *                   "todos" (por defecto) ejecuta los de RQ18–RQ25 y los de RQ1–RQ5.
+ *   LOGIN_EMAIL / LOGIN_PASSWORD   Cuenta de prueba para el escenario login-valido (RQ2).
+ *   CREAR_USUARIOS  "true" agrega create-user (RQ1); crea cuentas reales, requiere TOKEN_FILE de admin.
+ *   PERFIL          smoke | carga | estres | pico | soak. Fija ETAPAS/DURACION_S si no se indican.
+ *                   estres, pico y soak solo contra localhost (o PERMITIR_REMOTO=true).
+ *   THINK_MS        Pausa entre peticiones de cada usuario virtual (por defecto 0).
+ *   PID_BACK        PID del back local: se muestrea su memoria (VmRSS) durante la prueba (Linux).
  *
  * Termina con código 1 si algún escenario incumple su criterio de aceptación.
  */
@@ -19,18 +27,41 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { escenarios as definirEscenarios } from './escenarios.mjs'
 
+const PERFILES = {
+  smoke: { etapas: '1', duracionS: 10 },
+  carga: { etapas: '1,5,10,25', duracionS: 20 },
+  estres: { etapas: '10,25,50,100,150', duracionS: 20 },
+  // 5 → 50 → 5: la tercera etapa muestra si el sistema se recupera tras el pico.
+  pico: { etapas: '5,50,5', duracionS: 20 },
+  soak: { etapas: '10', duracionS: 600 },
+}
+const perfil = PERFILES[process.env.PERFIL || ''] ?? null
+if (process.env.PERFIL && !perfil) throw new Error(`PERFIL desconocido: ${process.env.PERFIL}`)
+
 const config = {
   apiUrl: (process.env.API_URL || 'https://entreaulas-back.onrender.com').replace(/\/$/, ''),
-  etapas: (process.env.ETAPAS || '1,5,10').split(',').map(Number).filter((n) => n > 0),
-  duracionS: Number(process.env.DURACION_S || 15),
+  etapas: (process.env.ETAPAS || perfil?.etapas || '1,5,10').split(',').map(Number).filter((n) => n > 0),
+  duracionS: Number(process.env.DURACION_S || perfil?.duracionS || 15),
   periodo: process.env.PERIODO || '2026-1',
   profesorId: process.env.PROFESOR_ID || '',
   qrToken: process.env.QR_TOKEN || '',
   timeoutMs: Number(process.env.TIMEOUT_MS || 30_000),
+  thinkMs: Number(process.env.THINK_MS || 0),
+  loginEmail: process.env.LOGIN_EMAIL || '',
+  loginPassword: process.env.LOGIN_PASSWORD || '',
+  crearUsuarios: process.env.CREAR_USUARIOS === 'true',
+  perfil: process.env.PERFIL || 'manual',
 }
+const esLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(config.apiUrl).hostname)
+if (['estres', 'pico', 'soak'].includes(config.perfil) && !esLocal && process.env.PERMITIR_REMOTO !== 'true') {
+  throw new Error(`El perfil ${config.perfil} puede tumbar el servicio: solo contra localhost (o PERMITIR_REMOTO=true). Destino: ${config.apiUrl}`)
+}
+if (config.crearUsuarios && !esLocal) throw new Error('CREAR_USUARIOS=true crea cuentas reales: solo contra localhost.')
 const token = process.env.TOKEN_FILE ? readFileSync(process.env.TOKEN_FILE, 'utf8').trim() : ''
 
-const todos = definirEscenarios(config)
+const soloRq1Rq5 = (process.env.ESCENARIOS || 'todos') === 'rq1-rq5'
+// /health va siempre primero: esperarServidor() lo usa para detectar el arranque en frío.
+const todos = definirEscenarios(config).filter((e) => e.nombre === 'health' || !soloRq1Rq5 || e.grupo === 'rq1-rq5')
 const escenarios = todos.filter((e) => !e.auth || token)
 const omitidos = todos.filter((e) => e.auth && !token).map((e) => e.nombre)
 
@@ -51,7 +82,7 @@ async function pedir(escenario) {
     const resp = await fetch(config.apiUrl + escenario.ruta, {
       method: escenario.metodo || 'GET',
       headers,
-      body: escenario.cuerpo ? JSON.stringify(escenario.cuerpo) : undefined,
+      body: escenario.cuerpo ? JSON.stringify(typeof escenario.cuerpo === 'function' ? escenario.cuerpo() : escenario.cuerpo) : undefined,
       signal: AbortSignal.timeout(config.timeoutMs),
     })
     await resp.arrayBuffer()
@@ -81,6 +112,7 @@ async function usuarioVirtual(hasta, muestras, desfase) {
   while (performance.now() < hasta) {
     const escenario = escenarios[i % escenarios.length]
     muestras[escenario.nombre].push(await pedir(escenario))
+    if (config.thinkMs) await new Promise((listo) => setTimeout(listo, config.thinkMs))
     i++
   }
 }
@@ -130,13 +162,40 @@ function tablaMarkdown(etapas) {
   return filas.join('\n')
 }
 
+/** Muestrea la memoria residente (VmRSS) del back local cada 5 s: un crecimiento sostenido indica fuga. */
+function muestrearMemoria(pid) {
+  const muestras = []
+  if (!pid) return { muestras, detener: () => muestras }
+  const leer = () => {
+    try {
+      const kb = Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))?.[1])
+      if (kb) muestras.push({ tS: Math.round(performance.now() / 1000), mb: Math.round(kb / 1024) })
+    } catch {
+      /* el proceso terminó o no es Linux */
+    }
+  }
+  leer()
+  const reloj = setInterval(leer, 5_000)
+  return { muestras, detener: () => (clearInterval(reloj), leer(), muestras) }
+}
+
+function resumenMemoria(m) {
+  if (!m.length) return ''
+  // El primer minuto incluye el calentamiento del JIT y los pools: la tendencia se mide después.
+  const base = m.find((x) => x.tS >= m[0].tS + 30) ?? m[0]
+  const fin = m.at(-1).mb
+  const pico = Math.max(...m.map((x) => x.mb))
+  return `Memoria del back (RSS): arranque ${m[0].mb} MB, tras calentamiento ${base.mb} MB, pico ${pico} MB, fin ${fin} MB (${base.mb ? Math.round(((fin - base.mb) / base.mb) * 100) : 0} % desde el calentamiento)\n`
+}
+
 async function main() {
-  console.log(`Back: ${config.apiUrl} | etapas: ${config.etapas.join(', ')} usuarios | ${config.duracionS} s por etapa`)
+  console.log(`Perfil: ${config.perfil} | Back: ${config.apiUrl} | etapas: ${config.etapas.join(', ')} usuarios | ${config.duracionS} s por etapa`)
   if (omitidos.length) console.log(`Sin TOKEN_FILE: se omiten ${omitidos.join(', ')}`)
 
   const frio = await esperarServidor()
   console.log(`Servidor listo tras ${Math.round(frio.ms)} ms (${frio.intentos} intento(s); en Render incluye el arranque en frío)`)
 
+  const sondaMemoria = muestrearMemoria(Number(process.env.PID_BACK) || 0)
   const etapas = []
   for (const usuarios of config.etapas) {
     console.log(`\nEtapa: ${usuarios} usuario(s) concurrente(s), ${config.duracionS} s...`)
@@ -149,14 +208,15 @@ async function main() {
     }
   }
 
+  const memoria = sondaMemoria.detener()
   const fecha = new Date().toISOString()
   const carpeta = path.resolve('reports', 'carga')
   mkdirSync(carpeta, { recursive: true })
   const base = path.join(carpeta, `carga-${fecha.replace(/[:.]/g, '-')}`)
   const destino = new URL(config.apiUrl).host
-  const { qrToken, ...configPublica } = config
-  writeFileSync(`${base}.json`, JSON.stringify({ fecha, destino, config: { ...configPublica, token: Boolean(token), qrToken: Boolean(qrToken) }, arranqueFrioMs: Math.round(frio.ms), etapas }, null, 2))
-  writeFileSync(`${base}.md`, `# Prueba de carga — ${destino}\n\nFecha: ${fecha}\n\nServidor listo tras: ${Math.round(frio.ms)} ms\n\n${tablaMarkdown(etapas)}\n`)
+  const { qrToken, loginPassword, loginEmail, ...configPublica } = config
+  writeFileSync(`${base}.json`, JSON.stringify({ fecha, destino, config: { ...configPublica, token: Boolean(token), qrToken: Boolean(qrToken), cuentaLogin: Boolean(loginEmail && loginPassword) }, arranqueFrioMs: Math.round(frio.ms), memoriaMb: memoria, etapas }, null, 2))
+  writeFileSync(`${base}.md`, `# Prueba de carga — ${destino}\n\nFecha: ${fecha}\n\nPerfil: ${config.perfil} | Servidor listo tras: ${Math.round(frio.ms)} ms\n${resumenMemoria(memoria)}\n${tablaMarkdown(etapas)}\n`)
   console.log(`\nReporte: ${base}.json y .md`)
 
   const fallos = etapas.flatMap((e) => e.resultados.filter((r) => !r.cumple).map((r) => `${r.escenario}@${e.usuarios}`))

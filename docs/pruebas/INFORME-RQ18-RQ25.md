@@ -1,5 +1,7 @@
 # Informe de pruebas del back — RQ18, RQ19, RQ22–RQ25
 
+> Seguridad y rendimiento de RQ1–RQ5 (métricas, criterios de aceptación, resultados y mejoras): [METRICAS-SEGURIDAD-RENDIMIENTO-RQ1-RQ5.md](METRICAS-SEGURIDAD-RENDIMIENTO-RQ1-RQ5.md)
+
 Fecha de ejecución: 10/10/2026 · Node 22.15 · Vitest 2.1.9 · Cypress 16.1.1
 Back en producción: https://entreaulas-back.onrender.com (Render, plan gratuito) · Base: Supabase
 

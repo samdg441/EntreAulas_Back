@@ -1,6 +1,6 @@
 # Registro de defectos (V&V)
 
-Defectos detectados durante la validación de los requisitos RQ6, RQ10–RQ13, RQ14–RQ17, RQ18–RQ25, RQ29 y RQ31.
+Defectos detectados durante la validación de los requisitos RQ1–RQ5 (seguridad), RQ6, RQ10–RQ13, RQ14–RQ17, RQ18–RQ25, RQ29 y RQ31.
 Cada uno tiene una prueba ejecutable que **falla mientras el defecto siga abierto**.
 
 ```bash
@@ -49,6 +49,13 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
 | DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | ABIERTO |
 | DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | ABIERTO |
+| DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | ABIERTO |
+| DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | ABIERTO |
+| DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | ABIERTO |
+| DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
+| DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | ABIERTO |
+| DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
+| DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | ABIERTO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
 DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con Cypress desde el
@@ -965,6 +972,129 @@ de Express. El front espera `{ error }` y termina mostrando un mensaje genérico
 
 **Corrección propuesta.** Un manejador final `app.use((err, req, res, next) => ...)` que responda
 `{ error: 'JSON inválido' }` (400) o `{ error: 'Cuerpo demasiado grande' }` (413).
+
+---
+
+## DEF-39 — El autoregistro público permite crear cuentas de administrador
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ1 — Registro de usuarios desde admin |
+| Severidad | **Crítica** |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-39-register-publico-crea-admin.test.ts` |
+| Archivo | `modules/auth/auth.routes.ts` (`registerSchema`, `POST /register`) |
+
+**Descripción.** RQ1 exige que solo un administrador cree usuarios (`create-user` con `requireRole(['admin'])`),
+pero `POST /api/auth/register` no pide autenticación y su esquema acepta `tipo_usuario: 'admin'`,
+`'coordinador'` y `'decano'`. Un anónimo obtiene una cuenta privilegiada y un JWT (comprobado: 201 con token).
+
+**Resultado esperado.** 400/401/403 para roles privilegiados (o endpoint deshabilitado).
+**Resultado obtenido.** 201 y token.
+
+**Corrección propuesta.** Eliminar `register` si el alta es solo por el admin; si se mantiene para estudiantes,
+fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
+
+---
+
+## DEF-40 — Los 500 de autenticación devuelven el mensaje interno
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ1 / RQ2 |
+| Severidad | Media |
+| Estado | ABIERTO (mismo origen que DEF-31) |
+| Evidencia | `defects/DEF-40-error-500-auth-expone-detalles.test.ts` |
+| Archivo | `shared/errors.ts` (`sendError`) |
+
+**Descripción.** `sendError` copia `error.message` a `details`. Un fallo de Supabase en `create-user` o `login`
+revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey ... db.supabase.co`).
+
+**Corrección propuesta.** Responder solo `{ error: 'Error interno del servidor' }` y dejar el detalle en el log.
+
+---
+
+## DEF-41 — Enumeración de cuentas por tiempo de respuesta en el login
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ2 — Login |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-41-login-enumeracion-por-tiempo.test.ts` |
+| Archivo | `modules/auth/auth.routes.ts` (`POST /login`) |
+
+**Descripción.** Correo inexistente: ≈ 4 ms (no se ejecuta bcrypt). Correo existente con clave errónea: ≈ 340 ms (bcrypt, 12 rondas).
+El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registrados.
+
+**Corrección propuesta.** Cuando el usuario no existe, comparar contra un hash ficticio precalculado para igualar el tiempo.
+
+---
+
+## DEF-42 — El JWT sobrevive al restablecimiento de contraseña
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ5 — Restablecer contraseña |
+| Severidad | Media |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-42-jwt-sobrevive-al-restablecer-clave.test.ts` |
+| Archivo | `modules/auth/password-reset.routes.ts`, `middleware/auth.ts` |
+
+**Descripción.** Un token emitido antes del reset (válido 24 h) sigue autenticando después. Si la clave se cambia porque
+la cuenta fue comprometida, el atacante conserva la sesión.
+
+**Corrección propuesta.** Guardar `password_changed_at` (o `token_version`) y rechazar en `authenticateToken` los JWT con `iat` anterior.
+
+---
+
+## DEF-43 — La recuperación de contraseña no limita intentos
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ3.1 / RQ3.4 / RQ5 |
+| Severidad | **Alta** |
+| Estado | ABIERTO (misma causa que DEF-34) |
+| Evidencia | `defects/DEF-43-recuperacion-sin-limite-de-intentos.test.ts` |
+| Archivo | `src/app.ts`, `modules/auth/password-reset.routes.ts` |
+
+**Descripción.** 40 solicitudes seguidas a `forgot-password`, `validate-reset-token` o `reset-password` responden 200/400 sin 429.
+Permite inundar de correos a un usuario (y consumir la cuota del proveedor de correo), llenar `password_reset_tokens` y probar tokens sin freno.
+
+**Corrección propuesta.** `express-rate-limit` por IP y por correo (p. ej. 5 solicitudes/hora por correo en forgot-password; 10 intentos/15 min en validate y reset).
+
+---
+
+## DEF-44 — Los tokens de recuperación anteriores siguen vigentes
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ3.1 |
+| Severidad | Baja |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-44-forgot-password-no-invalida-tokens-previos.test.ts` |
+| Archivo | `modules/auth/password-reset.routes.ts` |
+
+**Descripción.** Dos solicitudes seguidas dejan dos tokens válidos durante 1 h. Un correo antiguo reenviado o filtrado sigue sirviendo.
+
+**Corrección propuesta.** Marcar como `used = true` los tokens sin usar del mismo correo antes de insertar el nuevo.
+
+---
+
+## DEF-45 — La política de contraseña es distinta en el alta y en la recuperación
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ1 / RQ5 |
+| Severidad | Baja |
+| Estado | ABIERTO |
+| Evidencia | `defects/DEF-45-politica-de-clave-inconsistente.test.ts` |
+| Archivo | `modules/auth/auth.routes.ts` (`create-user`, `register`) |
+
+**Descripción.** `reset-password` exige mayúscula, minúscula, número y carácter especial; `create-user` y `register` solo 8 caracteres
+(`12345678` se acepta). El front del admin sí aplica la política completa, pero la API no.
+
+**Corrección propuesta.** Usar `validarFortalezaPassword` también en `create-user` y `register`.
 
 ---
 
