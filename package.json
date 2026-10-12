@@ -24,6 +24,7 @@
     "test:carga:soak": "ESCENARIOS=rq1-rq5 PERFIL=soak API_URL=${API_URL:-http://localhost:3000} node carga/carga-api.mjs",
     "test:e2e": "npm --prefix e2e run test:e2e",
     "test:coverage": "node scripts/run-coverage.js",
+    "test:evidencias": "vitest run src/test/unit/autenticacion src/test/api/rq1- src/test/api/rq2- src/test/api/rq3- src/test/api/rq19-login src/test/security/rq1- src/test/security/rq2- src/test/security/rq3- src/test/security/rq19-login --testTimeout=30000 --reporter=default --reporter=junit --outputFile.junit=reports/junit/rq1-rq5.xml --coverage --coverage.reportsDirectory=coverage-rq1-rq5 --coverage.reporter=text --coverage.reporter=html --coverage.reporter=lcov --coverage.include='src/modules/auth/**/*.ts' --coverage.include=src/middleware/auth.ts --coverage.include=src/utils/passwordSecurity.ts --coverage.include=src/shared/errors.ts",
     "test:defects": "vitest run --config vitest.defects.config.mts",
     "sonar": "npx vitest run --coverage; node scripts/clean-lcov.js; npx @sonar/scan",
     "test:legacy-auth": "ts-node src/test-supabase-auth.ts",

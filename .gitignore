@@ -7,3 +7,4 @@ reports/
 .env
 npm-debug.log*
 .DS_Store
+coverage-rq1-rq5/

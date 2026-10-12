@@ -1,0 +1,67 @@
+{
+  "POST /api/auth/create-user 201 (RQ1)": [
+    "message",
+    "user",
+    "user.activo",
+    "user.apellido",
+    "user.email",
+    "user.id",
+    "user.nombre",
+    "user.tipo_usuario"
+  ],
+  "POST /api/auth/login 200 (RQ2)": [
+    "message",
+    "token",
+    "user",
+    "user.apellido",
+    "user.dashboard",
+    "user.email",
+    "user.id",
+    "user.nombre",
+    "user.permissions",
+    "user.role_description",
+    "user.roles",
+    "user.tipo_usuario",
+    "user.user_role",
+    "user.user_type"
+  ],
+  "POST /api/auth/login 401 (RQ2)": [
+    "error"
+  ],
+  "POST /api/auth/login-with-role 200 (RQ2)": [
+    "token",
+    "user",
+    "user.apellido",
+    "user.dashboard",
+    "user.email",
+    "user.id",
+    "user.nombre",
+    "user.roles",
+    "user.selected_role",
+    "user.tipo_usuario"
+  ],
+  "GET /api/auth/me 200 (RQ2)": [
+    "activo",
+    "apellido",
+    "created_at",
+    "dashboard",
+    "email",
+    "id",
+    "nombre",
+    "permissions",
+    "role_description",
+    "tipo_usuario",
+    "user_role",
+    "user_type"
+  ],
+  "POST /api/auth/forgot-password 200 (RQ3.1)": [
+    "message"
+  ],
+  "GET /api/auth/validate-reset-token/:token 200 (RQ3.4)": [
+    "message",
+    "valid"
+  ],
+  "POST /api/auth/reset-password 200 (RQ5)": [
+    "message"
+  ]
+}
