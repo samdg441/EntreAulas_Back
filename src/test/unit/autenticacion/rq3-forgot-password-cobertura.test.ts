@@ -8,6 +8,7 @@ vi.mock('../../../config/supabaseClient', () => import('../../helpers/dobles-sup
 
 import passwordResetRoutes from '../../../modules/auth/password-reset.routes'
 import { fakeDb } from '../../helpers/fake-supabase'
+import { authRepository } from '../../../modules/auth/auth.repository'
 
 const app = express()
 app.use(express.json())
@@ -139,6 +140,25 @@ describe('RQ3 — forgot-password (cobertura estructural, Fake Supabase)', () =>
     // El handler envuelve el error real con internal(msg, tokenError): el detalle va al log,
     // nunca a la respuesta (DEF-40).
     expect(res.body).toEqual({ error: 'Error interno del servidor' })
+  })
+
+  it('DEF-44: un enlace nuevo anula los anteriores y solo el último queda vigente', async () => {
+    fakeDb.seed('usuarios', [USUARIO_ACTIVO])
+    await forgot({ email: USUARIO_ACTIVO.email })
+    await forgot({ email: USUARIO_ACTIVO.email })
+
+    const tokens = fakeDb.filas('password_reset_tokens') as { used: boolean }[]
+    expect(tokens.map((t) => t.used)).toEqual([true, false])
+  })
+
+  it('DEF-44: si falla anular los anteriores, se registra y el enlace nuevo igual se crea (200)', async () => {
+    fakeDb.seed('usuarios', [USUARIO_ACTIVO])
+    vi.spyOn(authRepository, 'invalidateResetTokens').mockResolvedValueOnce({ message: 'update bloqueado' } as never)
+
+    const res = await forgot({ email: USUARIO_ACTIVO.email })
+
+    expect(res.status).toBe(200)
+    expect(fakeDb.filas('password_reset_tokens')).toHaveLength(1)
   })
 
   it('N17: excepción no controlada → catch → 500', async () => {

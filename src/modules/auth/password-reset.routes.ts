@@ -73,6 +73,12 @@ router.post('/forgot-password', limiteSolicitudRecuperacion, asyncHandler(async 
   const resetToken = generateResetToken()
   const expiresAt = generateExpirationDate()
 
+  // Un enlace nuevo anula los anteriores (DEF-44). Si falla, se registra y se sigue: el token nuevo vale igual.
+  const invalidarError = await authRepository.invalidateResetTokens(email)
+  if (invalidarError) {
+    logger.error('Error invalidando tokens de recuperación anteriores:', invalidarError)
+  }
+
   // Guardar token en la base de datos
   try {
     await authRepository.insertResetToken({

@@ -54,7 +54,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | CORREGIDO |
 | DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
 | DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | CORREGIDO |
-| DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
+| DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | CORREGIDO |
 | DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | CORREGIDO |
 | DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
 | DEF-47 | Pruebas del login intermitentes por timeout (bcrypt 12 en paralelo) | RQ2 | Baja | CORREGIDO |
@@ -1091,13 +1091,15 @@ Permite inundar de correos a un usuario (y consumir la cuota del proveedor de co
 |---|---|
 | Requisito afectado | RQ3.1 |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-44-forgot-password-no-invalida-tokens-previos.test.ts` |
 | Archivo | `modules/auth/password-reset.routes.ts` |
 
 **Descripción.** Dos solicitudes seguidas dejan dos tokens válidos durante 1 h. Un correo antiguo reenviado o filtrado sigue sirviendo.
 
 **Corrección propuesta.** Marcar como `used = true` los tokens sin usar del mismo correo antes de insertar el nuevo.
+
+**Corrección aplicada.** `forgot-password` llama a `authRepository.invalidateResetTokens(email)` antes de guardar el token nuevo: los anteriores quedan `used = true`. Si esa actualización falla se registra y el enlace nuevo igual se envía. La prueba de seguridad que esperaba ambos tokens vigentes se ajustó al comportamiento correcto.
 
 ---
 
