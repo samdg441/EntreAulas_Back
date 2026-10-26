@@ -2,6 +2,7 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { authenticateToken, requireRole } from '../../middleware/auth'
+import { limiteLogin } from '../../middleware/limite-de-intentos'
 import { authRepository } from './auth.repository'
 import {
   hashPassword,
@@ -183,7 +184,7 @@ router.post('/register', async (req, res) => {
 })
 
 // POST /auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', limiteLogin, async (req, res) => {
   try {
     const validatedData = loginSchema.parse(req.body)
 
@@ -289,7 +290,7 @@ router.post('/login', async (req, res) => {
 })
 
 // POST /auth/login-with-role - Login con rol específico
-router.post('/login-with-role', async (req, res) => {
+router.post('/login-with-role', limiteLogin, async (req, res) => {
   try {
     const { email, password, selectedRole } = req.body
 

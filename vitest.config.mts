@@ -23,6 +23,8 @@ export default defineConfig({
       // Alineado con sonar.inclusions (lcov que lee Sonar).
       include: [
         'src/middleware/auth.ts',
+        'src/middleware/limite-de-intentos.ts',
+        'src/middleware/errores-del-cuerpo.ts',
         'src/utils/passwordSecurity.ts',
         'src/shared/errors.ts',
         'src/shared/logger.ts',

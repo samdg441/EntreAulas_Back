@@ -6,6 +6,7 @@ import {
   asyncHandler
 } from '../../shared/errors'
 import { logger } from '../../shared/logger'
+import { limiteSolicitudRecuperacion, limiteTokenRecuperacion } from '../../middleware/limite-de-intentos'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
 import { mailConfigured } from '../../shared/adapters/mail-config'
 import { correoRecuperacionHtml, correoRecuperacionTexto } from '../../shared/email-templates'
@@ -44,7 +45,7 @@ async function enviarCorreoRecuperacion(email: string, resetLink: string, nombre
 }
 
 // Endpoint para solicitar reset de contraseña
-router.post('/forgot-password', asyncHandler(async (req, res) => {
+router.post('/forgot-password', limiteSolicitudRecuperacion, asyncHandler(async (req, res) => {
   const { email } = req.body
 
   // Validar que se proporcione el email
@@ -103,7 +104,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
 }))
 
 // Endpoint para validar token de reset
-router.get('/validate-reset-token/:token', asyncHandler(async (req, res) => {
+router.get('/validate-reset-token/:token', limiteTokenRecuperacion, asyncHandler(async (req, res) => {
   const { token } = req.params
   const { email } = req.query
 
@@ -120,7 +121,7 @@ router.get('/validate-reset-token/:token', asyncHandler(async (req, res) => {
 }))
 
 // Endpoint para resetear la contraseña
-router.post('/reset-password', asyncHandler(async (req, res) => {
+router.post('/reset-password', limiteTokenRecuperacion, asyncHandler(async (req, res) => {
   const { token, email, newPassword, confirmPassword } = req.body
 
   // Validar datos requeridos

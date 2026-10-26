@@ -44,7 +44,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-31 | Los 500 exponen el mensaje interno (`bigint`) | RQ22/RQ24 | Media | PARCIAL |
 | DEF-32 | Batch QR acepta grupoIds negativos, 0 y decimales | RQ18 | Baja | ABIERTO |
 | DEF-33 | Coordinador: periodo inválido devuelve todos los periodos | RQ23/RQ25 | Media | ABIERTO |
-| DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | ABIERTO |
+| DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | CORREGIDO |
 | DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | CORREGIDO |
 | DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
 | DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | CERRADO |
@@ -53,7 +53,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | CORREGIDO |
 | DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | ABIERTO |
 | DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
-| DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | ABIERTO |
+| DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | CORREGIDO |
 | DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
 | DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | CORREGIDO |
 | DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
@@ -890,7 +890,7 @@ mismo caso en `/teachers`.
 |---|---|
 | Requisito afectado | RQ19 — Autenticación y roles |
 | Severidad | **Alta** |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-34-login-sin-limite-intentos.test.ts` |
 | Archivo | `src/app.ts`, `modules/auth/auth.routes.ts` |
 
@@ -902,6 +902,8 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 
 **Corrección propuesta.** `express-rate-limit` sobre `/api/auth/login` y `/login-with-role`
 (con `app.set('trust proxy', 1)` en Render para leer la IP real).
+
+**Corrección aplicada.** `middleware/limite-de-intentos.ts` (`limiteLogin`) en `/login` y `/login-with-role`: 10 fallos por IP y correo cada 15 min → 429 con `Retry-After`. Los logins correctos no consumen intentos. `app.set('trust proxy', 1)` para que la IP sea la del cliente detrás de Render.
 
 ---
 
@@ -1068,7 +1070,7 @@ la cuenta fue comprometida, el atacante conserva la sesión.
 |---|---|
 | Requisito afectado | RQ3.1 / RQ3.4 / RQ5 |
 | Severidad | **Alta** |
-| Estado | ABIERTO (misma causa que DEF-34) |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-43-recuperacion-sin-limite-de-intentos.test.ts` |
 | Archivo | `src/app.ts`, `modules/auth/password-reset.routes.ts` |
 
@@ -1076,6 +1078,8 @@ la cuenta fue comprometida, el atacante conserva la sesión.
 Permite inundar de correos a un usuario (y consumir la cuota del proveedor de correo), llenar `password_reset_tokens` y probar tokens sin freno.
 
 **Corrección propuesta.** `express-rate-limit` por IP y por correo (p. ej. 5 solicitudes/hora por correo en forgot-password; 10 intentos/15 min en validate y reset).
+
+**Corrección aplicada.** `limiteSolicitudRecuperacion` (5 solicitudes por IP y correo cada 15 min) en `forgot-password` y `limiteTokenRecuperacion` (20 fallos por IP cada 15 min) en `validate-reset-token` y `reset-password`. Se puede desactivar solo para carga local con `LIMITE_INTENTOS_DESACTIVADO=true`.
 
 ---
 

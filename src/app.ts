@@ -25,6 +25,9 @@ dotenv.config()
 
 export const app = express()
 app.disable('x-powered-by')
+// Render (y Cloudflare delante) agregan X-Forwarded-For: se confía en un salto para que req.ip sea el cliente
+// y el límite de intentos no trate a todos los usuarios como una sola IP.
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1))
 
 // DEF-35: nosniff, HSTS, X-Frame-Options, Referrer-Policy… La API solo responde JSON, así que no necesita CSP
 // (y la de helmet rompería Swagger UI). /static sirve el logo de los correos: debe poder cargarse desde otro origen.
