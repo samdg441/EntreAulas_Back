@@ -45,17 +45,19 @@ export function unavailable(message: string, details?: unknown) {
 /**
  * Respuesta JSON estable: { error, details? }.
  * AppError → su status. Cualquier otra cosa → 500.
+ * Los 5xx nunca devuelven details: el mensaje de la base o del proveedor solo va al log (DEF-31, DEF-40).
  */
 export function sendError(res: Response, error: unknown): Response {
-  if (error instanceof AppError) {
+  if (error instanceof AppError && error.status < 500) {
     const body: { error: string; details?: unknown } = { error: error.message }
     if (error.details !== undefined) body.details = error.details
     return res.status(error.status).json(body)
   }
 
-  logger.error(error)
-  const details = error instanceof Error ? error.message : String(error)
-  return res.status(500).json({ error: 'Error interno del servidor', details })
+  logger.error(error instanceof AppError ? { error: error.message, details: error.details } : error)
+  const status = error instanceof AppError ? error.status : 500
+  const mensaje = error instanceof AppError ? error.message : 'Error interno del servidor'
+  return res.status(status).json({ error: mensaje })
 }
 
 /** Evita try/catch en cada handler: los throw AppError llegan a sendError. */

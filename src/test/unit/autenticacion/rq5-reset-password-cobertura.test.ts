@@ -100,7 +100,7 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     fakeDb.fail('password_reset_tokens', { message: 'sin conexión' })
     const res = await reset(bodyOk())
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 
   it('N13→N14: token expirado → 400 "El token ha expirado"', async () => {
@@ -126,7 +126,7 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     fakeDb.fail('usuarios', { message: 'sin conexión' })
     const res = await reset(bodyOk())
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 
   it('N20→N21: falla el UPDATE de la contraseña → 500', async () => {
@@ -134,12 +134,9 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     fakeDb.fail('usuarios', { message: 'update bloqueado' }, 1) // 1ª consulta (buscar) pasa, 2ª (update) falla
     const res = await reset(bodyOk())
     expect(res.status).toBe(500)
-    // El handler envuelve el error real con internal(msg, updateError): sendError expone
-    // ese updateError como `details` (contrato { error, details? } de shared/errors.ts).
-    expect(res.body).toEqual({
-      error: 'Error al actualizar la contraseña',
-      details: { message: 'update bloqueado' },
-    })
+    // El handler envuelve el error real con internal(msg, updateError): el detalle va al log,
+    // nunca a la respuesta (DEF-40).
+    expect(res.body).toEqual({ error: 'Error al actualizar la contraseña' })
   })
 
   it('N23: falla marcar el token como usado → NO corta el flujo, 200', async () => {
@@ -170,6 +167,6 @@ describe('RQ5 — reset-password (cobertura estructural, Fake Supabase)', () => 
     const res = await reset(bodyOk())
     expect(res.status).toBe(500)
     // Error genérico (no AppError): sendError usa error.message como `details`.
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: 'caída inesperada' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 })

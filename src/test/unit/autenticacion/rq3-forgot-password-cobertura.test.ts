@@ -71,7 +71,7 @@ describe('RQ3 — forgot-password (cobertura estructural, Fake Supabase)', () =>
     fakeDb.fail('usuarios', { message: 'fallo de conexión' })
     const res = await forgot({ email: USUARIO_ACTIVO.email })
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 
   it('N10→N16: usuario activo, sin debug → 200 genérico y token guardado en BD', async () => {
@@ -136,12 +136,9 @@ describe('RQ3 — forgot-password (cobertura estructural, Fake Supabase)', () =>
     const res = await forgot({ email: USUARIO_ACTIVO.email })
 
     expect(res.status).toBe(500)
-    // El handler envuelve el error real con internal(msg, tokenError): sendError expone
-    // ese tokenError como `details` (contrato { error, details? } de shared/errors.ts).
-    expect(res.body).toEqual({
-      error: 'Error interno del servidor',
-      details: { message: 'insert bloqueado' },
-    })
+    // El handler envuelve el error real con internal(msg, tokenError): el detalle va al log,
+    // nunca a la respuesta (DEF-40).
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 
   it('N17: excepción no controlada → catch → 500', async () => {
@@ -151,6 +148,6 @@ describe('RQ3 — forgot-password (cobertura estructural, Fake Supabase)', () =>
     const res = await forgot({ email: USUARIO_ACTIVO.email })
     expect(res.status).toBe(500)
     // Error genérico (no AppError): sendError usa error.message como `details`.
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: 'caída inesperada' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 })

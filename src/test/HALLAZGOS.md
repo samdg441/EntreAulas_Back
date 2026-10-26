@@ -816,7 +816,7 @@ router de QR y devolver 400, o documentar que el contrato solo aplica a
 |---|---|
 | Requisito afectado | RQ22/RQ24 — Estadísticas del coordinador (afecta a toda la API) |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | PARCIAL (2026-10-26): la fuga de detalles quedó corregida; falta validar `profesorId` en coordinador (fuera de RQ1–RQ5) |
 | Evidencia | `defects/DEF-31-error-500-expone-detalles.test.ts` · front DEF-API-01 |
 | Archivo | `src/shared/errors.ts` (`sendError`), `coordinador.routes.ts` (`/profesor-stats/:profesorId`) |
 
@@ -832,6 +832,8 @@ En Render, `GET /api/coordinador/profesor-stats/abc` devuelve
 
 **Corrección propuesta.** Quitar `details` del 500 (dejarlo en `logger.error`) y validar
 `profesorId` con `/^\d+$/` antes de llamar al servicio.
+
+**Corrección aplicada.** Mismo cambio de `sendError` que DEF-40: el 500 responde solo `{ error }`.
 
 ---
 
@@ -1004,7 +1006,7 @@ fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
 |---|---|
 | Requisito afectado | RQ1 / RQ2 |
 | Severidad | Media |
-| Estado | ABIERTO (mismo origen que DEF-31) |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-40-error-500-auth-expone-detalles.test.ts` |
 | Archivo | `shared/errors.ts` (`sendError`) |
 
@@ -1012,6 +1014,8 @@ fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
 revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey ... db.supabase.co`).
 
 **Corrección propuesta.** Responder solo `{ error: 'Error interno del servidor' }` y dejar el detalle en el log.
+
+**Corrección aplicada.** `sendError` ya no devuelve `details` en ninguna respuesta 5xx (ni en `internal(msg, err)` ni en errores inesperados): el detalle se registra con `logger.error`. Los 4xx conservan `details` (p. ej. errores de validación de Zod). Las pruebas de cobertura que fijaban el cuerpo con `details` se actualizaron al contrato seguro.
 
 ---
 
