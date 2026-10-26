@@ -6,6 +6,7 @@ import { limiteLogin } from '../../middleware/limite-de-intentos'
 import { authRepository } from './auth.repository'
 import {
   hashPassword,
+  igualarTiempoSinCuenta,
   validarPoliticaDeClave,
   verifyStoredPassword
 } from '../../utils/passwordSecurity'
@@ -190,11 +191,9 @@ router.post('/login', limiteLogin, async (req, res) => {
 
     const user = await authRepository.findUserByEmail(validatedData.email)
 
-    if (!user) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    if (!user.activo) {
+    // Mismo mensaje y mismo costo (bcrypt) exista o no la cuenta: no se puede enumerar usuarios (DEF-41).
+    if (!user?.activo) {
+      await igualarTiempoSinCuenta(validatedData.password)
       throw unauthorized('Credenciales inválidas')
     }
 
@@ -296,11 +295,8 @@ router.post('/login-with-role', limiteLogin, async (req, res) => {
 
     const user = await authRepository.findUserByEmail(email)
 
-    if (!user) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    if (!user.activo) {
+    if (!user?.activo) {
+      await igualarTiempoSinCuenta(password)
       throw unauthorized('Credenciales inválidas')
     }
 

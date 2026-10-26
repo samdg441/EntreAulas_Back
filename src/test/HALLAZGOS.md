@@ -51,7 +51,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | CORREGIDO |
 | DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | CORREGIDO |
 | DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | CORREGIDO |
-| DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | ABIERTO |
+| DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | CORREGIDO |
 | DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
 | DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | CORREGIDO |
 | DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
@@ -1036,7 +1036,7 @@ revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey 
 |---|---|
 | Requisito afectado | RQ2 — Login |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-41-login-enumeracion-por-tiempo.test.ts` |
 | Archivo | `modules/auth/auth.routes.ts` (`POST /login`) |
 
@@ -1044,6 +1044,8 @@ revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey 
 El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registrados.
 
 **Corrección propuesta.** Cuando el usuario no existe, comparar contra un hash ficticio precalculado para igualar el tiempo.
+
+**Corrección aplicada.** `igualarTiempoSinCuenta` (`utils/passwordSecurity.ts`) compara la clave contra un hash bcrypt ficticio del mismo coste cuando el correo no existe o la cuenta está inactiva, en `/login` y `/login-with-role`. Además se unificaron las dos ramas (`!user` / `!user.activo`) en una.
 
 ---
 

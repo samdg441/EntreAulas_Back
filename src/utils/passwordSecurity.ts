@@ -24,6 +24,17 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, getBcryptSaltRounds())
 }
 
+let hashFicticio: Promise<string> | null = null
+
+/**
+ * DEF-41: cuando el correo no existe (o la cuenta está inactiva) se compara igual contra un hash bcrypt del mismo coste,
+ * para que el tiempo de respuesta del login no revele qué cuentas existen.
+ */
+export async function igualarTiempoSinCuenta(plain: unknown): Promise<void> {
+  hashFicticio ??= hashPassword('entreaulas-cuenta-inexistente')
+  await bcrypt.compare(typeof plain === 'string' ? plain : '', await hashFicticio)
+}
+
 export type VerifyPasswordResult =
   | { ok: false }
   | { ok: true; migratePlaintextToHash?: string }
