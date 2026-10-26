@@ -33,8 +33,10 @@ describe('tokenAnteriorAlCambioDeClave', () => {
     ['token emitido antes del cambio', Date.parse('2026-10-26T10:00:00Z') / 1000 - 1, '2026-10-26T10:00:00.500Z', true],
     ['token emitido en el mismo segundo del cambio', Date.parse('2026-10-26T10:00:00Z') / 1000, '2026-10-26T10:00:00.900Z', false],
     ['token emitido después del cambio', Date.parse('2026-10-26T10:00:05Z') / 1000, '2026-10-26T10:00:00Z', false],
+    ['la fecha llega como Date (driver de Postgres)', 1_000, new Date(2_000_000), true],
+    ['tipo inesperado', 1_000, 12345, false],
   ])('%s → %s', (_caso, iat, cambio, esperado) => {
-    expect(tokenAnteriorAlCambioDeClave(iat as number | undefined, cambio)).toBe(esperado)
+    expect(tokenAnteriorAlCambioDeClave(iat as number | undefined, cambio as unknown)).toBe(esperado)
   })
 })
 

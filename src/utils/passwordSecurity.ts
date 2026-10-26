@@ -93,8 +93,10 @@ export function validarPoliticaDeClave(password: unknown): string | null {
  * `iat` viene en segundos; se compara contra el segundo del cambio para que el token emitido justo después siga válido.
  */
 export function tokenAnteriorAlCambioDeClave(iat: number | undefined, passwordChangedAt: unknown): boolean {
-  if (!passwordChangedAt || typeof iat !== 'number') return false
-  const cambio = Date.parse(String(passwordChangedAt))
+  if (typeof iat !== 'number') return false
+  let cambio = Number.NaN
+  if (passwordChangedAt instanceof Date) cambio = passwordChangedAt.getTime()
+  else if (typeof passwordChangedAt === 'string') cambio = Date.parse(passwordChangedAt)
   return !Number.isNaN(cambio) && iat < Math.floor(cambio / 1000)
 }
 

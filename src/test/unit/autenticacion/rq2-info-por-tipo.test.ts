@@ -1,10 +1,10 @@
 /**
- * RQ2 — Reglas de sesión extraídas de auth.routes.ts (refactorización): panel, permisos y descripción por tipo.
+ * RQ2 — Reglas de sesión de auth.service.ts que ahora usan las rutas (refactorización): panel, permisos y descripción por tipo.
  */
 import { describe, expect, it } from 'vitest'
-import { describirRolPrincipal, infoPorTipoDeUsuario, normalizarTipoUsuario, tieneRolValido } from '../../../modules/auth/sesion'
+import { describirRolPrincipal, infoPorTipoDeUsuario, normalizarTipoUsuario, tieneRolValido } from '../../../modules/auth/auth.service'
 
-describe('RQ2 — sesion.ts', () => {
+describe('RQ2 — auth.service: panel y roles', () => {
   it.each([
     ['estudiante', '/dashboard-estudiante'],
     ['profesor', '/dashboard-profesor'],

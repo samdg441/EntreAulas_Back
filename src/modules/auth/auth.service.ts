@@ -3,7 +3,7 @@ import { authRepository } from './auth.repository'
 import { hashPassword, verifyStoredPassword } from '../../utils/passwordSecurity'
 import { badRequest, unauthorized } from '../../shared/errors'
 
-const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
+export const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
 
 export interface NuevoUsuarioInput {
   email: string
@@ -172,3 +172,32 @@ export async function crearUsuarioConTipo(input: NuevoUsuarioInput) {
 export function generarTokenSesion(payload: Record<string, unknown>): string {
   return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '24h' })
 }
+
+const INFO_POR_TIPO: Record<string, { dashboard: string; permissions: string[]; role_description: string }> = {
+  estudiante: {
+    dashboard: '/dashboard-estudiante',
+    permissions: ['view_evaluations', 'submit_evaluations'],
+    role_description: 'Estudiante del sistema',
+  },
+  profesor: {
+    dashboard: '/dashboard-profesor',
+    permissions: ['view_evaluations', 'create_evaluations', 'view_reports'],
+    role_description: 'Profesor/Docente del sistema',
+  },
+  coordinador: {
+    dashboard: '/dashboard-coordinador',
+    permissions: ['view_evaluations', 'create_evaluations', 'view_reports', 'manage_users'],
+    role_description: 'Coordinador académico',
+  },
+  admin: {
+    dashboard: '/dashboard-admin',
+    permissions: ['all'],
+    role_description: 'Administrador del sistema',
+  },
+}
+
+/** Panel, permisos y descripción para GET /me según el tipo de usuario (docente = profesor). Reemplaza el switch de la ruta. */
+export function infoPorTipoDeUsuario(tipoUsuario: string) {
+  return INFO_POR_TIPO[normalizarTipoUsuario(tipoUsuario)] ?? {}
+}
+

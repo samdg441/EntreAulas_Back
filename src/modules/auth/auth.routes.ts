@@ -21,16 +21,13 @@ import {
 } from '../../shared/errors'
 import { normalizarCorreoInstitucional } from './correo-institucional'
 import {
-  describirRolPrincipal,
+  armarPerfilConRoles,
   infoPorTipoDeUsuario,
   migrarPasswordSiHaceFalta,
   normalizarTipoUsuario,
-  obtenerCoordinadorInfo,
-  obtenerDecanoInfo,
-  tieneRolValido,
+  resolverRolesUsuario,
   VALID_USER_TYPES,
-  type InfoDeSesion,
-} from './sesion'
+} from './auth.service'
 
 const router = Router()
 
@@ -146,12 +143,8 @@ router.post('/login', limiteLogin, async (req, res) => {
 
     await migrarPasswordSiHaceFalta(user.id, passwordCheck)
 
-    const { RoleService } = await import('./role.service')
-    const roles = await RoleService.obtenerRolesUsuario(user.id)
-
-    if (!tieneRolValido(user.tipo_usuario, roles)) {
-      return res.status(401).json({ error: 'Tipo de usuario no válido' })
-    }
+    // Roles y perfil: reglas de auth.service.ts (antes estaban duplicadas aquí).
+    const roles = await resolverRolesUsuario(user.id, user.tipo_usuario)
 
     if (roles.length > 1) {
       return res.status(200).json({
@@ -177,32 +170,12 @@ router.post('/login', limiteLogin, async (req, res) => {
       { expiresIn: '24h' }
     )
 
-    // Determinar el dashboard basado en roles múltiples
-    const dashboard = await RoleService.obtenerDashboardUsuario(user.id)
-    const permisos = await RoleService.obtenerPermisosUsuario(user.id)
-
-    const coordinadorInfo = await obtenerCoordinadorInfo(roles, user.id)
-    const decanoInfo = await obtenerDecanoInfo(roles, user.id)
-
     // Normalizar 'docente' a 'profesor' para compatibilidad
     const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
     const userRole = userTypeDisplay
 
-    // Información adicional según los roles del usuario
-    const additionalInfo: InfoDeSesion = {
-      dashboard: dashboard,
-      permissions: permisos,
-      roles: roles,
-      role_description: describirRolPrincipal(roles, user.tipo_usuario)
-    }
-
-    if (coordinadorInfo) {
-      additionalInfo.coordinador = coordinadorInfo
-    }
-
-    if (decanoInfo) {
-      additionalInfo.decano = decanoInfo
-    }
+    // Panel, permisos y datos de coordinador/decano según los roles
+    const additionalInfo = await armarPerfilConRoles(user.id, roles, user.tipo_usuario)
 
     res.json({
       message: 'Login exitoso',
