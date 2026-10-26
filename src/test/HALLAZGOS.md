@@ -57,6 +57,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
 | DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | CORREGIDO |
 | DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
+| DEF-47 | Pruebas del login intermitentes por timeout (bcrypt 12 en paralelo) | RQ2 | Baja | CORREGIDO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
 DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con peticiones HTTP desde el
@@ -1141,3 +1142,22 @@ Los listados para generar en lote y compartir por correo también devolvían QR 
 
 **Corrección aplicada.** `qrVencido` y `sinVencer` en `qr-resolucion.ts`; se usan en GET /:token,
 en la auto-inscripción y en `listActivosByGrupoIds` / `listActivosParaShare`.
+
+---
+
+## DEF-47 — Pruebas del login intermitentes por timeout
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ2 (calidad de la suite) |
+| Severidad | Baja |
+| Estado | CORREGIDO (2026-10-26) |
+| Evidencia | `docs/pruebas/antes/back-suite-completa.txt`: 3 fallas «Test timed out in 5000ms» que pasan al correr solas |
+| Archivo | `vitest.config.mts` |
+
+**Descripción.** Con `BCRYPT_SALT_ROUNDS=12` y los 77 archivos en paralelo, `rq2-login`, `rq10-gestionar-usuarios` y
+`rq2-login-avanzado` superaban el límite de 5 s de Vitest: la suite completa fallaba de forma intermitente (falsos rojos en Jenkins).
+
+**Corrección aplicada.** `testTimeout: 15_000` en la configuración principal. No se bajó el coste de bcrypt en pruebas:
+tres pruebas (RQ1 Nodo 15, RQ1·P4, RQ13 Nodo 10) exigen coste 12 como requisito de seguridad.
+

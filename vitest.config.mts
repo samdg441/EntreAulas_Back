@@ -13,6 +13,8 @@ export default defineConfig({
     ],
     setupFiles: ['src/test/setup.ts'],
     globals: false,
+    // DEF-47: bcrypt con coste 12 (exigido por RQ1/RQ13) necesita margen cuando la máquina o Jenkins está cargada.
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',
