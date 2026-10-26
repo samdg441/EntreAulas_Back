@@ -5,7 +5,22 @@ import { analyticsRepository } from '../analytics/analytics.repository'
 import { evaluationsRepository } from '../evaluations/evaluations.repository'
 import { conflict, forbidden, internal, notFound } from '../../shared/errors'
 import { tieneRol } from '../../shared/tiene-rol'
-import { listarProfesoresConCursos } from './listado-profesores'
+import { listarProfesoresConCursos, marcarCursosEvaluados } from './listado-profesores'
+
+async function clavesEvaluadasDelUsuario(usuarioId: string): Promise<Set<string>> {
+  try {
+    const estudiante = await academicRepository.findEstudianteByUsuarioId(usuarioId)
+    if (!estudiante) return new Set()
+    const evaluaciones = await analyticsRepository.listEvaluaciones({
+      columns: 'profesor_id, grupo_id',
+      estudianteId: estudiante.id,
+      completada: true,
+    })
+    return new Set((evaluaciones || []).map((item: any) => `${item.profesor_id}:${item.grupo_id}`))
+  } catch {
+    return new Set()
+  }
+}
 
 function formatQuestions(questions: any[]) {
   return questions.map((pregunta: any) => ({
@@ -62,8 +77,11 @@ async function listCarrerasActivas(opts: { activo?: boolean; activa?: boolean })
 
 /** Orquesta listados y fichas de profesores. Sin SQL directo. */
 export class TeachersService {
-  async listTeachers(user: { id: string; tipo_usuario?: string }) {
-    return listarProfesoresConCursos(user)
+  async listTeachers(user: { id: string; tipo_usuario?: string; roles?: string[] }) {
+    const listado = await listarProfesoresConCursos(user)
+    if (!tieneRol(user, 'estudiante')) return listado
+    const claves = await clavesEvaluadasDelUsuario(user.id)
+    return marcarCursosEvaluados(listado, claves)
   }
 
   async listGroups(profesorId: string, courseId: string, user?: { id: string; tipo_usuario?: string; roles?: string[] }) {
@@ -75,7 +93,10 @@ export class TeachersService {
     const inscritos = new Set(
       (await academicRepository.listInscripcionesActivas(estudiante.id)).map((i: any) => String(i.grupo_id))
     )
-    return grupos.filter((g: any) => inscritos.has(String(g.id)))
+    const claves = await clavesEvaluadasDelUsuario(user.id)
+    return grupos
+      .filter((g: any) => inscritos.has(String(g.id)))
+      .map((g: any) => ({ ...g, evaluada: claves.has(`${profesorId}:${g.id}`) }))
   }
 
   private async gruposDelProfesorEnCurso(profesorId: string, courseId: string) {
@@ -866,6 +887,7 @@ export class TeachersService {
       return empty
     }
 
+    const claves = await clavesEvaluadasDelUsuario(usuarioId)
     const materiasMatriculadas =
       inscripciones
         ?.map((inscripcion: any) => ({
@@ -891,6 +913,9 @@ export class TeachersService {
               codigo: inscripcion.grupo?.periodo?.codigo,
             },
           },
+          evaluada: claves.has(
+            `${inscripcion.grupo?.asignaciones_profesor?.[0]?.profesor?.id}:${inscripcion.grupo?.id}`
+          ),
         }))
         .filter((materia: any) => materia.grupo?.curso?.id) || []
 

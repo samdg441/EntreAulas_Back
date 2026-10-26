@@ -300,6 +300,21 @@ export function cursosSinRepetir(cursos: any[]) {
   return [...porId.values()]
 }
 
+/** Marca grupos ya evaluados por el estudiante. La clave es `profesorId:grupoId`. */
+export function marcarCursosEvaluados(listado: any[], claves: Set<string>) {
+  return listado.map((profesor) => ({
+    ...profesor,
+    courses: (profesor.courses || []).map((curso: any) => {
+      const groups = (curso.groups || []).map((grupo: any) => ({
+        ...grupo,
+        evaluada: claves.has(`${profesor.id}:${grupo.id}`),
+      }))
+      const evaluada = groups.length > 0 && groups.every((grupo: any) => grupo.evaluada)
+      return { ...curso, groups, evaluada }
+    }),
+  }))
+}
+
 function departamentoListado(profesor: any, courses: any[]) {
   if (profesor.departamento) return profesor.departamento
   if (courses.length > 0) return courses[0].department

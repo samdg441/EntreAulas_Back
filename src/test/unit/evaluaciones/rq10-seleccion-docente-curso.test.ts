@@ -20,8 +20,13 @@ const academicRepository = vi.hoisted(() => ({
   listGruposByCurso: vi.fn(),
 }))
 
+const analyticsRepository = vi.hoisted(() => ({
+  listEvaluaciones: vi.fn(),
+}))
+
 vi.mock('../../../modules/academic/teachers.repository', () => ({ teachersRepository }))
 vi.mock('../../../modules/academic/academic.repository', () => ({ academicRepository }))
+vi.mock('../../../modules/analytics/analytics.repository', () => ({ analyticsRepository }))
 
 import { cursosSinRepetir, listarProfesoresConCursos } from '../../../modules/academic/listado-profesores'
 import { teachersService } from '../../../modules/academic/teachers.service'
@@ -82,6 +87,8 @@ describe('RQ10 — Selección de docente y curso para evaluar', () => {
   beforeEach(() => {
     Object.values(teachersRepository).forEach((fn) => fn.mockReset())
     Object.values(academicRepository).forEach((fn) => fn.mockReset())
+    analyticsRepository.listEvaluaciones.mockReset()
+    analyticsRepository.listEvaluaciones.mockResolvedValue([])
   })
 
   it('el estudiante ve cada curso una sola vez y solo con el grupo en el que está inscrito', async () => {
