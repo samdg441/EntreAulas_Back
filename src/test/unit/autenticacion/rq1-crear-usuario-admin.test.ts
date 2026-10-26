@@ -50,7 +50,7 @@ function fakeReq(over: Partial<Request> = {}): Request {
 
 const bodyValido = {
   email: 'rq1.nuevo@soyudemedellin.edu.co',
-  password: 'password123',
+  password: 'Clave-Segura2026!',
   nombre: 'Ana',
   apellido: 'Perez',
   tipo_usuario: 'estudiante',
@@ -58,7 +58,7 @@ const bodyValido = {
 
 const bodyValidoProfesor = {
   email: 'rq1.nuevo.profesor@udemedellin.edu.co',
-  password: 'password123',
+  password: 'Clave-Segura2026!',
   nombre: 'Prof',
   apellido: 'Esor',
   tipo_usuario: 'profesor',

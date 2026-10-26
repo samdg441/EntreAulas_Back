@@ -5,11 +5,13 @@ import { authenticateToken, requireRole } from '../../middleware/auth'
 import { authRepository } from './auth.repository'
 import {
   hashPassword,
+  validarPoliticaDeClave,
   verifyStoredPassword
 } from '../../utils/passwordSecurity'
 import { dashboardDesdeRolSeleccionado } from './dashboard'
 import {
   badRequest,
+  forbidden,
   notFound,
   sendError,
   unauthorized,
@@ -39,6 +41,9 @@ const loginSchema = z.object({
 })
 
 const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
+
+// RQ1: las demás cuentas solo las crea un administrador con create-user (DEF-39).
+const TIPOS_AUTORREGISTRO = new Set(['estudiante'])
 
 
 async function migrarPasswordSiHaceFalta(
@@ -116,6 +121,15 @@ async function obtenerDecanoInfo(
 router.post('/register', async (req, res) => {
   try {
     const validatedData = registerSchema.parse(req.body)
+
+    if (!TIPOS_AUTORREGISTRO.has(validatedData.tipo_usuario)) {
+      throw forbidden('El autorregistro solo está disponible para estudiantes; las demás cuentas las crea un administrador')
+    }
+
+    const errorClave = validarPoliticaDeClave(validatedData.password)
+    if (errorClave) {
+      throw badRequest(errorClave)
+    }
 
     // Verificar si el usuario ya existe
     const existingUser = await authRepository.findUserByEmail(validatedData.email)
@@ -475,8 +489,13 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       throw badRequest('Todos los campos son requeridos')
     }
 
-    if (typeof password !== 'string' || password.length < 8) {
-      throw badRequest('La contraseña debe tener al menos 8 caracteres')
+    if (typeof tipo_usuario !== 'string' || !VALID_USER_TYPES.has(tipo_usuario)) {
+      throw badRequest('tipo_usuario inválido')
+    }
+
+    const errorClave = validarPoliticaDeClave(password)
+    if (errorClave) {
+      throw badRequest(errorClave)
     }
 
     const correoInstitucional = normalizarCorreoInstitucional(email, tipo_usuario)

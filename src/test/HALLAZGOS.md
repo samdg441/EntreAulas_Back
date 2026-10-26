@@ -31,7 +31,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | CERRADO |
 | DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | CERRADO |
 | DEF-20 | Rol `Coordinador` recibe 403 en el resumen | RQ24 | Media | ABIERTO |
-| DEF-21 | `create-user` acepta `tipo_usuario` inválido | RQ10 | **Alta** | ABIERTO |
+| DEF-21 | `create-user` acepta `tipo_usuario` inválido | RQ10 | **Alta** | CORREGIDO |
 | DEF-22 | Promedio student-stats fuera de escala | RQ11 | **Alta** | ABIERTO |
 | DEF-22 | Rol `Admin` recibe 403 en POST `/batch` | RQ6 | Media | ABIERTO |
 | DEF-23 | Se evalúa un grupo sin inscripción | RQ13 | **Alta** | ABIERTO |
@@ -41,7 +41,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-25 | Decano/admin reciben 400 de coordinador en by-career | RQ31 | **Alta** | ABIERTO |
 | DEF-25 | HTML del correo QR no escapa el mensaje | RQ16 | Media | CERRADO |
 | DEF-26 | GET `/qr-evaluaciones/` vacío responde 404 | RQ17 | Baja | ABIERTO |
-| DEF-31 | Los 500 exponen el mensaje interno (`bigint`) | RQ22/RQ24 | Media | ABIERTO |
+| DEF-31 | Los 500 exponen el mensaje interno (`bigint`) | RQ22/RQ24 | Media | PARCIAL |
 | DEF-32 | Batch QR acepta grupoIds negativos, 0 y decimales | RQ18 | Baja | ABIERTO |
 | DEF-33 | Coordinador: periodo inválido devuelve todos los periodos | RQ23/RQ25 | Media | ABIERTO |
 | DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | ABIERTO |
@@ -49,13 +49,13 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
 | DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | CERRADO |
 | DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | ABIERTO |
-| DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | ABIERTO |
-| DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | ABIERTO |
+| DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | CORREGIDO |
+| DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | CORREGIDO |
 | DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | ABIERTO |
 | DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
 | DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | ABIERTO |
 | DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
-| DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | ABIERTO |
+| DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | CORREGIDO |
 | DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
@@ -552,7 +552,7 @@ sí se rechazan (esperado).
 |---|---|
 | Requisito afectado | RQ10 — Gestionar usuarios |
 | Severidad | Alta |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-21-create-user-tipo-invalido.test.ts` |
 | Archivo | `src/modules/auth/auth.routes.ts:482` |
 
@@ -570,6 +570,8 @@ el usuario.
 
 **Corrección propuesta.** Reutilizar el mismo enum y mensaje que el PUT
 (`users.controller.ts`).
+
+**Corrección aplicada.** `create-user` valida `tipo_usuario` contra `VALID_USER_TYPES` antes de tocar la base y responde `400 { error: 'tipo_usuario inválido' }`.
 
 ---
 
@@ -984,7 +986,7 @@ de Express. El front espera `{ error }` y termina mostrando un mensaje genérico
 |---|---|
 | Requisito afectado | RQ1 — Registro de usuarios desde admin |
 | Severidad | **Crítica** |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-39-register-publico-crea-admin.test.ts` |
 | Archivo | `modules/auth/auth.routes.ts` (`registerSchema`, `POST /register`) |
 
@@ -997,6 +999,8 @@ pero `POST /api/auth/register` no pide autenticación y su esquema acepta `tipo_
 
 **Corrección propuesta.** Eliminar `register` si el alta es solo por el admin; si se mantiene para estudiantes,
 fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
+
+**Corrección aplicada.** `POST /register` solo admite `tipo_usuario: 'estudiante'` (`TIPOS_AUTORREGISTRO`); cualquier otro rol responde **403** sin crear la cuenta ni emitir JWT. Las cuentas de docente, coordinador, decano y admin solo se crean con `create-user` (admin autenticado).
 
 ---
 
@@ -1092,7 +1096,7 @@ Permite inundar de correos a un usuario (y consumir la cuota del proveedor de co
 |---|---|
 | Requisito afectado | RQ1 / RQ5 |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-45-politica-de-clave-inconsistente.test.ts` |
 | Archivo | `modules/auth/auth.routes.ts` (`create-user`, `register`) |
 
@@ -1100,6 +1104,8 @@ Permite inundar de correos a un usuario (y consumir la cuota del proveedor de co
 (`12345678` se acepta). El front del admin sí aplica la política completa, pero la API no.
 
 **Corrección propuesta.** Usar `validarFortalezaPassword` también en `create-user` y `register`.
+
+**Corrección aplicada.** La política vive en `utils/passwordSecurity.ts` (`validarPoliticaDeClave`) y la usan `create-user`, `register` y `reset-password` (`validarFortalezaPassword` quedó como alias). Coincide con la política del front (`lib/validation.ts`).
 
 ---
 

@@ -53,3 +53,26 @@ export async function verifyStoredPassword(
 
   return { ok: false }
 }
+
+/**
+ * Política única de contraseña para el alta (create-user / register) y la recuperación (reset-password).
+ * Devuelve el primer incumplimiento o null si la contraseña es válida (DEF-45).
+ */
+export function validarPoliticaDeClave(password: unknown): string | null {
+  if (typeof password !== 'string' || password.length < 8) {
+    return 'La contraseña debe tener al menos 8 caracteres'
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'La contraseña debe contener al menos una letra mayúscula'
+  }
+  if (!/[a-z]/.test(password)) {
+    return 'La contraseña debe contener al menos una letra minúscula'
+  }
+  if (!/\d/.test(password)) {
+    return 'La contraseña debe contener al menos un número'
+  }
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    return 'La contraseña debe contener al menos un carácter especial'
+  }
+  return null
+}
