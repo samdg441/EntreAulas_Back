@@ -20,6 +20,17 @@ import {
   unauthorized,
 } from '../../shared/errors'
 import { normalizarCorreoInstitucional } from './correo-institucional'
+import {
+  describirRolPrincipal,
+  infoPorTipoDeUsuario,
+  migrarPasswordSiHaceFalta,
+  normalizarTipoUsuario,
+  obtenerCoordinadorInfo,
+  obtenerDecanoInfo,
+  tieneRolValido,
+  VALID_USER_TYPES,
+  type InfoDeSesion,
+} from './sesion'
 
 const router = Router()
 
@@ -43,82 +54,8 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
-const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
-
 // RQ1: las demás cuentas solo las crea un administrador con create-user (DEF-39).
 const TIPOS_AUTORREGISTRO = new Set(['estudiante'])
-
-
-async function migrarPasswordSiHaceFalta(
-  userId: string,
-  passwordCheck: { migratePlaintextToHash?: string }
-): Promise<void> {
-  if (!passwordCheck.migratePlaintextToHash) return
-  try {
-    const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-    await authRepository.updateUser(userId, { password: hashedPassword })
-  } catch (updateError) {
-    console.error('Error migrando contraseña a bcrypt:', updateError)
-  }
-}
-
-function tieneRolValido(tipoUsuario: string, roles: string[]): boolean {
-  return (
-    VALID_USER_TYPES.has(tipoUsuario) ||
-    roles.some((rol) => VALID_USER_TYPES.has(rol))
-  )
-}
-
-// Normaliza 'docente' a 'profesor' para compatibilidad con el frontend.
-function normalizarTipoUsuario(tipoUsuario: string): string {
-  return tipoUsuario === 'docente' ? 'profesor' : tipoUsuario
-}
-
-function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
-  if (roles.includes('admin')) return 'Administrador del sistema'
-  if (roles.includes('decano')) return 'Decano de la facultad'
-  if (roles.includes('coordinador')) return 'Coordinador del sistema'
-  if (roles.includes('profesor') || roles.includes('docente')) return 'Profesor/Docente del sistema'
-  if (roles.includes('estudiante')) return 'Estudiante del sistema'
-  return roles.length > 1
-    ? `Usuario con múltiples roles: ${roles.join(', ')}`
-    : `Usuario con rol: ${roles[0] || tipoUsuario}`
-}
-
-async function obtenerCoordinadorInfo(
-  roles: string[],
-  userId: string
-): Promise<{ carrera_id: unknown } | null> {
-  if (!roles.includes('coordinador')) return null
-  try {
-    const { RoleService } = await import('./role.service')
-    const info = await RoleService.obtenerCoordinadorPorUsuario(userId)
-    return info ? { carrera_id: info.carrera_id ?? null } : null
-  } catch (e) {
-    console.warn('Error obteniendo info del coordinador:', e)
-    return null
-  }
-}
-
-async function obtenerDecanoInfo(
-  roles: string[],
-  userId: string
-): Promise<Record<string, unknown> | null> {
-  if (!roles.includes('decano')) return null
-  try {
-    const { RoleService } = await import('./role.service')
-    const info = await RoleService.obtenerDecanoPorUsuario(userId)
-    if (!info) return null
-    return {
-      facultad_id: info.facultad_id ?? null,
-      facultad_nombre: info.facultades?.nombre ?? null,
-      fecha_nombramiento: info.fecha_nombramiento
-    }
-  } catch (e) {
-    console.warn('Error obteniendo info del decano:', e)
-    return null
-  }
-}
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
@@ -252,7 +189,7 @@ router.post('/login', limiteLogin, async (req, res) => {
     const userRole = userTypeDisplay
 
     // Información adicional según los roles del usuario
-    const additionalInfo: any = {
+    const additionalInfo: InfoDeSesion = {
       dashboard: dashboard,
       permissions: permisos,
       roles: roles,
@@ -387,9 +324,13 @@ router.get('/me', async (req, res) => {
     const token = authHeader.substring(7) // Remover 'Bearer '
 
     // Verificar y decodificar el token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload & { email?: string }
 
     // Buscar el usuario en la base de datos
+    if (!decoded.email) {
+      throw unauthorized('Token inválido')
+    }
+
     const user = await authRepository.findUserByEmail(decoded.email)
 
     if (!user?.activo) {
@@ -400,50 +341,10 @@ router.get('/me', async (req, res) => {
       throw unauthorized('La sesión expiró porque la contraseña cambió')
     }
 
-    // Determinar el tipo de usuario para la respuesta
-    let userTypeDisplay = user.tipo_usuario
-    let userRole = user.tipo_usuario
-
     // Normalizar 'docente' a 'profesor' para compatibilidad
-    if (user.tipo_usuario === 'docente') {
-      userTypeDisplay = 'profesor'
-      userRole = 'profesor'
-    }
-
-    // Información adicional según el tipo de usuario
-    let additionalInfo = {}
-
-    switch (user.tipo_usuario) {
-      case 'estudiante':
-        additionalInfo = {
-          dashboard: '/dashboard-estudiante',
-          permissions: ['view_evaluations', 'submit_evaluations'],
-          role_description: 'Estudiante del sistema'
-        }
-        break
-      case 'profesor':
-      case 'docente':
-        additionalInfo = {
-          dashboard: '/dashboard-profesor',
-          permissions: ['view_evaluations', 'create_evaluations', 'view_reports'],
-          role_description: 'Profesor/Docente del sistema'
-        }
-        break
-      case 'coordinador':
-        additionalInfo = {
-          dashboard: '/dashboard-coordinador',
-          permissions: ['view_evaluations', 'create_evaluations', 'view_reports', 'manage_users'],
-          role_description: 'Coordinador académico'
-        }
-        break
-      case 'admin':
-        additionalInfo = {
-          dashboard: '/dashboard-admin',
-          permissions: ['all'],
-          role_description: 'Administrador del sistema'
-        }
-        break
-    }
+    const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
+    const userRole = userTypeDisplay
+    const additionalInfo = infoPorTipoDeUsuario(user.tipo_usuario)
 
     // Devolver información del usuario (sin la contraseña)
     res.json({
