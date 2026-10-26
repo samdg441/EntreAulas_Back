@@ -1,7 +1,7 @@
 /**
  * DEF-40 — Los 500 de create-user y reset-password devuelven el mensaje interno (RQ1/RQ5)
  *
- * Severidad: Media | Estado: ABIERTO | Mismo origen que DEF-31 (`sendError` copia `error.message`)
+ * Severidad: Media | Estado: CORREGIDO (2026-10-26) | Mismo origen que DEF-31 (`sendError` copia `error.message`)
  *
  * Ante un fallo de base de datos el cuerpo trae `details` con texto de PostgreSQL/Supabase
  * (restricciones, nombres de tabla, host). Debe responder solo `{ error: 'Error interno del servidor' }`.

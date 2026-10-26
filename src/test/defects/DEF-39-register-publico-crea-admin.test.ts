@@ -1,7 +1,7 @@
 /**
  * DEF-39 — POST /api/auth/register es público y permite crear cuentas "admin" (RQ1)
  *
- * Severidad: CRÍTICA | Estado: ABIERTO
+ * Severidad: CRÍTICA | Estado: CORREGIDO (2026-10-26)
  *
  * RQ1 exige que solo un administrador cree usuarios (`create-user` + requireRole(['admin'])).
  * Pero `register` no tiene autenticación y su esquema acepta `tipo_usuario: 'admin'`:

@@ -1,7 +1,7 @@
 /**
  * DEF-34 — El login no limita intentos fallidos (RQ19)
  *
- * Severidad: Alta | Estado: ABIERTO
+ * Severidad: Alta | Estado: CORREGIDO (2026-10-26)
  *
  * `/api/auth/login` responde 401 indefinidamente: un atacante puede probar contraseñas
  * sin freno (fuerza bruta / credential stuffing). Lo esperado es 429 tras N fallos

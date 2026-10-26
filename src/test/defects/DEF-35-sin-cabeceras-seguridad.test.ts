@@ -1,7 +1,7 @@
 /**
  * DEF-35 — La API no envía cabeceras de seguridad HTTP (RQ18–RQ25)
  *
- * Severidad: Baja | Estado: ABIERTO | Visto en producción como DEF-API-04
+ * Severidad: Baja | Estado: CORREGIDO (2026-10-26) | Visto en producción como DEF-API-04
  *
  * `app.ts` desactiva `x-powered-by`, pero no usa `helmet`: faltan `X-Content-Type-Options`,
  * `Strict-Transport-Security`, `X-Frame-Options` y `Referrer-Policy`. La imagen PNG del QR
