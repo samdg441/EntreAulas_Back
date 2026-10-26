@@ -45,10 +45,10 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-32 | Batch QR acepta grupoIds negativos, 0 y decimales | RQ18 | Baja | ABIERTO |
 | DEF-33 | Coordinador: periodo inválido devuelve todos los periodos | RQ23/RQ25 | Media | ABIERTO |
 | DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | ABIERTO |
-| DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | ABIERTO |
+| DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | CORREGIDO |
 | DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
 | DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | CERRADO |
-| DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | ABIERTO |
+| DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | CORREGIDO |
 | DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | CORREGIDO |
 | DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | CORREGIDO |
 | DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | ABIERTO |
@@ -911,7 +911,7 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 |---|---|
 | Requisito afectado | RQ18–RQ25 (transversal) |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-35-sin-cabeceras-seguridad.test.ts` · front DEF-API-04 |
 | Archivo | `src/app.ts` |
 
@@ -920,6 +920,8 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 
 **Corrección propuesta.** `app.use(helmet())` antes de las rutas (revisar `contentSecurityPolicy`
 para Swagger en `/api/docs`).
+
+**Corrección aplicada.** `helmet` 8 en `app.ts`: `X-Content-Type-Options: nosniff`, HSTS, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: no-referrer` y demás. Sin CSP (la API solo responde JSON y Swagger UI la necesita inline) y con `Cross-Origin-Resource-Policy: cross-origin` para que los clientes de correo carguen el logo de `/static`.
 
 ---
 
@@ -969,7 +971,7 @@ contra la base real.
 |---|---|
 | Requisito afectado | RQ18/RQ19 (transversal: todos los POST) |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-38-errores-de-cuerpo-en-html.test.ts` |
 | Archivo | `src/app.ts` (falta manejador de errores de Express) |
 
@@ -978,6 +980,8 @@ de Express. El front espera `{ error }` y termina mostrando un mensaje genérico
 
 **Corrección propuesta.** Un manejador final `app.use((err, req, res, next) => ...)` que responda
 `{ error: 'JSON inválido' }` (400) o `{ error: 'Cuerpo demasiado grande' }` (413).
+
+**Corrección aplicada.** Nuevo `middleware/errores-del-cuerpo.ts` al final de `app.ts`: `entity.parse.failed` → 400 y `entity.too.large` → 413, ambos `application/json` con `{ error }`.
 
 ---
 
