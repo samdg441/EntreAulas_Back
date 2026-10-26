@@ -44,6 +44,20 @@ async function enviarCorreoRecuperacion(email: string, resetLink: string, nombre
   }
 }
 
+const columnaInexistente = (e: unknown) => ['42703', 'PGRST204'].includes(String((e as { code?: unknown })?.code))
+
+async function guardarNuevaClave(userId: string, hash: string): Promise<void> {
+  const ahora = new Date().toISOString()
+  try {
+    await authRepository.updateUser(userId, { password: hash, updated_at: ahora, password_changed_at: ahora })
+  } catch (error) {
+    // Sin la migración scripts/add-password-changed-at.sql la clave se cambia igual, pero sin revocar sesiones.
+    if (!columnaInexistente(error)) throw error
+    logger.error('Falta usuarios.password_changed_at: ejecuta scripts/add-password-changed-at.sql para revocar sesiones (DEF-42)')
+    await authRepository.updateUser(userId, { password: hash, updated_at: ahora })
+  }
+}
+
 // Endpoint para solicitar reset de contraseña
 router.post('/forgot-password', limiteSolicitudRecuperacion, asyncHandler(async (req, res) => {
   const { email } = req.body
@@ -158,12 +172,9 @@ router.post('/reset-password', limiteTokenRecuperacion, asyncHandler(async (req,
 
   const hashedPassword = await hashPassword(newPassword)
 
-  // Actualizar la contraseña del usuario
+  // Actualizar la contraseña del usuario; password_changed_at revoca los JWT emitidos antes (DEF-42).
   try {
-    await authRepository.updateUser(user.id, {
-      password: hashedPassword,
-      updated_at: new Date().toISOString()
-    })
+    await guardarNuevaClave(user.id, hashedPassword)
   } catch (updateError) {
     throw internal('Error al actualizar la contraseña', updateError)
   }

@@ -52,7 +52,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | CORREGIDO |
 | DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | CORREGIDO |
 | DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | CORREGIDO |
-| DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
+| DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | CORREGIDO |
 | DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | CORREGIDO |
 | DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | CORREGIDO |
 | DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | CORREGIDO |
@@ -1055,7 +1055,7 @@ El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registr
 |---|---|
 | Requisito afectado | RQ5 — Restablecer contraseña |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) — requiere `scripts/add-password-changed-at.sql` en Supabase |
 | Evidencia | `defects/DEF-42-jwt-sobrevive-al-restablecer-clave.test.ts` |
 | Archivo | `modules/auth/password-reset.routes.ts`, `middleware/auth.ts` |
 
@@ -1063,6 +1063,8 @@ El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registr
 la cuenta fue comprometida, el atacante conserva la sesión.
 
 **Corrección propuesta.** Guardar `password_changed_at` (o `token_version`) y rechazar en `authenticateToken` los JWT con `iat` anterior.
+
+**Corrección aplicada.** `reset-password` guarda `usuarios.password_changed_at` junto con la nueva clave; `authenticateToken` y `GET /me` rechazan con 401 (`TOKEN_REVOKED`) los JWT cuyo `iat` es anterior a ese segundo (`tokenAnteriorAlCambioDeClave`). Si la columna aún no existe (42703 / PGRST204) la clave se cambia igual y se registra el error para ejecutar la migración.
 
 ---
 

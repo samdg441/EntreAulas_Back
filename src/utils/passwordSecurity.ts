@@ -87,3 +87,14 @@ export function validarPoliticaDeClave(password: unknown): string | null {
   }
   return null
 }
+
+/**
+ * DEF-42: un JWT emitido antes del último cambio de contraseña deja de servir.
+ * `iat` viene en segundos; se compara contra el segundo del cambio para que el token emitido justo después siga válido.
+ */
+export function tokenAnteriorAlCambioDeClave(iat: number | undefined, passwordChangedAt: unknown): boolean {
+  if (!passwordChangedAt || typeof iat !== 'number') return false
+  const cambio = Date.parse(String(passwordChangedAt))
+  return !Number.isNaN(cambio) && iat < Math.floor(cambio / 1000)
+}
+

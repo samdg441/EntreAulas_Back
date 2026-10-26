@@ -7,6 +7,7 @@ import { authRepository } from './auth.repository'
 import {
   hashPassword,
   igualarTiempoSinCuenta,
+  tokenAnteriorAlCambioDeClave,
   validarPoliticaDeClave,
   verifyStoredPassword
 } from '../../utils/passwordSecurity'
@@ -393,6 +394,10 @@ router.get('/me', async (req, res) => {
 
     if (!user?.activo) {
       throw unauthorized('Usuario no encontrado o inactivo')
+    }
+
+    if (tokenAnteriorAlCambioDeClave(decoded.iat, user.password_changed_at)) {
+      throw unauthorized('La sesión expiró porque la contraseña cambió')
     }
 
     // Determinar el tipo de usuario para la respuesta
