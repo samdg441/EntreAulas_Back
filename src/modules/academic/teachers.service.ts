@@ -902,6 +902,12 @@ export class TeachersService {
       return empty
     }
 
+    let respondidas = new Set<string>()
+    try {
+      respondidas = (await this.marcasDeEvaluacion(usuarioId)).respondidas
+    } catch {
+      respondidas = new Set()
+    }
     const materiasMatriculadas =
       inscripciones
         ?.map((inscripcion: any) => ({
@@ -927,6 +933,12 @@ export class TeachersService {
               codigo: inscripcion.grupo?.periodo?.codigo,
             },
           },
+          evaluada: respondidas.has(
+            claveEvaluacion(
+              inscripcion.grupo?.asignaciones_profesor?.[0]?.profesor?.id,
+              inscripcion.grupo?.id
+            )
+          ),
         }))
         .filter((materia: any) => materia.grupo?.curso?.id) || []
 

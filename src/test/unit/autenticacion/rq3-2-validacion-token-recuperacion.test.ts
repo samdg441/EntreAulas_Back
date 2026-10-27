@@ -1,16 +1,17 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import passwordResetRoutes from '../../../modules/auth/password-reset.routes'
 import { supabaseAdmin } from '../../../config/supabase-only'
+import { reiniciarLimitesDeIntentos } from '../../../middleware/limite-de-intentos'
 
-
-
-const TOKEN_CUALQUIERA = 'a'.repeat(64)
-
-const EMAIL = process.env.RQ32_EMAIL ?? 'usuario.activo@entreaulas.test'
-const TOKEN_VALIDO = process.env.RQ32_TOKEN_VALIDO ?? TOKEN_CUALQUIERA
-const TOKEN_EXPIRADO = process.env.RQ32_TOKEN_EXPIRADO ?? 'b'.repeat(64)
+// Correo y tokens propios de esta prueba. forgot-password del mismo usuario activo
+// anula todos sus tokens (DEF-44) y, en paralelo, tumbaba el válido y el expirado.
+const marca = `rq32-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+const EMAIL = `${marca}@entreaulas.test`
+const TOKEN_CUALQUIERA = `${marca}-otro`.padEnd(64, 'o').slice(0, 64)
+const TOKEN_VALIDO = `${marca}-valido`.padEnd(64, 'v').slice(0, 64)
+const TOKEN_EXPIRADO = `${marca}-expirado`.padEnd(64, 'e').slice(0, 64)
 
 const app = express()
 app.use(express.json())
@@ -29,9 +30,14 @@ async function asegurarToken(token: string, expiresAt: Date) {
     .maybeSingle()
 
   if (existente) {
-    await supabaseAdmin.from('password_reset_tokens').update(fila).eq('id', (existente as { id: string }).id)
+    const { error } = await supabaseAdmin
+      .from('password_reset_tokens')
+      .update(fila)
+      .eq('id', (existente as { id: string }).id)
+    if (error) throw error
   } else {
-    await supabaseAdmin.from('password_reset_tokens').insert({ ...fila, token })
+    const { error } = await supabaseAdmin.from('password_reset_tokens').insert({ ...fila, token })
+    if (error) throw error
   }
 }
 
@@ -40,6 +46,10 @@ describe('RQ3.2 — Validación del token de recuperación (código real)', () =
     const unaHora = 60 * 60 * 1000
     await asegurarToken(TOKEN_VALIDO, new Date(Date.now() + unaHora))
     await asegurarToken(TOKEN_EXPIRADO, new Date(Date.now() - unaHora))
+  })
+
+  beforeEach(() => {
+    reiniciarLimitesDeIntentos()
   })
 
   describe('N1 · GET /api/auth/validate-reset-token/:token', () => {
