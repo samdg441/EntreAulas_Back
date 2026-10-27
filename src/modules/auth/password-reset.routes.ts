@@ -6,6 +6,7 @@ import {
   asyncHandler
 } from '../../shared/errors'
 import { logger } from '../../shared/logger'
+import { limiteSolicitudRecuperacion, limiteTokenRecuperacion } from '../../middleware/limite-de-intentos'
 import { sendMail } from '../../shared/adapters/mailer.adapter'
 import { mailConfigured } from '../../shared/adapters/mail-config'
 import { correoRecuperacionHtml, correoRecuperacionTexto } from '../../shared/email-templates'
@@ -43,8 +44,22 @@ async function enviarCorreoRecuperacion(email: string, resetLink: string, nombre
   }
 }
 
+const columnaInexistente = (e: unknown) => ['42703', 'PGRST204'].includes(String((e as { code?: unknown })?.code))
+
+async function guardarNuevaClave(userId: string, hash: string): Promise<void> {
+  const ahora = new Date().toISOString()
+  try {
+    await authRepository.updateUser(userId, { password: hash, updated_at: ahora, password_changed_at: ahora })
+  } catch (error) {
+    // Sin la migración scripts/add-password-changed-at.sql la clave se cambia igual, pero sin revocar sesiones.
+    if (!columnaInexistente(error)) throw error
+    logger.error('Falta usuarios.password_changed_at: ejecuta scripts/add-password-changed-at.sql para revocar sesiones (DEF-42)')
+    await authRepository.updateUser(userId, { password: hash, updated_at: ahora })
+  }
+}
+
 // Endpoint para solicitar reset de contraseña
-router.post('/forgot-password', asyncHandler(async (req, res) => {
+router.post('/forgot-password', limiteSolicitudRecuperacion, asyncHandler(async (req, res) => {
   const { email } = req.body
 
   // Validar que se proporcione el email
@@ -71,6 +86,12 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
   // Generar token de reset
   const resetToken = generateResetToken()
   const expiresAt = generateExpirationDate()
+
+  // Un enlace nuevo anula los anteriores (DEF-44). Si falla, se registra y se sigue: el token nuevo vale igual.
+  const invalidarError = await authRepository.invalidateResetTokens(email)
+  if (invalidarError) {
+    logger.error('Error invalidando tokens de recuperación anteriores:', invalidarError)
+  }
 
   // Guardar token en la base de datos
   try {
@@ -103,7 +124,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
 }))
 
 // Endpoint para validar token de reset
-router.get('/validate-reset-token/:token', asyncHandler(async (req, res) => {
+router.get('/validate-reset-token/:token', limiteTokenRecuperacion, asyncHandler(async (req, res) => {
   const { token } = req.params
   const { email } = req.query
 
@@ -120,7 +141,7 @@ router.get('/validate-reset-token/:token', asyncHandler(async (req, res) => {
 }))
 
 // Endpoint para resetear la contraseña
-router.post('/reset-password', asyncHandler(async (req, res) => {
+router.post('/reset-password', limiteTokenRecuperacion, asyncHandler(async (req, res) => {
   const { token, email, newPassword, confirmPassword } = req.body
 
   // Validar datos requeridos
@@ -151,12 +172,9 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 
   const hashedPassword = await hashPassword(newPassword)
 
-  // Actualizar la contraseña del usuario
+  // Actualizar la contraseña del usuario; password_changed_at revoca los JWT emitidos antes (DEF-42).
   try {
-    await authRepository.updateUser(user.id, {
-      password: hashedPassword,
-      updated_at: new Date().toISOString()
-    })
+    await guardarNuevaClave(user.id, hashedPassword)
   } catch (updateError) {
     throw internal('Error al actualizar la contraseña', updateError)
   }

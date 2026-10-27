@@ -47,9 +47,19 @@ class AppErrorPruebas {
 
   C3_sendErrorConDetails() {
     const { res, capturado } = respuestaCapturada()
+    sendError(res, badRequest('Datos inválidos', [{ campo: 'email' }]))
+    expect(capturado.statusCode).toBe(400)
+    expect(capturado.body).toEqual({ error: 'Datos inválidos', details: [{ campo: 'email' }] })
+  }
+
+  /** DEF-40: un 5xx deja los detalles en el log, nunca en la respuesta. */
+  C3b_sendError5xxSinDetails() {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { res, capturado } = respuestaCapturada()
     sendError(res, internal('DB grupos', { code: '42703' }))
+    spy.mockRestore()
     expect(capturado.statusCode).toBe(500)
-    expect(capturado.body).toEqual({ error: 'DB grupos', details: { code: '42703' } })
+    expect(capturado.body).toEqual({ error: 'DB grupos' })
   }
 
   C4_sendErrorInesperado() {
@@ -59,10 +69,7 @@ class AppErrorPruebas {
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
     expect(capturado.statusCode).toBe(500)
-    expect(capturado.body).toEqual({
-      error: 'Error interno del servidor',
-      details: 'boom',
-    })
+    expect(capturado.body).toEqual({ error: 'Error interno del servidor' })
   }
 
   C5_esAppError() {
@@ -77,7 +84,8 @@ const pruebas = new AppErrorPruebas()
 describe('AppError — respuestas HTTP unificadas', () => {
   it('C1: helpers con status 400–500', () => pruebas.C1_helpersStatus())
   it('C2: sendError serializa AppError', () => pruebas.C2_sendErrorAppError())
-  it('C3: sendError incluye details', () => pruebas.C3_sendErrorConDetails())
+  it('C3: sendError incluye details en errores 4xx', () => pruebas.C3_sendErrorConDetails())
+  it('C3b: sendError omite details en errores 5xx', () => pruebas.C3b_sendError5xxSinDetails())
   it('C4: error inesperado → 500 genérico', () => pruebas.C4_sendErrorInesperado())
   it('C5: AppError extiende Error', () => pruebas.C5_esAppError())
 })

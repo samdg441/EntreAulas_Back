@@ -11,6 +11,8 @@ export default defineConfig({
     include: ['src/test/defects/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/coverage/**'],
     setupFiles: ['src/test/setup.ts'],
+    // DEF-47: bcrypt 12 en DEF-34/DEF-41 necesita margen con la máquina cargada.
+    testTimeout: 15_000,
     globals: false,
   },
 })

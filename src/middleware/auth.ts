@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import { SupabaseDB } from '../config/supabase-only'
 import { RoleService } from '../services/roleService'
 import { logger } from '../shared/logger'
+import { tokenAnteriorAlCambioDeClave } from '../utils/passwordSecurity'
 
 /**
  * Verifica JWT en `Authorization: Bearer <token>`.
@@ -34,6 +35,10 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
     if (!user?.activo) {
       return res.status(401).json({ error: 'Usuario no válido o inactivo', code: 'USER_INVALID' })
+    }
+
+    if (tokenAnteriorAlCambioDeClave(decoded.iat, user.password_changed_at)) {
+      return res.status(401).json({ error: 'La sesión expiró porque la contraseña cambió', code: 'TOKEN_REVOKED' })
     }
 
     const [roles, permisos] = await Promise.all([

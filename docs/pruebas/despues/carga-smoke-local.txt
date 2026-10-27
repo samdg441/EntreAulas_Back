@@ -1,0 +1,11 @@
+Perfil: smoke | Back: http://localhost:3000 | etapas: 1 usuarios | 10 s por etapa
+Servidor listo tras 110 ms (1 intento(s); en Render incluye el arranque en frío)
+
+Etapa: 1 usuario(s) concurrente(s), 10 s...
+  OK  health             p50 2 ms | p95 3 ms (≤ 1000) | 61.3 rps | errores 0 % {"200":613}
+  OK  forgot-password    p50 3 ms | p95 4 ms (≤ 2000) | 61.3 rps | errores 0 % {"200":5,"429":608}
+  OK  validate-reset-token p50 2 ms | p95 3 ms (≤ 1500) | 61.3 rps | errores 0 % {"429":613}
+  OK  reset-password-token-invalido p50 3 ms | p95 4 ms (≤ 1500) | 61.3 rps | errores 0 % {"429":613}
+  OK  create-user-sin-token p50 3 ms | p95 4 ms (≤ 1000) | 61.2 rps | errores 0 % {"401":612}
+
+Reporte: EntreAulas_Back/reports/carga/carga-2026-10-26T20-05-31-912Z.json y .md

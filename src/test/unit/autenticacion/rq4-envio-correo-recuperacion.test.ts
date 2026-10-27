@@ -113,7 +113,7 @@ afterEach(() => {
 
 describe('RQ4 — Envío de correo de recuperación (código real)', () => {
 
-  describe('N2 · el endpoint debe enviar el correo de recuperación (requisito NO implementado — FALLA a propósito)', () => {
+  describe('N2 · el endpoint envía el correo de recuperación por SMTP (antes no implementado; hoy pasa)', () => {
     const rutaFuente = join(__dirname, '../../../modules/auth/password-reset.routes.ts')
     const fuente = readFileSync(rutaFuente, 'utf8')
 

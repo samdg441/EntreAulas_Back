@@ -1,7 +1,7 @@
 /**
  * DEF-45 — create-user acepta contraseñas que reset-password rechaza (RQ1/RQ5)
  *
- * Severidad: Baja | Estado: ABIERTO
+ * Severidad: Baja | Estado: CORREGIDO (2026-10-26)
  *
  * reset-password exige mayúscula, minúscula, número y carácter especial (`validarFortalezaPassword`);
  * create-user y register solo exigen 8 caracteres, así que el admin puede crear la cuenta con

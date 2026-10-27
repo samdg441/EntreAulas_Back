@@ -1,7 +1,7 @@
 /**
  * DEF-44 — Cada solicitud de recuperación deja vivos los tokens anteriores (RQ3.1)
  *
- * Severidad: Baja | Estado: ABIERTO
+ * Severidad: Baja | Estado: CORREGIDO (2026-10-26)
  *
  * Si el usuario pide el enlace varias veces, todos los tokens siguen válidos durante 1 h. Aumenta la
  * ventana de ataque (un correo antiguo reenviado o filtrado sigue sirviendo). Lo esperado: al emitir un

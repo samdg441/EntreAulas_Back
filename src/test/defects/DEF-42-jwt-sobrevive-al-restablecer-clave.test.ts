@@ -1,7 +1,7 @@
 /**
  * DEF-42 — Un JWT emitido antes de restablecer la contraseña sigue siendo válido (RQ5)
  *
- * Severidad: Media | Estado: ABIERTO
+ * Severidad: Media | Estado: CORREGIDO (2026-10-26)
  *
  * El motivo habitual de restablecer la clave es una cuenta comprometida. Hoy el JWT (24 h) no se
  * revoca: el atacante conserva la sesión aunque la víctima cambie la clave. Corrección: guardar

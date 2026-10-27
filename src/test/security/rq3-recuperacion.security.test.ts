@@ -66,7 +66,9 @@ describe('RQ3.1 — Solicitud de recuperación (forgot-password)', () => {
     expect(a.token).toMatch(/^[0-9a-f]{64}$/)
     expect(a.token).not.toBe(b.token)
     expect(new Date(a.expires_at).getTime() - Date.now()).toBeLessThanOrEqual(3600_000)
-    expect(a.used).toBe(false)
+    // DEF-44: pedir un enlace nuevo anula el anterior; solo el último queda vigente.
+    expect(a.used).toBe(true)
+    expect(b.used).toBe(false)
   })
 
   it.each([

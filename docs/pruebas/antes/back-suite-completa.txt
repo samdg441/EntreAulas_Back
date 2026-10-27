@@ -1,0 +1,308 @@
+npm notice run EntreAulas-backend@0.1.0 npx
+npm notice run 'vitest' run
+
+ RUN  v2.1.9 EntreAulas_Back
+
+ ✓ src/test/unit/reportes/rq11-teachers-analytics-cobertura.test.ts (24 tests) 188ms
+ ✓ src/test/unit/evaluaciones/rq10-evaluaciones-estudiante.test.ts (22 tests) 248ms
+ ✓ src/test/unit/evaluaciones/rq11-enviar-evaluacion-docente.test.ts (27 tests) 359ms
+ ✓ src/test/regression/rq6-rq27-regresion.test.ts (50 tests) 1122ms
+   ✓ Regresión de RQ6, RQ14, RQ15, RQ16, RQ17 y RQ27 > RQ16 — Distribución de QR por correo > regresión: el admin envía el correo con el enlace del QR 540ms
+ ✓ src/test/regression/rq10-rq31-regresion.test.ts (18 tests) 519ms
+ ✓ src/test/unit/usuarios/rq10-users-controller.test.ts (6 tests) 233ms
+ ✓ src/test/unit/resumen-ia/rq29-resumen-generado-ia.test.ts (9 tests) 1162ms
+   ✓ RQ29 unit — Resumen generado con IA > caminos que fallan > C1 (1-2-3-4-5-18): sin JWT o usuario inactivo → 401 332ms
+ ✓ src/test/unit/usuarios/rq13-gestionar-usuarios.test.ts (30 tests) 2061ms
+   ✓ RQ13 — Gestionar usuarios > Nodo 10: password se hashea con bcrypt 12 1017ms
+   ✓ RQ10 — helpers de updateUser (sin mocks) > password válida se hashea con bcrypt 908ms
+ ✓ src/test/api/rq10-rq31.api.test.ts (14 tests) 1226ms
+   ✓ RQ10, RQ11, RQ13, RQ29, RQ30 y RQ31 — API > RQ13 — Gestionar usuarios > un administrador crea el usuario y la respuesta no lleva la contraseña 905ms
+ ✓ src/test/unit/resumen-ia/rq30-resumen-agregados.test.ts (13 tests) 3790ms
+   ✓ RQ30 — Resúmenes agregados por docente, carrera o facultad > Dado un período YYYY-X, cuando filtra cualquiera de los tres alcances, entonces se traduce a fechas 3678ms
+ ✓ src/test/unit/resumen-ia/rq29-resumen-automatico-comentarios.test.ts (22 tests) 564ms
+   ✓ RQ29 — helpers de ai.routes (sin mocks de repositorio) > filtros de periodo y grupo (numérico, YYYY-X no válido y vacío) 391ms
+ ✓ src/test/unit/evaluaciones/rq11-evaluaciones-estudiante.test.ts (6 tests) 425ms
+ ✓ src/test/unit/autenticacion/rq4-envio-correo-recuperacion.test.ts (20 tests) 8927ms
+   ✓ RQ4 — Envío de correo de recuperación (código real) > N2 · el endpoint debe enviar el correo de recuperación (requisito NO implementado — FALLA a propósito) > N2: al solicitar recuperación de un usuario activo, el endpoint entrega un correo al servidor SMTP 3935ms
+   ✓ RQ4 — Envío de correo de recuperación (código real) > N2 · el endpoint debe enviar el correo de recuperación (requisito NO implementado — FALLA a propósito) > N2: el correo enviado contiene el enlace de recuperación con el token 364ms
+   ✓ RQ4 — Envío de correo de recuperación (código real) > N2 · el endpoint debe enviar el correo de recuperación (requisito NO implementado — FALLA a propósito) > N2: el correo se dirige a la dirección del usuario que lo solicitó 431ms
+   ✓ RQ4 — Envío de correo de recuperación (código real) > N2 · el endpoint debe enviar el correo de recuperación (requisito NO implementado — FALLA a propósito) > N2: en producción NO se debe exponer el token en el JSON (debe ir por correo) 387ms
+   ✓ RQ4 — Envío de correo de recuperación (código real) > N4 → N5 · debugReset = true → 200 con resetToken y resetLink > N5 vs N6: ambas ramas devuelven el mismo message genérico 512ms
+ ✓ src/test/api/rq3-recuperacion.api.test.ts (35 tests) 4347ms
+   ✓ RQ5 — API reset-password > RQ5·P1: restablece → 200 { message }, guarda bcrypt, marca el token usado 1919ms
+   ✓ RQ5 — API reset-password > RQ5·P2: la respuesta no deja rastro de la contraseña, el hash ni el token 922ms
+   ✓ RQ5 — API reset-password > RQ5·N1: el token es de un solo uso — el segundo intento → 400 y la clave no cambia 966ms
+ ❯ src/test/unit/usuarios/rq10-gestionar-usuarios.test.ts (12 tests | 1 failed) 13089ms
+   ✓ RQ10 unit — Gestionar usuarios (admin) > caminos que fallan > C1 (1-2-3-4-5-18): sin JWT, inactivo o no admin → 401/403 892ms
+   ✓ RQ10 unit — Gestionar usuarios (admin) > caminos que funcionan > C3 (1-2-3-4-6-7-8-10-18): alta válida → 201 sin password 1263ms
+   ✓ RQ10 unit — auth.routes y listados de usuarios > POST /auth/register valida, rechaza duplicado y crea usuario 1061ms
+   × RQ10 unit — auth.routes y listados de usuarios > POST /auth/login cubre credenciales, roles y dashboards 5024ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   ✓ RQ10 unit — auth.routes y listados de usuarios > POST /auth/login-with-role valida usuario, clave y rol 4373ms
+ ✓ src/test/unit/resumen-ia/rq31-alerta-indicios-acoso.test.ts (11 tests) 116ms
+ ✓ src/test/security/rq3-recuperacion.security.test.ts (41 tests) 5532ms
+   ✓ RQ5 — Restablecer contraseña (reset-password) > restablece, guarda un hash bcrypt (no texto plano) y marca el token como usado 2097ms
+   ✓ RQ5 — Restablecer contraseña (reset-password) > el token es de un solo uso: la segunda vez → 400 y la contraseña no cambia 1187ms
+   ✓ RQ5 — Restablecer contraseña (reset-password) > la respuesta no incluye la contraseña, el hash ni el token 1577ms
+ ✓ src/test/unit/resumen-ia/rq31-alerta-acoso-ia.test.ts (9 tests) 381ms
+ ✓ src/test/regression/rq18-rq25-regresion.test.ts (20 tests) 44ms
+ ✓ src/test/security/rq10-rq31.security.test.ts (27 tests) 477ms
+stderr | src/test/unit/autenticacion/rq5-reset-password-cobertura.test.ts > RQ5 — reset-password (cobertura estructural, Fake Supabase) > N11→N12 (regresión): error de BD al buscar token → 500, ya no se enmascara como 400
+{ message: 'sin conexión' }
+
+stderr | src/test/unit/autenticacion/rq5-reset-password-cobertura.test.ts > RQ5 — reset-password (cobertura estructural, Fake Supabase) > N16→N17 (regresión): error de BD al buscar usuario → 500, ya no se enmascara como 400
+{ message: 'sin conexión' }
+
+stderr | src/test/unit/autenticacion/rq2-login.test.ts > RQ2 — Login > Nodo 25: error interno → 500
+Error: caída inesperada
+    at RQ2Login.N25_errorInterno (EntreAulas_Back/src/test/unit/autenticacion/rq2-login.test.ts:274:71)
+    at EntreAulas_Back/src/test/unit/autenticacion/rq2-login.test.ts:312:52
+    at file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:146:14
+    at file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1262:5)
+
+ ❯ src/test/unit/autenticacion/rq2-login.test.ts (20 tests | 1 failed) 19010ms
+   ✓ RQ2 — Login > Nodo 2-4: body inválido → 400 Datos inválidos 359ms
+   × RQ2 — Login > Nodo 2: body válido → continúa 5018ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   ✓ RQ2 — Login > Nodo 3-6: usuario no existe → 401 313ms
+   ✓ RQ2 — Login > Nodo 9-11: contraseña incorrecta → 401 427ms
+   ✓ RQ2 — Login > Nodo 12-13: migración de contraseña en texto plano 2242ms
+   ✓ RQ2 — Login > Nodo 14: falla la migración → no interrumpe el login 1715ms
+   ✓ RQ2 — Login > Nodo 15-17: tipo de usuario no válido → 401 1850ms
+   ✓ RQ2 — Login > Nodo 15-16: rol válido desde la tabla de roles → 200 2065ms
+   ✓ RQ2 — Login > Nodo 18-20: múltiples roles → 200 sin token 527ms
+   ✓ RQ2 — Login > Nodo 21-24: login exitoso con un rol → 200 744ms
+   ✓ RQ2 — Login > Nodo 21-24: perfil incluye datos de coordinador 1020ms
+   ✓ RQ2 — Login > Nodo 21-24: perfil incluye datos de decano 925ms
+   ✓ RQ2 — Login > Nodo 21-24: falla obtener info de coordinador → se ignora 772ms
+   ✓ RQ2 — Login > Nodo 21-24: falla obtener info de decano → se ignora 753ms
+ ✓ src/test/api/rq6-rq27.api.test.ts (13 tests) 357ms
+ ✓ src/test/unit/reportes/rq24-resumen-coordinador.test.ts (13 tests) 97ms
+ ✓ src/test/unit/evaluaciones/rq13-enviar-evaluacion.test.ts (8 tests) 478ms
+   ✓ RQ13 unit — Enviar evaluación docente > caminos que fallan > C1 (1-2-3-4-5-18): sin JWT o usuario inactivo → 401 304ms
+stderr | src/test/unit/autenticacion/rq5-reset-password-cobertura.test.ts > RQ5 — reset-password (cobertura estructural, Fake Supabase) > N23: falla marcar el token como usado → NO corta el flujo, 200
+Error al marcar token como usado: { message: 'update bloqueado' }
+
+ ✓ src/test/unit/autenticacion/rq1-rq5-regresion-flujo-autenticacion.test.ts (8 tests) 18718ms
+ ✓ src/test/api/rq22-rq25-coordinador.api.test.ts (11 tests) 357ms
+stderr | src/test/unit/autenticacion/rq5-reset-password-cobertura.test.ts > RQ5 — reset-password (cobertura estructural, Fake Supabase) > N25: excepción no controlada → catch → 500
+Error: caída inesperada
+    at FakeSupabase.<anonymous> (EntreAulas_Back/src/test/unit/autenticacion/rq5-reset-password-cobertura.test.ts:168:13)
+    at FakeSupabase.mockCall (file://EntreAulas_Back/node_modules/@vitest/spy/dist/index.js:61:17)
+    at FakeSupabase.from (file://EntreAulas_Back/node_modules/tinyspy/dist/index.js:45:80)
+    at Object.from (EntreAulas_Back/src/test/helpers/fake-supabase.ts:225:35)
+    at AuthRepository.findUnusedResetToken (EntreAulas_Back/src/modules/auth/auth.repository.ts:43:8)
+    at Module.buscarTokenDeResetValido (EntreAulas_Back/src/modules/auth/password-reset.service.ts:50:42)
+    at EntreAulas_Back/src/modules/auth/password-reset.routes.ts:143:27
+    at EntreAulas_Back/src/shared/errors.ts:66:21
+    at Layer.handle [as handle_request] (EntreAulas_Back/node_modules/express/lib/router/layer.js:95:5)
+    at next (EntreAulas_Back/node_modules/express/lib/router/route.js:149:13)
+
+ ✓ src/test/unit/autenticacion/rq5-reset-password-cobertura.test.ts (20 tests) 3939ms
+   ✓ RQ5 — reset-password (cobertura estructural, Fake Supabase) > N20→N21: falla el UPDATE de la contraseña → 500 1068ms
+   ✓ RQ5 — reset-password (cobertura estructural, Fake Supabase) > N23: falla marcar el token como usado → NO corta el flujo, 200 1329ms
+   ✓ RQ5 — reset-password (cobertura estructural, Fake Supabase) > N24: camino feliz → 200 y contraseña hasheada en BD 1187ms
+ ✓ src/test/unit/evaluaciones/rq10-seleccion-docente-curso.test.ts (7 tests) 78ms
+stderr | src/test/unit/autenticacion/rq3-forgot-password-cobertura.test.ts > RQ3 — forgot-password (cobertura estructural, Fake Supabase) > N8→N9 (regresión): error de BD al buscar usuario → 500, ya no se enmascara como 200 genérico
+{ message: 'fallo de conexión' }
+
+ ✓ src/test/unit/acceso/rq6-role-service-cobertura.test.ts (4 tests) 2197ms
+   ✓ RQ6 — RoleService (cobertura) > crearCoordinadorProfesor ok y error 2145ms
+stderr | src/test/unit/autenticacion/rq3-forgot-password-cobertura.test.ts > RQ3 — forgot-password (cobertura estructural, Fake Supabase) > N17: excepción no controlada → catch → 500
+Error: caída inesperada
+    at FakeSupabase.<anonymous> (EntreAulas_Back/src/test/unit/autenticacion/rq3-forgot-password-cobertura.test.ts:149:13)
+    at FakeSupabase.mockCall (file://EntreAulas_Back/node_modules/@vitest/spy/dist/index.js:61:17)
+    at FakeSupabase.from (file://EntreAulas_Back/node_modules/tinyspy/dist/index.js:45:80)
+    at Object.from (EntreAulas_Back/src/test/helpers/fake-supabase.ts:225:35)
+    at AuthRepository.findActiveByEmail (EntreAulas_Back/src/modules/auth/auth.repository.ts:28:8)
+    at EntreAulas_Back/src/modules/auth/password-reset.routes.ts:62:37
+    at EntreAulas_Back/src/shared/errors.ts:66:21
+    at Layer.handle [as handle_request] (EntreAulas_Back/node_modules/express/lib/router/layer.js:95:5)
+    at next (EntreAulas_Back/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (EntreAulas_Back/node_modules/express/lib/router/route.js:119:3)
+
+ ✓ src/test/unit/autenticacion/rq3-forgot-password-cobertura.test.ts (10 tests) 349ms
+ ✓ src/test/unit/correo/email-templates.test.ts (15 tests) 1521ms
+   ✓ Imagen PNG del QR > genera un PNG válido 302ms
+   ✓ Imagen PNG del QR > se lee con un lector de QR y lleva a la encuesta aunque tenga el logo al centro 496ms
+   ✓ Imagen PNG del QR > GET /imagen.png responde image/png y ?descargar=1 lo marca como adjunto 396ms
+ ✓ src/test/unit/autenticacion/rq3-solicitud-recuperacion-contrasena.test.ts (17 tests) 2720ms
+   ✓ RQ3 — Solicitud de recuperación de contraseña (código real) > N1 · POST /api/auth/forgot-password > N1: la ruta está montada (no responde 404) 503ms
+   ✓ RQ3 — Solicitud de recuperación de contraseña (código real) > N10-N16 · usuario activo → token generado y guardado → 200 > N16: email de usuario activo → 200 con mensaje genérico (requiere RQ3_EMAIL_EXISTENTE en BD) 669ms
+ ✓ src/test/unit/autenticacion/rq1-crear-usuario-admin.test.ts (12 tests) 16490ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 2-3: sin token → 401 NO_TOKEN 472ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 2-6: middleware real acepta al admin sembrado 972ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 7-9: campos requeridos faltantes → 400 927ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 10-11: contraseña corta → 400 731ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 12-14: email ya registrado → 400 4104ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 15: hashPassword → bcrypt 12 salt rounds 1587ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 16-17: usuario creado → 201 3261ms
+   ✓ RQ1 — Crear usuario como administrador > Nodo 16-17: usuario creado con campos de profesor → 201 3362ms
+ ✓ src/test/api/rq18-qr.api.test.ts (16 tests) 1086ms
+   ✓ RQ18 — API de QR > GET /api/qr-evaluaciones/:token/imagen.png (público, lo usan los correos) > devuelve un PNG cacheable 421ms
+ ✓ src/test/api/rq1-create-user.api.test.ts (25 tests) 6490ms
+   ✓ RQ1 — API create-user > casos positivos > RQ1·P1: el admin crea un profesor → 201 con el contrato exacto y sin contraseña 1252ms
+   ✓ RQ1 — API create-user > casos positivos > RQ1·P2: el admin crea un estudiante con correo @soyudemedellin.edu.co 1159ms
+   ✓ RQ1 — API create-user > casos positivos > RQ1·P3: el correo se normaliza (minúsculas y sin espacios) antes de guardarse 1179ms
+   ✓ RQ1 — API create-user > casos positivos > RQ1·P4: se guarda un hash bcrypt y nunca la contraseña en claro 1384ms
+   ✓ RQ1 — API create-user > casos positivos > RQ1·P5: los campos opcionales de profesor llegan al repositorio 1083ms
+ ✓ src/test/unit/acceso/rq6-rbac.test.ts (9 tests) 55ms
+ ✓ src/test/unit/qr/rq15-qr-batch-cobertura.test.ts (10 tests) 102ms
+stderr | src/test/unit/autenticacion/rq2-auth-service-cobertura.test.ts > RQ2 — auth.service (cobertura) > migrarPasswordSiHaceFalta no hace nada sin hash pendiente y traga error de update
+Error migrando contraseña a bcrypt: Error: db
+    at EntreAulas_Back/src/test/unit/autenticacion/rq2-auth-service-cobertura.test.ts:50:53
+    at file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1056:11)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1271:3)
+    at file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11
+    at withEnv (file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)
+    at run (file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)
+
+ ✓ src/test/security/rq1-create-user.security.test.ts (19 tests) 3418ms
+   ✓ RQ1 — Seguridad de create-user > el admin crea el usuario y la respuesta no incluye contraseña ni hash 1023ms
+   ✓ RQ1 — Seguridad de create-user > mass-assignment: "activo", "id" y "roles" del body se ignoran 967ms
+   ✓ RQ1 — Seguridad de create-user > nombre con HTML se guarda tal cual y la API responde JSON (no HTML ejecutable) 1008ms
+ ✓ src/test/security/rq18-rq25-entradas-y-cabeceras.security.test.ts (24 tests) 341ms
+ ✓ src/test/unit/reportes/rq25-exportar-reporte.test.ts (8 tests) 93ms
+ ✓ src/test/unit/acceso/rq6-auth-middleware-cobertura.test.ts (10 tests) 51ms
+ ✓ src/test/api/rq2-login-me.api.test.ts (27 tests) 19937ms
+   ✓ RQ2 — API de login y /me > POST /login — positivos > RQ2·P1: estudiante → 200, contrato exacto y dashboard estudiante 4160ms
+   ✓ RQ2 — API de login y /me > POST /login — positivos > RQ2·P1: profesor → 200, contrato exacto y dashboard profesor 1099ms
+   ✓ RQ2 — API de login y /me > POST /login — positivos > RQ2·P1: coordinador → 200, contrato exacto y dashboard coordinador 1034ms
+   ✓ RQ2 — API de login y /me > POST /login — positivos > RQ2·P2: el token devuelto es un JWT HS256 que identifica al usuario y vence en ≤ 24 h 1366ms
+   ✓ RQ2 — API de login y /me > POST /login — positivos > RQ2·P3: "docente" se presenta como "profesor" (compatibilidad con el front) 1248ms
+   ✓ RQ2 — API de login y /me > POST /login — positivos > RQ2·P4: una cuenta con varios roles NO recibe token hasta elegir uno 1157ms
+   ✓ RQ2 — API de login y /me > POST /login — negativos > RQ2·N1: correo inexistente, clave incorrecta y cuenta inactiva → 401 con el MISMO cuerpo 1062ms
+   ✓ RQ2 — API de login y /me > POST /login — negativos > RQ2·N3: un fallo de roles inválidos ("tipo de usuario no válido") → 401 sin token 1214ms
+   ✓ RQ2 — API de login y /me > POST /login-with-role > RQ2·P5: con un rol que la cuenta sí tiene → 200, contrato exacto y dashboard del rol 1236ms
+   ✓ RQ2 — API de login y /me > POST /login-with-role > RQ2·N4: rol que no tiene → 401 igual que una clave mala 1158ms
+   ✓ RQ2 — API de login y /me > POST /login-with-role > RQ2·N4: rol con mayúsculas → 401 igual que una clave mala 1145ms
+   ✓ RQ2 — API de login y /me > POST /login-with-role > RQ2·N4: rol vacío → 401 igual que una clave mala 1247ms
+   ✓ RQ2 — API de login y /me > POST /login-with-role > RQ2·N4: rol como arreglo → 401 igual que una clave mala 1295ms
+   ✓ RQ2 — API de login y /me > POST /login-with-role > RQ2·N5: clave incorrecta con un rol válido → 401 1194ms
+stderr | src/test/unit/autenticacion/rq2-auth-service-cobertura.test.ts > RQ2 — auth.service (cobertura) > armarPerfilConRoles agrega coordinador y decano y tolera fallos
+Error obteniendo info del coordinador: Error: c
+    at EntreAulas_Back/src/test/unit/autenticacion/rq2-auth-service-cobertura.test.ts:120:68
+    at file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1056:11)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1271:3)
+    at file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11
+    at withEnv (file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)
+    at run (file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)
+Error obteniendo info del decano: Error: d
+    at EntreAulas_Back/src/test/unit/autenticacion/rq2-auth-service-cobertura.test.ts:121:63
+    at file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1056:11)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file://EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1271:3)
+    at file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11
+    at withEnv (file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)
+    at run (file://EntreAulas_Back/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)
+
+ ✓ src/test/unit/autenticacion/rq2-auth-service-cobertura.test.ts (7 tests) 5856ms
+   ✓ RQ2 — auth.service (cobertura) > migrarPasswordSiHaceFalta no hace nada sin hash pendiente y traga error de update 1955ms
+   ✓ RQ2 — auth.service (cobertura) > autenticarCredenciales rechaza ausente, inactivo o password mala y acepta hash 2903ms
+   ✓ RQ2 — auth.service (cobertura) > crearUsuarioConTipo 400 si el email existe y crea si no 948ms
+ ✓ src/test/unit/qr/rq18-qr-vencido.test.ts (17 tests) 167ms
+stderr | src/test/unit/evaluaciones/calendario-periodos.test.ts > Calendario — GET /api/periodos/evaluacion > si aún no se ejecutó el SQL (columna inexistente) responde lista vacía
+Faltan las columnas de ventana de evaluación: ejecuta scripts/add-evaluation-window.sql
+
+ ✓ src/test/unit/evaluaciones/calendario-periodos.test.ts (10 tests) 261ms
+ ✓ src/test/api/rq19-login-dashboard.api.test.ts (6 tests) 5051ms
+   ✓ RQ19 — API de login y dashboard por rol > un coordinador recibe token y el dashboard de coordinador 2123ms
+   ✓ RQ19 — API de login y dashboard por rol > Regresión RQ19: con varios roles no entrega token hasta elegir uno 972ms
+   ✓ RQ19 — API de login y dashboard por rol > login-with-role con un rol que sí tiene → dashboard de ese rol 954ms
+   ✓ RQ19 — API de login y dashboard por rol > Regresión RQ19: login-with-role con un rol que NO tiene → 401 y sin token 952ms
+ ✓ src/test/integration/rq10-gestionar-usuarios.integration.test.ts (3 tests) 1123ms
+   ✓ RQ10 integration — smoke gestionar usuarios > C3 HTTP: 201 usuario creado 962ms
+ ✓ src/test/unit/autenticacion/rq3-2-validacion-token-recuperacion.test.ts (9 tests) 2219ms
+ ✓ src/test/unit/qr/rq-qr-routes-cobertura.test.ts (8 tests) 318ms
+ ✓ src/test/unit/evaluaciones/rq23-estadisticas-historicas.test.ts (10 tests) 64ms
+ ✓ src/test/unit/qr/rq14-auto-enroll-cobertura.test.ts (9 tests) 69ms
+ ✓ src/test/unit/qr/rq18-validar-qr.test.ts (9 tests) 55ms
+ ✓ src/test/unit/qr/rq16-share-email-cobertura.test.ts (7 tests) 336ms
+ ❯ src/test/security/rq2-login-avanzado.security.test.ts (14 tests | 1 failed) 11655ms
+   ✓ RQ2 — Seguridad avanzada del login > la respuesta del login no contiene la contraseña ni su hash 2564ms
+   ✓ RQ2 — Seguridad avanzada del login > el JWT emitido vence (exp) en ≤ 24 h y no lleva la contraseña 1361ms
+   ✓ RQ2 — Seguridad avanzada del login > el JWT emitido usa HS256 (nunca "none") 1208ms
+   ✓ RQ2 — Seguridad avanzada del login > login-with-role: pedir un rol que la cuenta no tiene → 401 igual que una clave mala 1179ms
+   × RQ2 — Seguridad avanzada del login > login-with-role: un rol repetido en un arreglo o con otro tipo no se acepta 5050ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ✓ src/test/unit/acceso/rq19-redirigir-dashboard.test.ts (13 tests) 33ms
+ ✓ src/test/unit/reportes/decano-reportes.test.ts (8 tests) 253ms
+ ✓ src/test/security/rq19-jwt-y-roles.security.test.ts (13 tests) 428ms
+stderr | src/test/unit/autenticacion/rq5-validate-reset-token-cobertura.test.ts > RQ5 — validate-reset-token (cobertura estructural, Fake Supabase) > N5→N6 (regresión): error de BD → 500, ya no se enmascara como 400
+{ message: 'sin conexión' }
+
+ ✓ src/test/api/rq1-rq5-regresion-contrato.api.test.ts (8 tests) 8259ms
+   ✓ Regresión de contrato — /api/auth (RQ1, RQ2, RQ3.1, RQ3.4, RQ5) > POST /api/auth/create-user 201 (RQ1) conserva su huella de claves 2750ms
+   ✓ Regresión de contrato — /api/auth (RQ1, RQ2, RQ3.1, RQ3.4, RQ5) > POST /api/auth/login 200 (RQ2) conserva su huella de claves 1221ms
+   ✓ Regresión de contrato — /api/auth (RQ1, RQ2, RQ3.1, RQ3.4, RQ5) > POST /api/auth/login 401 (RQ2) conserva su huella de claves 1271ms
+   ✓ Regresión de contrato — /api/auth (RQ1, RQ2, RQ3.1, RQ3.4, RQ5) > POST /api/auth/login-with-role 200 (RQ2) conserva su huella de claves 1485ms
+   ✓ Regresión de contrato — /api/auth (RQ1, RQ2, RQ3.1, RQ3.4, RQ5) > POST /api/auth/reset-password 200 (RQ5) conserva su huella de claves 1404ms
+stderr | src/test/unit/autenticacion/rq5-validate-reset-token-cobertura.test.ts > RQ5 — validate-reset-token (cobertura estructural, Fake Supabase) > N10: excepción no controlada → catch → 500
+Error: caída inesperada
+    at FakeSupabase.<anonymous> (EntreAulas_Back/src/test/unit/autenticacion/rq5-validate-reset-token-cobertura.test.ts:69:13)
+    at FakeSupabase.mockCall (file://EntreAulas_Back/node_modules/@vitest/spy/dist/index.js:61:17)
+    at FakeSupabase.from (file://EntreAulas_Back/node_modules/tinyspy/dist/index.js:45:80)
+    at Object.from (EntreAulas_Back/src/test/helpers/fake-supabase.ts:225:35)
+    at AuthRepository.findUnusedResetToken (EntreAulas_Back/src/modules/auth/auth.repository.ts:43:8)
+    at Module.buscarTokenDeResetValido (EntreAulas_Back/src/modules/auth/password-reset.service.ts:50:42)
+    at EntreAulas_Back/src/modules/auth/password-reset.routes.ts:114:9
+    at EntreAulas_Back/src/shared/errors.ts:66:21
+    at Layer.handle [as handle_request] (EntreAulas_Back/node_modules/express/lib/router/layer.js:95:5)
+    at next (EntreAulas_Back/node_modules/express/lib/router/route.js:149:13)
+
+ ✓ src/test/unit/autenticacion/rq5-validate-reset-token-cobertura.test.ts (6 tests) 397ms
+ ✓ src/test/unit/qr/rq17-resolucion-token.test.ts (7 tests) 63ms
+ ✓ src/test/unit/correo/mailer-brevo.test.ts (9 tests) 77ms
+ ✓ src/test/unit/evaluaciones/rq22-metricas-evaluacion.test.ts (8 tests) 69ms
+ ✓ src/test/unit/reportes/rq27-relacion-estudiante-materia.test.ts (4 tests) 33ms
+ ✓ src/test/integration/rq31-alerta-acoso-ia.integration.test.ts (2 tests) 375ms
+ ✓ src/test/integration/rq29-resumen-generado-ia.integration.test.ts (2 tests) 200ms
+ ✓ src/test/security/rq6-rq27.security.test.ts (9 tests) 447ms
+ ✓ src/test/unit/soporte/app-error.test.ts (5 tests) 37ms
+ ✓ src/test/security/rq1-rq5-cabeceras.security.test.ts (17 tests) 464ms
+ ✓ src/test/unit/soporte/fake-supabase.test.ts (6 tests) 41ms
+ ✓ src/test/security/rq19-login.security.test.ts (7 tests) 3406ms
+   ✓ RQ19 — Seguridad del login > correo inexistente, clave incorrecta y cuenta inactiva responden exactamente igual 2291ms
+   ✓ RQ19 — Seguridad del login > una clave de 10.000 caracteres no tumba el servidor 983ms
+ ✓ src/test/unit/qr/rq15-generar-qr.test.ts (8 tests) 46ms
+ ✓ src/test/integration/rq11-evaluaciones-estudiante.integration.test.ts (2 tests) 199ms
+ ✓ src/test/unit/qr/rq14-auto-inscripcion.test.ts (7 tests) 36ms
+ ✓ src/test/unit/qr/rq16-correo-qr.test.ts (8 tests) 69ms
+ ✓ src/test/integration/rq13-enviar-evaluacion.integration.test.ts (2 tests) 186ms
+ ✓ src/test/unit/autenticacion/nombres-mayusculas.test.ts (4 tests) 50ms
+ ✓ src/test/unit/soporte/logger.test.ts (3 tests) 31ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/unit/autenticacion/rq2-login.test.ts > RQ2 — Login > Nodo 2: body válido → continúa
+ FAIL  src/test/unit/usuarios/rq10-gestionar-usuarios.test.ts > RQ10 unit — auth.routes y listados de usuarios > POST /auth/login cubre credenciales, roles y dashboards
+ FAIL  src/test/security/rq2-login-avanzado.security.test.ts > RQ2 — Seguridad avanzada del login > login-with-role: un rol repetido en un arreglo o con otro tipo no se acepta
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ Test Files  3 failed | 74 passed (77)
+      Tests  3 failed | 986 passed (989)
+   Start at  12:53:36
+   Duration  56.58s (transform 10.26s, setup 3.55s, collect 104.37s, tests 185.06s, environment 109ms, prepare 35.33s)
+

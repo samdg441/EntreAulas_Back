@@ -1,7 +1,7 @@
 /**
  * DEF-43 — forgot-password, validate-reset-token y reset-password sin límite de intentos (RQ3.1/RQ3.4/RQ5)
  *
- * Severidad: Alta | Estado: ABIERTO | Misma causa que DEF-34 (no hay rate limiting en la API)
+ * Severidad: Alta | Estado: CORREGIDO (2026-10-26) | Misma causa que DEF-34 (no hay rate limiting en la API)
  *
  * - forgot-password: un atacante puede inundar de correos de recuperación a un usuario (spam / abuso
  *   del proveedor de correo) y llenar la tabla de tokens.

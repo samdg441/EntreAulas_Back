@@ -1,7 +1,7 @@
 /**
  * DEF-41 — El login permite enumerar cuentas por tiempo de respuesta (RQ2)
  *
- * Severidad: Media | Estado: ABIERTO
+ * Severidad: Media | Estado: CORREGIDO (2026-10-26)
  *
  * Con correo inexistente el login responde sin ejecutar bcrypt (≈ 5 ms); con correo existente y clave
  * incorrecta ejecuta bcrypt con 12 rondas (≈ 300–400 ms). Aunque el cuerpo sea idéntico (RQ19), el

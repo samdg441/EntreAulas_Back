@@ -24,6 +24,17 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, getBcryptSaltRounds())
 }
 
+let hashFicticio: Promise<string> | null = null
+
+/**
+ * DEF-41: cuando el correo no existe (o la cuenta está inactiva) se compara igual contra un hash bcrypt del mismo coste,
+ * para que el tiempo de respuesta del login no revele qué cuentas existen.
+ */
+export async function igualarTiempoSinCuenta(plain: unknown): Promise<void> {
+  hashFicticio ??= hashPassword('entreaulas-cuenta-inexistente')
+  await bcrypt.compare(typeof plain === 'string' ? plain : '', await hashFicticio)
+}
+
 export type VerifyPasswordResult =
   | { ok: false }
   | { ok: true; migratePlaintextToHash?: string }
@@ -53,3 +64,39 @@ export async function verifyStoredPassword(
 
   return { ok: false }
 }
+
+/**
+ * Política única de contraseña para el alta (create-user / register) y la recuperación (reset-password).
+ * Devuelve el primer incumplimiento o null si la contraseña es válida (DEF-45).
+ */
+export function validarPoliticaDeClave(password: unknown): string | null {
+  if (typeof password !== 'string' || password.length < 8) {
+    return 'La contraseña debe tener al menos 8 caracteres'
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'La contraseña debe contener al menos una letra mayúscula'
+  }
+  if (!/[a-z]/.test(password)) {
+    return 'La contraseña debe contener al menos una letra minúscula'
+  }
+  if (!/\d/.test(password)) {
+    return 'La contraseña debe contener al menos un número'
+  }
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    return 'La contraseña debe contener al menos un carácter especial'
+  }
+  return null
+}
+
+/**
+ * DEF-42: un JWT emitido antes del último cambio de contraseña deja de servir.
+ * `iat` viene en segundos; se compara contra el segundo del cambio para que el token emitido justo después siga válido.
+ */
+export function tokenAnteriorAlCambioDeClave(iat: number | undefined, passwordChangedAt: unknown): boolean {
+  if (typeof iat !== 'number') return false
+  let cambio = Number.NaN
+  if (passwordChangedAt instanceof Date) cambio = passwordChangedAt.getTime()
+  else if (typeof passwordChangedAt === 'string') cambio = Date.parse(passwordChangedAt)
+  return !Number.isNaN(cambio) && iat < Math.floor(cambio / 1000)
+}
+

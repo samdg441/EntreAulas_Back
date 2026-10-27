@@ -1,3 +1,5 @@
+import { beforeEach } from 'vitest'
+import { reiniciarLimitesDeIntentos } from '../middleware/limite-de-intentos'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -15,3 +17,7 @@ for (const key of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_P
 
 // El modo debug de recuperación lo activa cada prueba que lo necesita, no el .env local.
 process.env.PASSWORD_RESET_DEBUG_RESPONSE = ''
+
+// Los contadores del límite de intentos viven en memoria: cada prueba empieza de cero.
+beforeEach(() => reiniciarLimitesDeIntentos())
+

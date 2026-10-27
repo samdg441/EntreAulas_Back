@@ -2,19 +2,32 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { authenticateToken, requireRole } from '../../middleware/auth'
+import { limiteLogin } from '../../middleware/limite-de-intentos'
 import { authRepository } from './auth.repository'
 import {
   hashPassword,
+  igualarTiempoSinCuenta,
+  tokenAnteriorAlCambioDeClave,
+  validarPoliticaDeClave,
   verifyStoredPassword
 } from '../../utils/passwordSecurity'
 import { dashboardDesdeRolSeleccionado } from './dashboard'
 import {
   badRequest,
+  forbidden,
   notFound,
   sendError,
   unauthorized,
 } from '../../shared/errors'
 import { normalizarCorreoInstitucional } from './correo-institucional'
+import {
+  armarPerfilConRoles,
+  infoPorTipoDeUsuario,
+  migrarPasswordSiHaceFalta,
+  normalizarTipoUsuario,
+  resolverRolesUsuario,
+  VALID_USER_TYPES,
+} from './auth.service'
 
 const router = Router()
 
@@ -38,84 +51,22 @@ const loginSchema = z.object({
   password: z.string().min(1)
 })
 
-const VALID_USER_TYPES = new Set(['estudiante', 'profesor', 'docente', 'coordinador', 'admin', 'decano'])
-
-
-async function migrarPasswordSiHaceFalta(
-  userId: string,
-  passwordCheck: { migratePlaintextToHash?: string }
-): Promise<void> {
-  if (!passwordCheck.migratePlaintextToHash) return
-  try {
-    const hashedPassword = await hashPassword(passwordCheck.migratePlaintextToHash)
-    await authRepository.updateUser(userId, { password: hashedPassword })
-  } catch (updateError) {
-    console.error('Error migrando contraseña a bcrypt:', updateError)
-  }
-}
-
-function tieneRolValido(tipoUsuario: string, roles: string[]): boolean {
-  return (
-    VALID_USER_TYPES.has(tipoUsuario) ||
-    roles.some((rol) => VALID_USER_TYPES.has(rol))
-  )
-}
-
-// Normaliza 'docente' a 'profesor' para compatibilidad con el frontend.
-function normalizarTipoUsuario(tipoUsuario: string): string {
-  return tipoUsuario === 'docente' ? 'profesor' : tipoUsuario
-}
-
-function describirRolPrincipal(roles: string[], tipoUsuario: string): string {
-  if (roles.includes('admin')) return 'Administrador del sistema'
-  if (roles.includes('decano')) return 'Decano de la facultad'
-  if (roles.includes('coordinador')) return 'Coordinador del sistema'
-  if (roles.includes('profesor') || roles.includes('docente')) return 'Profesor/Docente del sistema'
-  if (roles.includes('estudiante')) return 'Estudiante del sistema'
-  return roles.length > 1
-    ? `Usuario con múltiples roles: ${roles.join(', ')}`
-    : `Usuario con rol: ${roles[0] || tipoUsuario}`
-}
-
-async function obtenerCoordinadorInfo(
-  roles: string[],
-  userId: string
-): Promise<{ carrera_id: unknown } | null> {
-  if (!roles.includes('coordinador')) return null
-  try {
-    const { RoleService } = await import('./role.service')
-    const info = await RoleService.obtenerCoordinadorPorUsuario(userId)
-    return info ? { carrera_id: info.carrera_id ?? null } : null
-  } catch (e) {
-    console.warn('Error obteniendo info del coordinador:', e)
-    return null
-  }
-}
-
-async function obtenerDecanoInfo(
-  roles: string[],
-  userId: string
-): Promise<Record<string, unknown> | null> {
-  if (!roles.includes('decano')) return null
-  try {
-    const { RoleService } = await import('./role.service')
-    const info = await RoleService.obtenerDecanoPorUsuario(userId)
-    if (!info) return null
-    return {
-      facultad_id: info.facultad_id ?? null,
-      facultad_nombre: info.facultades?.nombre ?? null,
-      fecha_nombramiento: info.fecha_nombramiento
-    }
-  } catch (e) {
-    console.warn('Error obteniendo info del decano:', e)
-    return null
-  }
-}
+// RQ1: las demás cuentas solo las crea un administrador con create-user (DEF-39).
+const TIPOS_AUTORREGISTRO = new Set(['estudiante'])
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
   try {
     const validatedData = registerSchema.parse(req.body)
+
+    if (!TIPOS_AUTORREGISTRO.has(validatedData.tipo_usuario)) {
+      throw forbidden('El autorregistro solo está disponible para estudiantes; las demás cuentas las crea un administrador')
+    }
+
+    const errorClave = validarPoliticaDeClave(validatedData.password)
+    if (errorClave) {
+      throw badRequest(errorClave)
+    }
 
     // Verificar si el usuario ya existe
     const existingUser = await authRepository.findUserByEmail(validatedData.email)
@@ -169,17 +120,15 @@ router.post('/register', async (req, res) => {
 })
 
 // POST /auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', limiteLogin, async (req, res) => {
   try {
     const validatedData = loginSchema.parse(req.body)
 
     const user = await authRepository.findUserByEmail(validatedData.email)
 
-    if (!user) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    if (!user.activo) {
+    // Mismo mensaje y mismo costo (bcrypt) exista o no la cuenta: no se puede enumerar usuarios (DEF-41).
+    if (!user?.activo) {
+      await igualarTiempoSinCuenta(validatedData.password)
       throw unauthorized('Credenciales inválidas')
     }
 
@@ -194,12 +143,8 @@ router.post('/login', async (req, res) => {
 
     await migrarPasswordSiHaceFalta(user.id, passwordCheck)
 
-    const { RoleService } = await import('./role.service')
-    const roles = await RoleService.obtenerRolesUsuario(user.id)
-
-    if (!tieneRolValido(user.tipo_usuario, roles)) {
-      return res.status(401).json({ error: 'Tipo de usuario no válido' })
-    }
+    // Roles y perfil: reglas de auth.service.ts (antes estaban duplicadas aquí).
+    const roles = await resolverRolesUsuario(user.id, user.tipo_usuario)
 
     if (roles.length > 1) {
       return res.status(200).json({
@@ -225,32 +170,12 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     )
 
-    // Determinar el dashboard basado en roles múltiples
-    const dashboard = await RoleService.obtenerDashboardUsuario(user.id)
-    const permisos = await RoleService.obtenerPermisosUsuario(user.id)
-
-    const coordinadorInfo = await obtenerCoordinadorInfo(roles, user.id)
-    const decanoInfo = await obtenerDecanoInfo(roles, user.id)
-
     // Normalizar 'docente' a 'profesor' para compatibilidad
     const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
     const userRole = userTypeDisplay
 
-    // Información adicional según los roles del usuario
-    const additionalInfo: any = {
-      dashboard: dashboard,
-      permissions: permisos,
-      roles: roles,
-      role_description: describirRolPrincipal(roles, user.tipo_usuario)
-    }
-
-    if (coordinadorInfo) {
-      additionalInfo.coordinador = coordinadorInfo
-    }
-
-    if (decanoInfo) {
-      additionalInfo.decano = decanoInfo
-    }
+    // Panel, permisos y datos de coordinador/decano según los roles
+    const additionalInfo = await armarPerfilConRoles(user.id, roles, user.tipo_usuario)
 
     res.json({
       message: 'Login exitoso',
@@ -275,17 +200,14 @@ router.post('/login', async (req, res) => {
 })
 
 // POST /auth/login-with-role - Login con rol específico
-router.post('/login-with-role', async (req, res) => {
+router.post('/login-with-role', limiteLogin, async (req, res) => {
   try {
     const { email, password, selectedRole } = req.body
 
     const user = await authRepository.findUserByEmail(email)
 
-    if (!user) {
-      throw unauthorized('Credenciales inválidas')
-    }
-
-    if (!user.activo) {
+    if (!user?.activo) {
+      await igualarTiempoSinCuenta(password)
       throw unauthorized('Credenciales inválidas')
     }
 
@@ -375,59 +297,27 @@ router.get('/me', async (req, res) => {
     const token = authHeader.substring(7) // Remover 'Bearer '
 
     // Verificar y decodificar el token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload & { email?: string }
 
     // Buscar el usuario en la base de datos
+    if (!decoded.email) {
+      throw unauthorized('Token inválido')
+    }
+
     const user = await authRepository.findUserByEmail(decoded.email)
 
     if (!user?.activo) {
       throw unauthorized('Usuario no encontrado o inactivo')
     }
 
-    // Determinar el tipo de usuario para la respuesta
-    let userTypeDisplay = user.tipo_usuario
-    let userRole = user.tipo_usuario
+    if (tokenAnteriorAlCambioDeClave(decoded.iat, user.password_changed_at)) {
+      throw unauthorized('La sesión expiró porque la contraseña cambió')
+    }
 
     // Normalizar 'docente' a 'profesor' para compatibilidad
-    if (user.tipo_usuario === 'docente') {
-      userTypeDisplay = 'profesor'
-      userRole = 'profesor'
-    }
-
-    // Información adicional según el tipo de usuario
-    let additionalInfo = {}
-
-    switch (user.tipo_usuario) {
-      case 'estudiante':
-        additionalInfo = {
-          dashboard: '/dashboard-estudiante',
-          permissions: ['view_evaluations', 'submit_evaluations'],
-          role_description: 'Estudiante del sistema'
-        }
-        break
-      case 'profesor':
-      case 'docente':
-        additionalInfo = {
-          dashboard: '/dashboard-profesor',
-          permissions: ['view_evaluations', 'create_evaluations', 'view_reports'],
-          role_description: 'Profesor/Docente del sistema'
-        }
-        break
-      case 'coordinador':
-        additionalInfo = {
-          dashboard: '/dashboard-coordinador',
-          permissions: ['view_evaluations', 'create_evaluations', 'view_reports', 'manage_users'],
-          role_description: 'Coordinador académico'
-        }
-        break
-      case 'admin':
-        additionalInfo = {
-          dashboard: '/dashboard-admin',
-          permissions: ['all'],
-          role_description: 'Administrador del sistema'
-        }
-        break
-    }
+    const userTypeDisplay = normalizarTipoUsuario(user.tipo_usuario)
+    const userRole = userTypeDisplay
+    const additionalInfo = infoPorTipoDeUsuario(user.tipo_usuario)
 
     // Devolver información del usuario (sin la contraseña)
     res.json({
@@ -475,8 +365,13 @@ router.post('/create-user', authenticateToken, requireRole(['admin']), async (re
       throw badRequest('Todos los campos son requeridos')
     }
 
-    if (typeof password !== 'string' || password.length < 8) {
-      throw badRequest('La contraseña debe tener al menos 8 caracteres')
+    if (typeof tipo_usuario !== 'string' || !VALID_USER_TYPES.has(tipo_usuario)) {
+      throw badRequest('tipo_usuario inválido')
+    }
+
+    const errorClave = validarPoliticaDeClave(password)
+    if (errorClave) {
+      throw badRequest(errorClave)
     }
 
     const correoInstitucional = normalizarCorreoInstitucional(email, tipo_usuario)

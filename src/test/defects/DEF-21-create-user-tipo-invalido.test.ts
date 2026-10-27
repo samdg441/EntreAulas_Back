@@ -1,7 +1,7 @@
 /**
  * DEF-21 — create-user no valida tipo_usuario (RQ10)
  *
- * Severidad: Alta | Estado: ABIERTO
+ * Severidad: Alta | Estado: CORREGIDO (2026-10-26)
  *
  * PUT /api/users/:id rechaza tipos fuera de ALLOWED_USER_TYPES con
  * `{ error: 'tipo_usuario inválido' }`. POST /auth/create-user solo exige

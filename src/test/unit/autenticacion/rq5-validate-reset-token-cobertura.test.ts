@@ -43,7 +43,7 @@ describe('RQ5 — validate-reset-token (cobertura estructural, Fake Supabase)', 
     fakeDb.fail('password_reset_tokens', { message: 'sin conexión' })
     const res = await validar('t-ok', 'user@test.com')
     expect(res.status).toBe(500)
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: '[object Object]' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 
   it('N7→N8: token expirado → 400 "El token ha expirado"', async () => {
@@ -71,6 +71,6 @@ describe('RQ5 — validate-reset-token (cobertura estructural, Fake Supabase)', 
     const res = await validar('t-ok', 'user@test.com')
     expect(res.status).toBe(500)
     // Error genérico (no AppError): sendError usa error.message como `details`.
-    expect(res.body).toEqual({ error: 'Error interno del servidor', details: 'caída inesperada' })
+    expect(res.body).toEqual({ error: 'Error interno del servidor' })
   })
 })

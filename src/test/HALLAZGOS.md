@@ -31,7 +31,7 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-18 | Promedio histórico fuera de escala | RQ23 | **Alta** | CERRADO |
 | DEF-19 | Resumen coordinador publica promedio 99 | RQ24 | Media | CERRADO |
 | DEF-20 | Rol `Coordinador` recibe 403 en el resumen | RQ24 | Media | ABIERTO |
-| DEF-21 | `create-user` acepta `tipo_usuario` inválido | RQ10 | **Alta** | ABIERTO |
+| DEF-21 | `create-user` acepta `tipo_usuario` inválido | RQ10 | **Alta** | CORREGIDO |
 | DEF-22 | Promedio student-stats fuera de escala | RQ11 | **Alta** | ABIERTO |
 | DEF-22 | Rol `Admin` recibe 403 en POST `/batch` | RQ6 | Media | ABIERTO |
 | DEF-23 | Se evalúa un grupo sin inscripción | RQ13 | **Alta** | ABIERTO |
@@ -41,22 +41,23 @@ encontrados (rojo). Un defecto se cierra cuando su prueba pasa a verde.
 | DEF-25 | Decano/admin reciben 400 de coordinador en by-career | RQ31 | **Alta** | ABIERTO |
 | DEF-25 | HTML del correo QR no escapa el mensaje | RQ16 | Media | CERRADO |
 | DEF-26 | GET `/qr-evaluaciones/` vacío responde 404 | RQ17 | Baja | ABIERTO |
-| DEF-31 | Los 500 exponen el mensaje interno (`bigint`) | RQ22/RQ24 | Media | ABIERTO |
+| DEF-31 | Los 500 exponen el mensaje interno (`bigint`) | RQ22/RQ24 | Media | PARCIAL |
 | DEF-32 | Batch QR acepta grupoIds negativos, 0 y decimales | RQ18 | Baja | ABIERTO |
 | DEF-33 | Coordinador: periodo inválido devuelve todos los periodos | RQ23/RQ25 | Media | ABIERTO |
-| DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | ABIERTO |
-| DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | ABIERTO |
+| DEF-34 | Login sin límite de intentos (fuerza bruta) | RQ19 | **Alta** | CORREGIDO |
+| DEF-35 | Sin cabeceras de seguridad HTTP (helmet) | RQ18–RQ25 | Baja | CORREGIDO |
 | DEF-36 | Nombre del archivo de reporte sin sanear (latente) | RQ25 | Baja | ABIERTO |
 | DEF-37 | Token de QR que no es UUID → 500 en vez de 404 | RQ18 | Media | CERRADO |
-| DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | ABIERTO |
-| DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | ABIERTO |
-| DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | ABIERTO |
-| DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | ABIERTO |
-| DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | ABIERTO |
-| DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | ABIERTO |
-| DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | ABIERTO |
-| DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | ABIERTO |
+| DEF-38 | JSON malformado / cuerpo > 100 KB responden HTML | RQ18/RQ19 | Baja | CORREGIDO |
+| DEF-39 | `POST /api/auth/register` público permite crear usuarios `admin` | RQ1 | **Crítica** | CORREGIDO |
+| DEF-40 | Los 500 de create-user / login devuelven el mensaje interno de la BD | RQ1/RQ2 | Media | CORREGIDO |
+| DEF-41 | El login permite enumerar cuentas por tiempo de respuesta (bcrypt solo si existe) | RQ2 | Media | CORREGIDO |
+| DEF-42 | El JWT emitido antes de restablecer la contraseña sigue válido | RQ5 | Media | CORREGIDO |
+| DEF-43 | forgot-password / validate-reset-token / reset-password sin límite de intentos | RQ3.1/RQ3.4/RQ5 | **Alta** | CORREGIDO |
+| DEF-44 | Cada solicitud de recuperación deja vivos los tokens anteriores | RQ3.1 | Baja | CORREGIDO |
+| DEF-45 | create-user acepta contraseñas que reset-password rechaza | RQ1/RQ5 | Baja | CORREGIDO |
 | DEF-46 | Un QR con `expires_at` vencido se sigue aceptando | RQ18/RQ14 | Media | CERRADO |
+| DEF-47 | Pruebas del login intermitentes por timeout (bcrypt 12 en paralelo) | RQ2 | Baja | CORREGIDO |
 
 Los IDs DEF-22 a DEF-25 aparecen en dos entregas distintas; se distinguen por el archivo de evidencia.
 DEF-31, DEF-33 y DEF-35 se confirmaron también contra producción (Render) con peticiones HTTP desde el
@@ -552,7 +553,7 @@ sí se rechazan (esperado).
 |---|---|
 | Requisito afectado | RQ10 — Gestionar usuarios |
 | Severidad | Alta |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-21-create-user-tipo-invalido.test.ts` |
 | Archivo | `src/modules/auth/auth.routes.ts:482` |
 
@@ -570,6 +571,8 @@ el usuario.
 
 **Corrección propuesta.** Reutilizar el mismo enum y mensaje que el PUT
 (`users.controller.ts`).
+
+**Corrección aplicada.** `create-user` valida `tipo_usuario` contra `VALID_USER_TYPES` antes de tocar la base y responde `400 { error: 'tipo_usuario inválido' }`.
 
 ---
 
@@ -816,7 +819,7 @@ router de QR y devolver 400, o documentar que el contrato solo aplica a
 |---|---|
 | Requisito afectado | RQ22/RQ24 — Estadísticas del coordinador (afecta a toda la API) |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | PARCIAL (2026-10-26): la fuga de detalles quedó corregida; falta validar `profesorId` en coordinador (fuera de RQ1–RQ5) |
 | Evidencia | `defects/DEF-31-error-500-expone-detalles.test.ts` · front DEF-API-01 |
 | Archivo | `src/shared/errors.ts` (`sendError`), `coordinador.routes.ts` (`/profesor-stats/:profesorId`) |
 
@@ -832,6 +835,8 @@ En Render, `GET /api/coordinador/profesor-stats/abc` devuelve
 
 **Corrección propuesta.** Quitar `details` del 500 (dejarlo en `logger.error`) y validar
 `profesorId` con `/^\d+$/` antes de llamar al servicio.
+
+**Corrección aplicada.** Mismo cambio de `sendError` que DEF-40: el 500 responde solo `{ error }`.
 
 ---
 
@@ -885,7 +890,7 @@ mismo caso en `/teachers`.
 |---|---|
 | Requisito afectado | RQ19 — Autenticación y roles |
 | Severidad | **Alta** |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-34-login-sin-limite-intentos.test.ts` |
 | Archivo | `src/app.ts`, `modules/auth/auth.routes.ts` |
 
@@ -898,6 +903,8 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 **Corrección propuesta.** `express-rate-limit` sobre `/api/auth/login` y `/login-with-role`
 (con `app.set('trust proxy', 1)` en Render para leer la IP real).
 
+**Corrección aplicada.** `middleware/limite-de-intentos.ts` (`limiteLogin`) en `/login` y `/login-with-role`: 10 fallos por IP y correo cada 15 min → 429 con `Retry-After`. Los logins correctos no consumen intentos. `app.set('trust proxy', 1)` para que la IP sea la del cliente detrás de Render.
+
 ---
 
 ## DEF-35 — La API no envía cabeceras de seguridad HTTP
@@ -906,7 +913,7 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 |---|---|
 | Requisito afectado | RQ18–RQ25 (transversal) |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-35-sin-cabeceras-seguridad.test.ts` · front DEF-API-04 |
 | Archivo | `src/app.ts` |
 
@@ -915,6 +922,8 @@ Sin freno, la fuerza bruta y el *credential stuffing* solo dependen del ancho de
 
 **Corrección propuesta.** `app.use(helmet())` antes de las rutas (revisar `contentSecurityPolicy`
 para Swagger en `/api/docs`).
+
+**Corrección aplicada.** `helmet` 8 en `app.ts`: `X-Content-Type-Options: nosniff`, HSTS, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: no-referrer` y demás. Sin CSP (la API solo responde JSON y Swagger UI la necesita inline) y con `Cross-Origin-Resource-Policy: cross-origin` para que los clientes de correo carguen el logo de `/static`.
 
 ---
 
@@ -964,7 +973,7 @@ contra la base real.
 |---|---|
 | Requisito afectado | RQ18/RQ19 (transversal: todos los POST) |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-38-errores-de-cuerpo-en-html.test.ts` |
 | Archivo | `src/app.ts` (falta manejador de errores de Express) |
 
@@ -974,6 +983,8 @@ de Express. El front espera `{ error }` y termina mostrando un mensaje genérico
 **Corrección propuesta.** Un manejador final `app.use((err, req, res, next) => ...)` que responda
 `{ error: 'JSON inválido' }` (400) o `{ error: 'Cuerpo demasiado grande' }` (413).
 
+**Corrección aplicada.** Nuevo `middleware/errores-del-cuerpo.ts` al final de `app.ts`: `entity.parse.failed` → 400 y `entity.too.large` → 413, ambos `application/json` con `{ error }`.
+
 ---
 
 ## DEF-39 — El autoregistro público permite crear cuentas de administrador
@@ -982,7 +993,7 @@ de Express. El front espera `{ error }` y termina mostrando un mensaje genérico
 |---|---|
 | Requisito afectado | RQ1 — Registro de usuarios desde admin |
 | Severidad | **Crítica** |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-39-register-publico-crea-admin.test.ts` |
 | Archivo | `modules/auth/auth.routes.ts` (`registerSchema`, `POST /register`) |
 
@@ -996,6 +1007,8 @@ pero `POST /api/auth/register` no pide autenticación y su esquema acepta `tipo_
 **Corrección propuesta.** Eliminar `register` si el alta es solo por el admin; si se mantiene para estudiantes,
 fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
 
+**Corrección aplicada.** `POST /register` solo admite `tipo_usuario: 'estudiante'` (`TIPOS_AUTORREGISTRO`); cualquier otro rol responde **403** sin crear la cuenta ni emitir JWT. Las cuentas de docente, coordinador, decano y admin solo se crean con `create-user` (admin autenticado).
+
 ---
 
 ## DEF-40 — Los 500 de autenticación devuelven el mensaje interno
@@ -1004,7 +1017,7 @@ fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
 |---|---|
 | Requisito afectado | RQ1 / RQ2 |
 | Severidad | Media |
-| Estado | ABIERTO (mismo origen que DEF-31) |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-40-error-500-auth-expone-detalles.test.ts` |
 | Archivo | `shared/errors.ts` (`sendError`) |
 
@@ -1012,6 +1025,8 @@ fijar `tipo_usuario = 'estudiante'` en el servidor e ignorar el del cuerpo.
 revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey ... db.supabase.co`).
 
 **Corrección propuesta.** Responder solo `{ error: 'Error interno del servidor' }` y dejar el detalle en el log.
+
+**Corrección aplicada.** `sendError` ya no devuelve `details` en ninguna respuesta 5xx (ni en `internal(msg, err)` ni en errores inesperados): el detalle se registra con `logger.error`. Los 4xx conservan `details` (p. ej. errores de validación de Zod). Las pruebas de cobertura que fijaban el cuerpo con `details` se actualizaron al contrato seguro.
 
 ---
 
@@ -1021,7 +1036,7 @@ revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey 
 |---|---|
 | Requisito afectado | RQ2 — Login |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-41-login-enumeracion-por-tiempo.test.ts` |
 | Archivo | `modules/auth/auth.routes.ts` (`POST /login`) |
 
@@ -1029,6 +1044,8 @@ revela restricciones, nombres de tabla y host (`duplicate key ... usuarios_pkey 
 El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registrados.
 
 **Corrección propuesta.** Cuando el usuario no existe, comparar contra un hash ficticio precalculado para igualar el tiempo.
+
+**Corrección aplicada.** `igualarTiempoSinCuenta` (`utils/passwordSecurity.ts`) compara la clave contra un hash bcrypt ficticio del mismo coste cuando el correo no existe o la cuenta está inactiva, en `/login` y `/login-with-role`. Además se unificaron las dos ramas (`!user` / `!user.activo`) en una.
 
 ---
 
@@ -1038,7 +1055,7 @@ El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registr
 |---|---|
 | Requisito afectado | RQ5 — Restablecer contraseña |
 | Severidad | Media |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) — requiere `scripts/add-password-changed-at.sql` en Supabase |
 | Evidencia | `defects/DEF-42-jwt-sobrevive-al-restablecer-clave.test.ts` |
 | Archivo | `modules/auth/password-reset.routes.ts`, `middleware/auth.ts` |
 
@@ -1046,6 +1063,8 @@ El cuerpo es idéntico (RQ19), pero el tiempo delata qué correos están registr
 la cuenta fue comprometida, el atacante conserva la sesión.
 
 **Corrección propuesta.** Guardar `password_changed_at` (o `token_version`) y rechazar en `authenticateToken` los JWT con `iat` anterior.
+
+**Corrección aplicada.** `reset-password` guarda `usuarios.password_changed_at` junto con la nueva clave; `authenticateToken` y `GET /me` rechazan con 401 (`TOKEN_REVOKED`) los JWT cuyo `iat` es anterior a ese segundo (`tokenAnteriorAlCambioDeClave`). Si la columna aún no existe (42703 / PGRST204) la clave se cambia igual y se registra el error para ejecutar la migración.
 
 ---
 
@@ -1055,7 +1074,7 @@ la cuenta fue comprometida, el atacante conserva la sesión.
 |---|---|
 | Requisito afectado | RQ3.1 / RQ3.4 / RQ5 |
 | Severidad | **Alta** |
-| Estado | ABIERTO (misma causa que DEF-34) |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-43-recuperacion-sin-limite-de-intentos.test.ts` |
 | Archivo | `src/app.ts`, `modules/auth/password-reset.routes.ts` |
 
@@ -1063,6 +1082,8 @@ la cuenta fue comprometida, el atacante conserva la sesión.
 Permite inundar de correos a un usuario (y consumir la cuota del proveedor de correo), llenar `password_reset_tokens` y probar tokens sin freno.
 
 **Corrección propuesta.** `express-rate-limit` por IP y por correo (p. ej. 5 solicitudes/hora por correo en forgot-password; 10 intentos/15 min en validate y reset).
+
+**Corrección aplicada.** `limiteSolicitudRecuperacion` (5 solicitudes por IP y correo cada 15 min) en `forgot-password` y `limiteTokenRecuperacion` (20 fallos por IP cada 15 min) en `validate-reset-token` y `reset-password`. Se puede desactivar solo para carga local con `LIMITE_INTENTOS_DESACTIVADO=true`.
 
 ---
 
@@ -1072,13 +1093,15 @@ Permite inundar de correos a un usuario (y consumir la cuota del proveedor de co
 |---|---|
 | Requisito afectado | RQ3.1 |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-44-forgot-password-no-invalida-tokens-previos.test.ts` |
 | Archivo | `modules/auth/password-reset.routes.ts` |
 
 **Descripción.** Dos solicitudes seguidas dejan dos tokens válidos durante 1 h. Un correo antiguo reenviado o filtrado sigue sirviendo.
 
 **Corrección propuesta.** Marcar como `used = true` los tokens sin usar del mismo correo antes de insertar el nuevo.
+
+**Corrección aplicada.** `forgot-password` llama a `authRepository.invalidateResetTokens(email)` antes de guardar el token nuevo: los anteriores quedan `used = true`. Si esa actualización falla se registra y el enlace nuevo igual se envía. La prueba de seguridad que esperaba ambos tokens vigentes se ajustó al comportamiento correcto.
 
 ---
 
@@ -1088,7 +1111,7 @@ Permite inundar de correos a un usuario (y consumir la cuota del proveedor de co
 |---|---|
 | Requisito afectado | RQ1 / RQ5 |
 | Severidad | Baja |
-| Estado | ABIERTO |
+| Estado | CORREGIDO (2026-10-26) |
 | Evidencia | `defects/DEF-45-politica-de-clave-inconsistente.test.ts` |
 | Archivo | `modules/auth/auth.routes.ts` (`create-user`, `register`) |
 
@@ -1096,6 +1119,8 @@ Permite inundar de correos a un usuario (y consumir la cuota del proveedor de co
 (`12345678` se acepta). El front del admin sí aplica la política completa, pero la API no.
 
 **Corrección propuesta.** Usar `validarFortalezaPassword` también en `create-user` y `register`.
+
+**Corrección aplicada.** La política vive en `utils/passwordSecurity.ts` (`validarPoliticaDeClave`) y la usan `create-user`, `register` y `reset-password` (`validarFortalezaPassword` quedó como alias). Coincide con la política del front (`lib/validation.ts`).
 
 ---
 
@@ -1131,3 +1156,22 @@ Los listados para generar en lote y compartir por correo también devolvían QR 
 
 **Corrección aplicada.** `qrVencido` y `sinVencer` en `qr-resolucion.ts`; se usan en GET /:token,
 en la auto-inscripción y en `listActivosByGrupoIds` / `listActivosParaShare`.
+
+---
+
+## DEF-47 — Pruebas del login intermitentes por timeout
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RQ2 (calidad de la suite) |
+| Severidad | Baja |
+| Estado | CORREGIDO (2026-10-26) |
+| Evidencia | `docs/pruebas/antes/back-suite-completa.txt`: 3 fallas «Test timed out in 5000ms» que pasan al correr solas |
+| Archivo | `vitest.config.mts` |
+
+**Descripción.** Con `BCRYPT_SALT_ROUNDS=12` y los 77 archivos en paralelo, `rq2-login`, `rq10-gestionar-usuarios` y
+`rq2-login-avanzado` superaban el límite de 5 s de Vitest: la suite completa fallaba de forma intermitente (falsos rojos en Jenkins).
+
+**Corrección aplicada.** `testTimeout: 15_000` en la configuración principal. No se bajó el coste de bcrypt en pruebas:
+tres pruebas (RQ1 Nodo 15, RQ1·P4, RQ13 Nodo 10) exigen coste 12 como requisito de seguridad.
+

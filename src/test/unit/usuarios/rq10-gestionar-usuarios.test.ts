@@ -109,7 +109,7 @@ function mockAuthenticatedUser(tipo_usuario: string, roles: string[], id = 'user
 
 const createBody = {
   email: 'nuevo@soyudemedellin.edu.co',
-  password: 'password123',
+  password: 'Clave-Segura2026!',
   nombre: 'Luis',
   apellido: 'Gomez',
   tipo_usuario: 'estudiante',
@@ -332,7 +332,7 @@ describe('RQ10 unit — auth.routes y listados de usuarios', () => {
       nombre: 'Luis',
       apellido: 'Gomez',
       tipo_usuario: 'estudiante',
-      password: 'password123',
+      password: 'Clave-Segura2026!',
     })
     expect(duplicado.status).toBe(400)
 
@@ -349,7 +349,7 @@ describe('RQ10 unit — auth.routes y listados de usuarios', () => {
       nombre: 'Luis',
       apellido: 'Gomez',
       tipo_usuario: 'estudiante',
-      password: 'password123',
+      password: 'Clave-Segura2026!',
       codigo_estudiante: 'E1',
       carrera_id: 1,
       semestre: '3',

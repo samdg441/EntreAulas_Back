@@ -12,7 +12,7 @@ import { adminUser } from '../fixtures/users'
 const { repo, fake } = vi.hoisted(() => ({
   repo: {
     findUserByEmail: vi.fn(), findUserById: vi.fn(), updateUser: vi.fn(), createUserWithType: vi.fn(), countUsers: vi.fn(),
-    findActiveByEmail: vi.fn(), insertResetToken: vi.fn(), findUnusedResetToken: vi.fn(), markResetTokenUsed: vi.fn(),
+    findActiveByEmail: vi.fn(), insertResetToken: vi.fn(), invalidateResetTokens: vi.fn().mockResolvedValue(null), findUnusedResetToken: vi.fn(), markResetTokenUsed: vi.fn(),
   },
   fake: {},
 }))

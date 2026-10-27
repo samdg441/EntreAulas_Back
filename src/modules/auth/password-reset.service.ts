@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { authRepository } from './auth.repository'
 import { badRequest } from '../../shared/errors'
+import { validarPoliticaDeClave } from '../../utils/passwordSecurity'
 
 export interface ResetToken {
   id: string
@@ -21,30 +22,8 @@ export function generateExpirationDate(): string {
   return expirationDate.toISOString()
 }
 
-export function validarFortalezaPassword(newPassword: string): string | null {
-  const minLength = 8
-  const hasUpperCase = /[A-Z]/.test(newPassword)
-  const hasLowerCase = /[a-z]/.test(newPassword)
-  const hasNumbers = /\d/.test(newPassword)
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword)
-
-  if (newPassword.length < minLength) {
-    return 'La contraseña debe tener al menos 8 caracteres'
-  }
-  if (!hasUpperCase) {
-    return 'La contraseña debe contener al menos una letra mayúscula'
-  }
-  if (!hasLowerCase) {
-    return 'La contraseña debe contener al menos una letra minúscula'
-  }
-  if (!hasNumbers) {
-    return 'La contraseña debe contener al menos un número'
-  }
-  if (!hasSpecialChar) {
-    return 'La contraseña debe contener al menos un carácter especial'
-  }
-  return null
-}
+/** Alias histórico: la política vive en utils/passwordSecurity para que alta y recuperación no diverjan (DEF-45). */
+export const validarFortalezaPassword = (newPassword: string): string | null => validarPoliticaDeClave(newPassword)
 
 export async function buscarTokenDeResetValido(token: string, email: string): Promise<ResetToken> {
   const tokenData = await authRepository.findUnusedResetToken(token, email) as ResetToken | null

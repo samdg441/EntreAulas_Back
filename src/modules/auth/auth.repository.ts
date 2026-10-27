@@ -38,6 +38,16 @@ export class AuthRepository {
     if (error) throw error
   }
 
+  /** Marca como usados los tokens vigentes del correo: solo el último enlace enviado sirve (DEF-44). */
+  async invalidateResetTokens(email: string) {
+    const { error } = await supabaseAdmin
+      .from('password_reset_tokens')
+      .update({ used: true })
+      .eq('email', email)
+      .eq('used', false)
+    return error
+  }
+
   async findUnusedResetToken(token: string, email: string) {
     const { data, error } = await supabaseAdmin
       .from('password_reset_tokens')

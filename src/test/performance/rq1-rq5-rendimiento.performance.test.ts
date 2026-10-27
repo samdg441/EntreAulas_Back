@@ -16,7 +16,7 @@ const { repo, fake } = vi.hoisted(() => ({
     createUserWithType: vi.fn(async (d: Record<string, unknown>) => ({ id: 'nuevo', activo: true, ...d })),
     countUsers: vi.fn(),
     findActiveByEmail: vi.fn(),
-    insertResetToken: vi.fn(),
+    insertResetToken: vi.fn(), invalidateResetTokens: vi.fn().mockResolvedValue(null),
     findUnusedResetToken: vi.fn(),
     markResetTokenUsed: vi.fn(),
   },
