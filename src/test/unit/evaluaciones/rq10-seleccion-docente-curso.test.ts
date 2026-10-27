@@ -22,6 +22,12 @@ const academicRepository = vi.hoisted(() => ({
 
 vi.mock('../../../modules/academic/teachers.repository', () => ({ teachersRepository }))
 vi.mock('../../../modules/academic/academic.repository', () => ({ academicRepository }))
+vi.mock('../../../modules/analytics/analytics.repository', () => ({
+  analyticsRepository: { listEvaluaciones: vi.fn(async () => []) },
+}))
+vi.mock('../../../modules/academic/periodos-evaluacion', () => ({
+  listarVentanasEvaluacion: vi.fn(async () => []),
+}))
 
 import { cursosSinRepetir, listarProfesoresConCursos } from '../../../modules/academic/listado-profesores'
 import { teachersService } from '../../../modules/academic/teachers.service'

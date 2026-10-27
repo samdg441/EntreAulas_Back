@@ -6,6 +6,8 @@ import { evaluationsRepository } from '../evaluations/evaluations.repository'
 import { conflict, forbidden, internal, notFound } from '../../shared/errors'
 import { tieneRol } from '../../shared/tiene-rol'
 import { listarProfesoresConCursos } from './listado-profesores'
+import { listarVentanasEvaluacion } from './periodos-evaluacion'
+import { claveEvaluacion, marcarDocentes, marcarGrupos, ventanaEstaCerrada } from './estado-evaluacion-estudiante'
 
 function formatQuestions(questions: any[]) {
   return questions.map((pregunta: any) => ({
@@ -62,8 +64,16 @@ async function listCarrerasActivas(opts: { activo?: boolean; activa?: boolean })
 
 /** Orquesta listados y fichas de profesores. Sin SQL directo. */
 export class TeachersService {
-  async listTeachers(user: { id: string; tipo_usuario?: string }) {
-    return listarProfesoresConCursos(user)
+  async listTeachers(user: { id: string; tipo_usuario?: string; roles?: string[] }) {
+    const docentes = await listarProfesoresConCursos(user)
+    if (!tieneRol(user, 'estudiante')) return docentes
+    try {
+      const marcas = await this.marcasDeEvaluacion(user.id)
+      return marcarDocentes(docentes, marcas.respondidas, marcas.cerrada)
+    } catch (error) {
+      console.warn('No se pudo marcar docentes respondidos o bloqueados:', error)
+      return docentes
+    }
   }
 
   async listGroups(profesorId: string, courseId: string, user?: { id: string; tipo_usuario?: string; roles?: string[] }) {
@@ -75,7 +85,33 @@ export class TeachersService {
     const inscritos = new Set(
       (await academicRepository.listInscripcionesActivas(estudiante.id)).map((i: any) => String(i.grupo_id))
     )
-    return grupos.filter((g: any) => inscritos.has(String(g.id)))
+    const propios = grupos.filter((g: any) => inscritos.has(String(g.id)))
+    try {
+      const marcas = await this.marcasDeEvaluacion(user.id)
+      return marcarGrupos(propios, profesorId, marcas.respondidas, marcas.cerrada)
+    } catch (error) {
+      console.warn('No se pudo marcar grupos respondidos o bloqueados:', error)
+      return propios
+    }
+  }
+
+  /** Evaluaciones ya enviadas por el estudiante y si la ventana del periodo está cerrada. */
+  private async marcasDeEvaluacion(usuarioId: string) {
+    const estudiante = await academicRepository.findEstudianteByUsuarioId(usuarioId)
+    if (!estudiante) return { respondidas: new Set<string>(), cerrada: false }
+
+    const evaluaciones = await analyticsRepository.listEvaluaciones({
+      columns: 'grupo_id, profesor_id',
+      estudianteId: estudiante.id,
+      completada: true,
+    })
+    const respondidas = new Set(
+      (evaluaciones || [])
+        .filter((fila: { grupo_id?: unknown; profesor_id?: unknown }) => fila.grupo_id != null && fila.profesor_id != null)
+        .map((fila: { grupo_id: unknown; profesor_id: unknown }) => claveEvaluacion(fila.profesor_id, fila.grupo_id))
+    )
+    const ventanas = await listarVentanasEvaluacion().catch(() => [])
+    return { respondidas, cerrada: ventanaEstaCerrada(ventanas) }
   }
 
   private async gruposDelProfesorEnCurso(profesorId: string, courseId: string) {
