@@ -22,8 +22,10 @@ function podarVencidos(ahora: number) {
 
 /** IP del cliente (con `trust proxy` en app.ts, la que entrega el proxy de Render) y correo normalizado. */
 export const ipDe = (req: Request) => req.ip ?? req.socket.remoteAddress ?? 'desconocida'
-export const correoDe = (req: Request) =>
-  String((req.body as { email?: unknown } | undefined)?.email ?? req.query.email ?? '').trim().toLowerCase()
+export const correoDe = (req: Request) => {
+  const email: unknown = (req.body as { email?: unknown } | undefined)?.email ?? req.query.email
+  return typeof email === 'string' ? email.trim().toLowerCase() : ''
+}
 
 /**
  * Límite de intentos en memoria (DEF-34, DEF-43). Al superarlo responde 429 con Retry-After.
