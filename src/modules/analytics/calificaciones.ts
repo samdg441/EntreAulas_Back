@@ -14,6 +14,34 @@ export function calcularPromedio(calificaciones: Array<number | string | null | 
   return lista.reduce((suma, n) => suma + n, 0) / lista.length
 }
 
+export type FilaCalificacion = {
+  calificacion_promedio: string | number | null
+  fecha_completada: string
+}
+
+/** Total, promedio, mínima, máxima y conteo por mes. Fuera de 1 a 5 no cuenta. */
+export function estadisticasIndividuales(evaluaciones: FilaCalificacion[] | null | undefined) {
+  const validas = (evaluaciones ?? []).filter(
+    (fila) => calificacionEnEscala(fila.calificacion_promedio) != null
+  )
+  const notas = validas.map((fila) => calificacionEnEscala(fila.calificacion_promedio) as number)
+  const evaluaciones_por_mes = validas.reduce<Record<string, number>>((acc, fila) => {
+    const fecha = new Date(fila.fecha_completada)
+    if (Number.isNaN(fecha.getTime())) return acc
+    const mes = fecha.toISOString().substring(0, 7)
+    acc[mes] = (acc[mes] || 0) + 1
+    return acc
+  }, {})
+
+  return {
+    total_evaluaciones: validas.length,
+    calificacion_promedio: calcularPromedio(notas),
+    calificacion_minima: notas.length > 0 ? Math.min(...notas) : 0,
+    calificacion_maxima: notas.length > 0 ? Math.max(...notas) : 0,
+    evaluaciones_por_mes,
+  }
+}
+
 export function resumenMetricas(
   evaluaciones: Array<{ calificacion_promedio?: number | string | null }>
 ): { calificacionPromedio: number; totalEvaluaciones: number } {

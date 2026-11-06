@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { evaluationsService } from './evaluations.service'
+import { filtrosConsultaResultados } from './resultados-filtros'
 import {
   sendError,
 } from '../../shared/errors'
@@ -13,15 +14,7 @@ router.get(
   requireRole(['profesor', 'coordinador', 'admin']),
   async (req: any, res) => {
     try {
-      const { periodo_id, grupo_id } = req.query
-      const filters: Record<string, unknown> = {}
-
-      if (req.user.tipo_usuario === 'profesor') {
-        filters.profesor_id = req.user.id
-      }
-      if (periodo_id) filters.periodo_id = Number.parseInt(periodo_id as string)
-      if (grupo_id) filters.grupo_id = Number.parseInt(grupo_id as string)
-
+      const filters = filtrosConsultaResultados(req.user, req.query)
       const evaluaciones = await evaluationsService.getCompletedResults(filters)
       res.json(evaluaciones)
     } catch (error) {
@@ -36,15 +29,7 @@ router.get(
   requireRole(['profesor', 'coordinador', 'admin']),
   async (req: any, res) => {
     try {
-      const { periodo_id, grupo_id } = req.query
-      const filters: Record<string, unknown> = {}
-
-      if (req.user.tipo_usuario === 'profesor') {
-        filters.profesor_id = req.user.id
-      }
-      if (periodo_id) filters.periodo_id = Number.parseInt(periodo_id as string)
-      if (grupo_id) filters.grupo_id = Number.parseInt(grupo_id as string)
-
+      const filters = filtrosConsultaResultados(req.user, req.query)
       const estadisticas = await evaluationsService.getRatingStatistics(filters)
       res.json(estadisticas)
     } catch (error) {

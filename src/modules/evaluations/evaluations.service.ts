@@ -3,6 +3,7 @@ import {
   evaluationsRepository,
 } from './evaluations.repository'
 import type { CreateQuestionInput, PreguntaEvaluacion } from './evaluations.types'
+import { estadisticasIndividuales } from '../analytics/calificaciones'
 import { logger } from '../../shared/logger'
 
 export class EvaluationsService {
@@ -83,24 +84,7 @@ export class EvaluationsService {
   computeRatingStatistics(
     evaluaciones: Array<{ calificacion_promedio: string | number; fecha_completada: string }>
   ) {
-    const calificaciones =
-      evaluaciones?.map((e) => parseFloat(String(e.calificacion_promedio))) || []
-
-    return {
-      total_evaluaciones: evaluaciones?.length || 0,
-      calificacion_promedio:
-        calificaciones.length > 0
-          ? calificaciones.reduce((a, b) => a + b, 0) / calificaciones.length
-          : 0,
-      calificacion_minima: calificaciones.length > 0 ? Math.min(...calificaciones) : 0,
-      calificacion_maxima: calificaciones.length > 0 ? Math.max(...calificaciones) : 0,
-      evaluaciones_por_mes:
-        evaluaciones?.reduce((acc: Record<string, number>, evaluacion) => {
-          const mes = new Date(evaluacion.fecha_completada).toISOString().substring(0, 7)
-          acc[mes] = (acc[mes] || 0) + 1
-          return acc
-        }, {}) || {},
-    }
+    return estadisticasIndividuales(evaluaciones)
   }
 
   async getRatingStatistics(filters: Record<string, unknown>) {
