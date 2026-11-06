@@ -1,10 +1,11 @@
 export type UsuarioConsulta = { tipo_usuario?: string; id?: string | number }
 export type QueryResultados = { periodo_id?: unknown; grupo_id?: unknown }
 
+/** Solo un entero completo. parseInt("8 OR 1=1") devolvería 8 y colaría el resto de la cadena. */
 function enteroSiViene(valor: unknown): number | undefined {
-  if (valor === undefined || valor === null || valor === '') return undefined
-  const n = Number.parseInt(String(valor), 10)
-  return Number.isNaN(n) ? undefined : n
+  if (typeof valor === 'number') return Number.isInteger(valor) ? valor : undefined
+  if (typeof valor !== 'string' || !/^\d+$/.test(valor.trim())) return undefined
+  return Number.parseInt(valor.trim(), 10)
 }
 
 /** Filtros de GET /api/resultados y /estadisticas. El profesor solo ve su id. */
