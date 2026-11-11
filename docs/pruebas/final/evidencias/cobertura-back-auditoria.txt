@@ -1,0 +1,27 @@
+npm notice run EntreAulas-backend@0.1.0 npx
+npm notice run 'vitest' run src/test/unit/auditoria src/test/api/auditoria.api.test.ts src/test/security/auditoria.security.test.ts src/test/integration/auditoria.integration.test.ts src/test/regression/auditoria-no-rompe-flujos.regression.test.ts --coverage --coverage.reportsDirectory=coverage-final --coverage.reporter=text --coverage.reporter=lcov --coverage.reporter=html --coverage.include=src/modules/analytics/auditoria.ts --coverage.include=src/modules/analytics/auditoria.service.ts --coverage.include=src/modules/analytics/coordinador.routes.ts
+
+ RUN  v2.1.9 /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back
+      Coverage enabled with v8
+
+ ✓ src/test/unit/auditoria/auditoria-logica.test.ts (39 tests) 139ms
+ ✓ src/test/unit/auditoria/auditoria-servicio.test.ts (10 tests) 120ms
+ ✓ src/test/api/auditoria.api.test.ts (7 tests) 170ms
+ ✓ src/test/integration/auditoria.integration.test.ts (5 tests) 435ms
+   ✓ Auditoría — integración de punta a punta > programar una encuesta deja un evento y el mismo coordinador lo ve en su auditoría 329ms
+ ✓ src/test/regression/auditoria-no-rompe-flujos.regression.test.ts (5 tests) 310ms
+ ✓ src/test/security/auditoria.security.test.ts (22 tests) 690ms
+
+ Test Files  6 passed (6)
+      Tests  88 passed (88)
+   Start at  14:14:02
+   Duration  8.36s (transform 4.59s, setup 1.52s, collect 19.69s, tests 1.86s, environment 13ms, prepare 4.21s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   97.59 |    83.87 |     100 |   97.59 |                   
+ ...ria.service.ts |   95.12 |    65.11 |     100 |   95.12 | 63-64,89-90       
+ auditoria.ts      |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
