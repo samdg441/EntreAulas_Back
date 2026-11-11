@@ -65,7 +65,7 @@ function leerAccion(valor: unknown): AccionAuditoria | undefined {
   const texto = String(valor ?? '').trim()
   if (!texto || texto === 'todas') return undefined
   if (!(ACCIONES_AUDITORIA as readonly string[]).includes(texto)) {
-    throw badRequest(`La acción "${texto}" no es válida.`)
+    throw badRequest(`La acción indicada no es válida. Valores permitidos: ${ACCIONES_AUDITORIA.join(', ')}, todas.`)
   }
   return texto as AccionAuditoria
 }

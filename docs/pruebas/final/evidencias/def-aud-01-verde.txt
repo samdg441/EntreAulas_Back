@@ -1,0 +1,10 @@
+
+ RUN  v2.1.9 /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back
+
+ ✓ src/test/security/auditoria.security.test.ts (23 tests) 281ms
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  00:04:09
+   Duration  3.08s (transform 1.13s, setup 89ms, collect 1.81s, tests 281ms, environment 0ms, prepare 223ms)
+
