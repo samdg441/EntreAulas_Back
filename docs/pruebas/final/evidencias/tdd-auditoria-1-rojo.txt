@@ -1,0 +1,34 @@
+npm notice run EntreAulas-backend@0.1.0 npx
+npm notice run 'vitest' run src/test/unit/auditoria src/test/api/auditoria.api.test.ts
+
+ RUN  v2.1.9 /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back
+
+ ❯ src/test/unit/auditoria/auditoria-logica.test.ts (0 test)
+ ❯ src/test/unit/auditoria/auditoria-servicio.test.ts (0 test)
+ ❯ src/test/api/auditoria.api.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/api/auditoria.api.test.ts [ src/test/api/auditoria.api.test.ts ]
+Error: Failed to load url ../../modules/analytics/auditoria.service (resolved id: ../../modules/analytics/auditoria.service) in /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back/src/test/api/auditoria.api.test.ts. Does the file exist?
+ ❯ loadAndTransform node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51969:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/test/unit/auditoria/auditoria-logica.test.ts [ src/test/unit/auditoria/auditoria-logica.test.ts ]
+Error: Failed to load url ../../../modules/analytics/auditoria (resolved id: ../../../modules/analytics/auditoria) in /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back/src/test/unit/auditoria/auditoria-logica.test.ts. Does the file exist?
+ ❯ loadAndTransform node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51969:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/test/unit/auditoria/auditoria-servicio.test.ts [ src/test/unit/auditoria/auditoria-servicio.test.ts ]
+Error: Failed to load url ../../../modules/analytics/auditoria.service (resolved id: ../../../modules/analytics/auditoria.service) in /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back/src/test/unit/auditoria/auditoria-servicio.test.ts. Does the file exist?
+ ❯ loadAndTransform node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51969:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  3 failed (3)
+      Tests  no tests
+   Start at  23:23:58
+   Duration  2.37s (transform 1.04s, setup 272ms, collect 0ms, tests 0ms, environment 1ms, prepare 527ms)
+

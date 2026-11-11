@@ -1,0 +1,12 @@
+
+ RUN  v2.1.9 /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back
+
+ ❯ src/test/security/auditoria.security.test.ts (23 tests | 1 failed) 284ms
+   × Auditoría — seguridad de la API > A03 — entradas maliciosas en los filtros > el filtro accion=programar_encuesta;DROP TABLE auditoria_eventos se rechaza con 400 (nunca llega a la base) 25ms
+     → expected '{"error":"La acción \"programar_encue…' not to match /auditoria_eventos|select |from /i
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 passed (23)
+   Start at  00:04:00
+   Duration  3.16s (transform 1.15s, setup 82ms, collect 2.04s, tests 284ms, environment 0ms, prepare 199ms)
+

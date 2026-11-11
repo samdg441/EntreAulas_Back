@@ -32,6 +32,8 @@ export default defineConfig({
         'src/modules/academic/users.controller.ts',
         'src/modules/academic/estudiante-materias.ts',
         'src/modules/analytics/calificaciones.ts',
+        'src/modules/analytics/auditoria.ts',
+        'src/modules/analytics/auditoria.service.ts',
         'src/modules/analytics/coordinador-resumen.ts',
         'src/modules/analytics/reporte-exportacion.ts',
         'src/modules/analytics/teachers-analytics.service.ts',
