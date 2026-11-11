@@ -43,6 +43,8 @@ export default defineConfig({
         'src/modules/evaluations/qr-auto-enroll.ts',
         'src/modules/evaluations/qr-share-email.ts',
         'src/modules/evaluations/qr-evaluaciones.routes.ts',
+        'src/modules/evaluations/evaluations.service.ts',
+        'src/modules/evaluations/evaluations.controller.ts',
       ],
       exclude: [
         'src/test/**',
