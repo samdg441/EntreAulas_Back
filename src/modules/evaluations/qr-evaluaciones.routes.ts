@@ -6,6 +6,7 @@ import { autoEnrollPorQr } from './qr-auto-enroll'
 import { compartirQrsPorEmail, errorEnvioCorreo, generarPngQr } from './qr-share-email'
 import { esTokenQrValido, mapearRespuestaQr, resolverEvaluacionQr } from './qr-resolucion'
 import { AppError, sendError } from '../../shared/errors'
+import { auditoriaService } from '../analytics/auditoria.service'
 
 const router = Router()
 
@@ -22,6 +23,12 @@ router.post('/batch', authenticateToken, requireRole(['coordinador', 'admin']), 
       req.body?.grupoIds,
       req.body?.periodo_id
     )
+    void auditoriaService.registrarComoUsuario(req.user, {
+      accion: 'generar_qr',
+      entidad: 'qr',
+      entidadId: null,
+      detalle: `${created.length} código(s) QR generados, ${skipped.length} omitidos`,
+    })
     res.status(201).json({ created, skipped })
   } catch (error) {
     return sendError(res, error)

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../config/supabase-only'
 import { authenticateToken, requireRole } from '../../middleware/auth'
 import { badRequest, internal, notFound, sendError, unavailable } from '../../shared/errors'
 import { logger } from '../../shared/logger'
+import { auditoriaService } from '../analytics/auditoria.service'
 
 export type VentanaEvaluacion = {
   periodoId: number
@@ -98,7 +99,14 @@ router.get('/evaluacion', authenticateToken, async (_req, res) => {
 /** PUT /api/periodos/evaluacion  Body: { periodo: "2026-1", fechaInicio, fechaFin } */
 router.put('/evaluacion', authenticateToken, requireRole(['coordinador', 'admin']), async (req, res) => {
   try {
-    res.json(await guardarVentanaEvaluacion(req.body))
+    const ventana = await guardarVentanaEvaluacion(req.body)
+    void auditoriaService.registrarComoUsuario(req.user, {
+      accion: 'programar_encuesta',
+      entidad: 'periodo',
+      entidadId: `${ventana.ano}-${ventana.semestre}`,
+      detalle: `Del ${ventana.fechaInicio} al ${ventana.fechaFin}`,
+    })
+    res.json(ventana)
   } catch (error) {
     return sendError(res, error)
   }

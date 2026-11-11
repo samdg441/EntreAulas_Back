@@ -3,6 +3,7 @@ import { authenticateToken, requireRole } from '../../middleware/auth'
 import { coordinadorService } from './coordinador.service'
 import { esCoordinador } from './coordinador-resumen'
 import { forbidden, sendError } from '../../shared/errors'
+import { auditoriaService } from './auditoria.service'
 
 const router = Router()
 
@@ -57,12 +58,17 @@ router.get('/reports-overview', authenticateToken, async (req: any, res) => {
     if (!esCoordinador(req.user)) {
       throw forbidden('Solo coordinadores pueden acceder a esta información.')
     }
-    res.json(
-      await coordinadorService.getReportsOverview(req.user.id, req.query?.period, {
-        courseId: req.query?.courseId,
-        grupoId: req.query?.grupoId,
-      })
-    )
+    const reporte = await coordinadorService.getReportsOverview(req.user.id, req.query?.period, {
+      courseId: req.query?.courseId,
+      grupoId: req.query?.grupoId,
+    })
+    void auditoriaService.registrarComoUsuario(req.user, {
+      accion: 'consultar_reportes',
+      entidad: 'reporte',
+      entidadId: req.query?.period ? String(req.query.period) : null,
+      detalle: `Reporte general del periodo ${req.query?.period || 'todos'}`,
+    })
+    res.json(reporte)
   } catch (error) {
     return sendError(res, error)
   }
@@ -77,9 +83,28 @@ router.get('/profesor-stats/:profesorId', authenticateToken, async (req: any, re
     if (!esCoordinador(req.user)) {
       throw forbidden('Solo coordinadores pueden acceder a esta información.')
     }
-    res.json(
-      await coordinadorService.getProfesorStats(req.user.id, req.params.profesorId, req.query?.period)
-    )
+    const stats = await coordinadorService.getProfesorStats(req.user.id, req.params.profesorId, req.query?.period)
+    void auditoriaService.registrarComoUsuario(req.user, {
+      accion: 'consultar_docente',
+      entidad: 'profesor',
+      entidadId: String(req.params.profesorId),
+      detalle: `Estadísticas del docente ${req.params.profesorId}, periodo ${req.query?.period || 'todos'}`,
+    })
+    res.json(stats)
+  } catch (error) {
+    return sendError(res, error)
+  }
+})
+
+/**
+ * GET /coordinador/auditoria
+ * Registro de acciones de la carrera del coordinador. Query: page, pageSize (máx. 50),
+ * accion (programar_encuesta | generar_qr | consultar_reportes | consultar_docente | todas),
+ * desde y hasta (AAAA-MM-DD), search.
+ */
+router.get('/auditoria', authenticateToken, requireRole(['coordinador']), async (req: any, res) => {
+  try {
+    res.json(await auditoriaService.listar(req.user.id, req.query || {}))
   } catch (error) {
     return sendError(res, error)
   }
