@@ -1,0 +1,14 @@
+npm notice run EntreAulas-backend@0.1.0 npx
+npm notice run 'vitest' run src/test/unit/auditoria src/test/api/auditoria.api.test.ts
+
+ RUN  v2.1.9 /home/julianaf/Escritorio/proyectos/github/entre-aulas/EntreAulas_Back
+
+ ✓ src/test/unit/auditoria/auditoria-logica.test.ts (39 tests) 61ms
+ ✓ src/test/unit/auditoria/auditoria-servicio.test.ts (10 tests) 54ms
+ ✓ src/test/api/auditoria.api.test.ts (7 tests) 276ms
+
+ Test Files  3 passed (3)
+      Tests  56 passed (56)
+   Start at  23:26:06
+   Duration  2.26s (transform 968ms, setup 171ms, collect 1.62s, tests 391ms, environment 1ms, prepare 487ms)
+

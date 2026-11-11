@@ -41,6 +41,7 @@ const TAM_PAGINA_POR_DEFECTO = 10
 const TAM_PAGINA_MAXIMO = 50
 const LARGO_MAXIMO_BUSQUEDA = 80
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/
+const MARCAS_DIACRITICAS = /\p{M}/gu
 
 function entero(valor: unknown, porDefecto: number): number {
   const n = Number(valor)
@@ -89,18 +90,21 @@ export function parsearFiltrosAuditoria(query: Record<string, unknown>): Filtros
 }
 
 function normalizar(texto: string): string {
-  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  return texto.normalize('NFD').replace(MARCAS_DIACRITICAS, '').toLowerCase()
 }
 
 function coincideBusqueda(e: EventoAuditoria, search: string): boolean {
   return normalizar(`${e.actorNombre} ${e.detalle} ${e.entidad} ${e.entidadId ?? ''}`).includes(normalizar(search))
 }
 
+const inicioDelDia = (fecha: string) => `${fecha}T00:00:00.000Z`
+const finDelDia = (fecha: string) => `${fecha}T23:59:59.999Z`
+
 function cumpleFiltros(e: EventoAuditoria, f: FiltrosAuditoria): boolean {
-  if (f.accion && e.accion !== f.accion) return false
-  if (f.desde && e.creadoEn < `${f.desde}T00:00:00.000Z`) return false
-  if (f.hasta && e.creadoEn > `${f.hasta}T23:59:59.999Z`) return false
-  return !f.search || coincideBusqueda(e, f.search)
+  const accionOk = !f.accion || e.accion === f.accion
+  const desdeOk = !f.desde || e.creadoEn >= inicioDelDia(f.desde)
+  const hastaOk = !f.hasta || e.creadoEn <= finDelDia(f.hasta)
+  return accionOk && desdeOk && hastaOk && (!f.search || coincideBusqueda(e, f.search))
 }
 
 /** Aplica filtros, ordena del más reciente al más antiguo, resume y pagina. No muta la entrada. */

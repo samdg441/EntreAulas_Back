@@ -143,3 +143,33 @@ describe('auditoriaService', () => {
     })
   })
 })
+
+describe('auditoriaService.registrarComoUsuario (Stub de usuario y carrera)', () => {
+  beforeEach(() => {
+    fake.fakeDb.reset()
+    vi.spyOn(RoleService, 'obtenerCoordinadorPorUsuario').mockResolvedValue({ carrera_id: 4 } as never)
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('resuelve nombre y carrera del usuario y guarda el evento', async () => {
+    fake.fakeDb.seed('usuarios', [{ id: 'u-9', nombre: 'Laura', apellido: 'Ríos', activo: true }])
+
+    await auditoriaService.registrarComoUsuario(
+      { id: 'u-9', roles: ['coordinador'], tipo_usuario: 'coordinador' },
+      { accion: 'consultar_docente', entidad: 'profesor', entidadId: '12', detalle: 'Docente 12' }
+    )
+
+    expect(fake.fakeDb.filas(TABLA)[0]).toMatchObject({
+      actor_nombre: 'Laura Ríos',
+      actor_rol: 'coordinador',
+      carrera_id: 4,
+      entidad_id: '12',
+    })
+  })
+
+  it('sin usuario autenticado no escribe nada', async () => {
+    await auditoriaService.registrarComoUsuario(undefined, { accion: 'generar_qr', entidad: 'qr' })
+
+    expect(fake.fakeDb.filas(TABLA)).toHaveLength(0)
+  })
+})
