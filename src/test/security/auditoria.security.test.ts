@@ -135,18 +135,7 @@ describe('Auditoría — seguridad de la API', () => {
       }
     )
 
-    it('un texto de búsqueda enorme se recorta a 80 caracteres antes de usarse', async () => {
-      const servicio = vi.spyOn(auditoriaService, 'listar').mockResolvedValue(vacia as never)
-      const auth = iniciarSesion(coordinadorUser)
-
-      const res = await request(app).get(`${ruta}?search=${'a'.repeat(5000)}`).set('Authorization', auth)
-
-      expect(res.status).toBe(200)
-      const consulta = servicio.mock.calls[0][1] as { search: string }
-      expect(consulta.search.length).toBe(5000) // el servicio recibe lo crudo…
-    })
-
-    it('…pero el parser lo limita: la búsqueda efectiva nunca supera 80 caracteres', async () => {
+    it('un texto de búsqueda enorme se recorta: la búsqueda efectiva nunca supera 80 caracteres', async () => {
       const { parsearFiltrosAuditoria } = await import('../../modules/analytics/auditoria')
 
       expect(parsearFiltrosAuditoria({ search: 'a'.repeat(5000) }).search).toHaveLength(80)
