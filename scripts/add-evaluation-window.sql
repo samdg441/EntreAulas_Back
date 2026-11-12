@@ -15,8 +15,14 @@ ALTER TABLE periodos_academicos
     OR fecha_fin_evaluacion >= fecha_inicio_evaluacion
   );
 
--- Ejemplo: ajusta las fechas reales de la evaluación del periodo vigente.
+-- La ventana de ejemplo se escribe en el periodo de la fecha de hoy:
+-- enero–junio → año-1, julio–diciembre → año-2.
+-- Cambia las dos fechas por las reales de la evaluación antes de ejecutar.
 UPDATE periodos_academicos
 SET fecha_inicio_evaluacion = '2026-09-28',
     fecha_fin_evaluacion = '2026-10-09'
-WHERE ano = 2026 AND semestre = 1;
+WHERE ano = EXTRACT(YEAR FROM CURRENT_DATE)::int
+  AND semestre = CASE
+    WHEN EXTRACT(MONTH FROM CURRENT_DATE) <= 6 THEN 1
+    ELSE 2
+  END;
