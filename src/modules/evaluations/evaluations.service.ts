@@ -84,7 +84,7 @@ export class EvaluationsService {
     evaluaciones: Array<{ calificacion_promedio: string | number; fecha_completada: string }>
   ) {
     const calificaciones =
-      evaluaciones?.map((e) => parseFloat(String(e.calificacion_promedio))) || []
+      evaluaciones?.map((e) => Number.parseFloat(String(e.calificacion_promedio))) || []
 
     return {
       total_evaluaciones: evaluaciones?.length || 0,

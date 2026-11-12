@@ -217,6 +217,36 @@ export class EvaluationsRepository {
     return data || []
   }
 
+  async createCategoria(input: { nombre: string; descripcion?: string | null; orden: number }) {
+    const { data, error } = await supabaseAdmin
+      .from('categorias_pregunta')
+      .insert({
+        nombre: input.nombre,
+        descripcion: input.descripcion || null,
+        orden: input.orden,
+        activa: true,
+      })
+      .select('id, nombre, descripcion, orden')
+      .single()
+    if (error) throw error
+    return data
+  }
+
+  async updateCategoria(id: number, input: { nombre: string; descripcion?: string | null; orden: number }) {
+    const { data, error } = await supabaseAdmin
+      .from('categorias_pregunta')
+      .update({
+        nombre: input.nombre,
+        descripcion: input.descripcion || null,
+        orden: input.orden,
+      })
+      .eq('id', id)
+      .select('id, nombre, descripcion, orden')
+      .maybeSingle()
+    if (error) throw error
+    return data
+  }
+
   async getActiveQuestionsByCareer(carreraId?: number | null) {
     let query = supabaseAdmin
       .from('preguntas_evaluacion')
