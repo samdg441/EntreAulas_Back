@@ -1315,3 +1315,49 @@ tres pruebas (RQ1 Nodo 15, RQ1·P4, RQ13 Nodo 10) exigen coste 12 como requisito
 **Descripción.** Crear, corregir o retirar preguntas no deja registro de quién lo hizo ni cuándo. El front llama a `GET /api/coordinador/auditoria`, pero el back no tiene esa ruta ni una tabla de eventos.
 
 **Recomendación.** Registrar usuario, acción, pregunta, valor anterior y nuevo en cada escritura de `/api/evaluations/questions` y `/categories`.
+
+---
+
+## DEF-51 — Corregir una pregunta que no existe respondía 500
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 |
+| Severidad | Baja |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/defects/DEF-51-53-errores-de-preguntas.test.ts` |
+| Evidencia | `docs/pruebas/evidencias/tdd-def-51-53-rojo.txt` y `tdd-def-51-53-verde.txt` |
+
+**Descripción.** `PUT /questions/99999`: Supabase responde `PGRST116` (no hay fila), pero el servicio reemplazaba el error por `new Error('Error al actualizar…')` y se perdía el código. El cliente recibía «Error interno del servidor» cuando el problema era que la pregunta no existía (por ejemplo, otro administrador la acababa de retirar).
+
+**Corrección aplicada.** El servicio conserva el error de Supabase en `cause`; `errorDePregunta()` en el controlador responde 404 «La pregunta no existe.».
+
+---
+
+## DEF-52 — Retirar una pregunta que no existe confirmaba «desactivada exitosamente»
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 |
+| Severidad | Media (el sistema confirma una operación que no ocurrió) |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/defects/DEF-51-53-errores-de-preguntas.test.ts` |
+
+**Descripción.** `deactivateQuestion` del repositorio devolvía `true` sin mirar cuántas filas cambió el `update`. `DELETE /questions/99999` respondía 200 «Pregunta desactivada exitosamente».
+
+**Corrección aplicada.** El repositorio usa `.select('id')` y devuelve si tocó alguna fila; el servicio responde 404 «La pregunta no existe.». Una falla real de la base sigue devolviendo `false` (500), como antes.
+
+---
+
+## DEF-53 — Crear o mover una pregunta a una encuesta que no existe respondía 500
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-32, RF-ENC-33 |
+| Severidad | Baja |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/defects/DEF-51-53-errores-de-preguntas.test.ts` |
+
+**Descripción.** Con un `categoria_id` inexistente Supabase responde `23503` (llave foránea); el servicio lo convertía en un error genérico y la API respondía 500.
+
+**Corrección aplicada.** Mismo cambio que DEF-51: `23503` se traduce a 400 «La encuesta no existe.». Los demás errores de la base siguen siendo 500 sin detalles.

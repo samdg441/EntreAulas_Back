@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { evaluationsService } from './evaluations.service'
-import { AppError, badRequest, sendError } from '../../shared/errors'
+import { AppError, badRequest, notFound, sendError } from '../../shared/errors'
 import type { PreguntaEvaluacion } from './evaluations.types'
 import { LARGO_MAXIMO, revisorPreguntas } from './revisor-preguntas'
 
@@ -73,6 +73,18 @@ function cambiosDePregunta(body: Record<string, unknown>): Partial<PreguntaEvalu
   return cambios as Partial<PreguntaEvaluacion>
 }
 
+/**
+ * DEF-51 y DEF-53: el servicio conserva el error de Supabase en `cause`.
+ * PGRST116 = .single() no encontró la fila → 404; 23503 = la encuesta (categoria_id) no existe → 400.
+ * Cualquier otro error sigue siendo 500 sin detalles.
+ */
+function errorDePregunta(error: unknown): unknown {
+  const codigo = (error as { cause?: { code?: string } })?.cause?.code
+  if (codigo === 'PGRST116') return notFound('Pregunta no encontrada', 'La pregunta no existe.')
+  if (codigo === '23503') return badRequest('Datos inválidos', 'La encuesta no existe.')
+  return error
+}
+
 export class EvaluationsController {
   static async getQuestionsByCareer(req: Request, res: Response) {
     try {
@@ -140,7 +152,7 @@ export class EvaluationsController {
         message: 'Pregunta creada exitosamente',
       })
     } catch (error) {
-      return sendEnvelope(res, error, 'No se pudo crear la pregunta de evaluación')
+      return sendEnvelope(res, errorDePregunta(error), 'No se pudo crear la pregunta de evaluación')
     }
   }
 
@@ -168,7 +180,7 @@ export class EvaluationsController {
         message: 'Pregunta actualizada exitosamente',
       })
     } catch (error) {
-      return sendEnvelope(res, error, 'No se pudo actualizar la pregunta de evaluación')
+      return sendEnvelope(res, errorDePregunta(error), 'No se pudo actualizar la pregunta de evaluación')
     }
   }
 

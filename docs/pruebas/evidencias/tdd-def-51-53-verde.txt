@@ -1,0 +1,16 @@
+
+ RUN  v2.1.9 C:/Users/Esteban Arias/Documents/Proyectos Sistemas/EntreAulas-RealG/EntreAulas_Back
+
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-51: corregir una pregunta que no existe responde 404, no 500
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-52: retirar una pregunta que no existe responde 404 y no confirma nada
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-52: retirar una pregunta que sí existe sigue respondiendo 200
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-53: crear una pregunta en una encuesta que no existe responde 400, no 500
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-53: mover una pregunta a una encuesta que no existe también responde 400
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > una falla real de la base sigue siendo 500 y sin detalles internos
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > corregir una pregunta que existe sigue respondiendo 200 con la pregunta guardada
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  16:29:21
+   Duration  2.67s (transform 679ms, setup 84ms, collect 1.84s, tests 103ms, environment 0ms, prepare 213ms)
+
