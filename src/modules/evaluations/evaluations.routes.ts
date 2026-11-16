@@ -73,6 +73,12 @@ router.post(
   requireRole(['admin', 'coordinador']),
   EvaluationsController.createQuestion
 )
+/** Revisión con IA de la redacción (punto 14); no escribe en la base. */
+router.post(
+  '/questions/revisar',
+  requireRole(['admin', 'coordinador']),
+  EvaluationsController.revisarPregunta
+)
 router.put(
   '/questions/:id',
   requireRole(['admin', 'coordinador']),

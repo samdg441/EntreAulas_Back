@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { evaluationsService } from './evaluations.service'
 import { AppError, badRequest, sendError } from '../../shared/errors'
 import type { PreguntaEvaluacion } from './evaluations.types'
+import { LARGO_MAXIMO, revisorPreguntas } from './revisor-preguntas'
 
 function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
   if (error instanceof AppError) {
@@ -140,6 +141,20 @@ export class EvaluationsController {
       })
     } catch (error) {
       return sendEnvelope(res, error, 'No se pudo crear la pregunta de evaluación')
+    }
+  }
+
+  /** Punto 14 — Revisión con IA de la redacción de una pregunta (no guarda nada). */
+  static async revisarPregunta(req: Request, res: Response) {
+    try {
+      const texto = textoDePregunta(req.body?.texto_pregunta)
+      if (texto.length > LARGO_MAXIMO) {
+        throw badRequest('Datos inválidos', `El texto de la pregunta no puede pasar de ${LARGO_MAXIMO} caracteres.`)
+      }
+      const revision = await revisorPreguntas.revisar(texto)
+      res.json({ success: true, data: revision })
+    } catch (error) {
+      return sendEnvelope(res, error, 'No se pudo revisar la pregunta')
     }
   }
 
