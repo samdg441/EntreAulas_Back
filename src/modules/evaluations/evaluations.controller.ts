@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { evaluationsService } from './evaluations.service'
 import { AppError, badRequest, sendError } from '../../shared/errors'
+import type { PreguntaEvaluacion } from './evaluations.types'
 
 function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
   if (error instanceof AppError) {
@@ -15,6 +16,49 @@ function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
     error: 'Error interno del servidor',
     message: fallbackMessage,
   })
+}
+
+/** DEF-49: el id de la ruta debe ser un entero positivo; si no, ni se consulta la base. */
+function idDePregunta(valor: string | undefined): number {
+  if (!valor) throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
+  const id = Number(valor)
+  if (!Number.isInteger(id) || id < 1) throw badRequest('ID inválido', 'La pregunta no es válida.')
+  return id
+}
+
+const CAMPOS_EDITABLES = [
+  'categoria_id',
+  'texto_pregunta',
+  'descripcion',
+  'tipo_pregunta',
+  'opciones',
+  'obligatoria',
+  'orden',
+  'id_carrera',
+] as const
+
+/**
+ * DEF-48 y DEF-50: corrige solo los campos editables y rechaza un texto en blanco o un orden inválido.
+ * `id`, `activa` y las fechas no se pueden cambiar por esta ruta.
+ */
+function cambiosDePregunta(body: Record<string, unknown>): Partial<PreguntaEvaluacion> {
+  const cambios: Record<string, unknown> = {}
+  for (const campo of CAMPOS_EDITABLES) {
+    if (body?.[campo] !== undefined) cambios[campo] = body[campo]
+  }
+  if ('texto_pregunta' in cambios) {
+    const texto = String(cambios.texto_pregunta ?? '').trim()
+    if (!texto) throw badRequest('Datos inválidos', 'El texto de la pregunta es obligatorio.')
+    cambios.texto_pregunta = texto
+  }
+  if ('orden' in cambios) {
+    const orden = Number(cambios.orden)
+    if (!Number.isInteger(orden) || orden < 1) {
+      throw badRequest('Datos inválidos', 'El orden debe ser un entero mayor que cero.')
+    }
+    cambios.orden = orden
+  }
+  return cambios as Partial<PreguntaEvaluacion>
 }
 
 export class EvaluationsController {
@@ -90,15 +134,8 @@ export class EvaluationsController {
 
   static async updateQuestion(req: Request, res: Response) {
     try {
-      const { id } = req.params
-      if (!id) {
-        throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
-      }
-
-      const updatedQuestion = await evaluationsService.updateQuestion(
-        Number.parseInt(id),
-        req.body
-      )
+      const id = idDePregunta(req.params.id)
+      const updatedQuestion = await evaluationsService.updateQuestion(id, cambiosDePregunta(req.body))
       res.json({
         success: true,
         data: updatedQuestion,
@@ -111,12 +148,7 @@ export class EvaluationsController {
 
   static async deactivateQuestion(req: Request, res: Response) {
     try {
-      const { id } = req.params
-      if (!id) {
-        throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
-      }
-
-      const success = await evaluationsService.deactivateQuestion(Number.parseInt(id))
+      const success = await evaluationsService.deactivateQuestion(idDePregunta(req.params.id))
       if (success) {
         res.json({ success: true, message: 'Pregunta desactivada exitosamente' })
       } else {
