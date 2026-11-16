@@ -1224,3 +1224,94 @@ tres pruebas (RQ1 Nodo 15, RQ1·P4, RQ13 Nodo 10) exigen coste 12 como requisito
 **Descripción.** El cuerpo del PUT se pasaba completo a Supabase: `id`, `activa` o `created_at` se podían sobrescribir, por ejemplo reactivar una pregunta retirada por la ruta de edición.
 
 **Corrección aplicada.** Lista blanca `CAMPOS_EDITABLES`; el resto del cuerpo se ignora.
+
+---
+
+## SEC-07 — Un id «0x8» o «1e1» todavía corregía otra pregunta
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 · OWASP A03 |
+| Severidad | Baja |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/security/rf-enc-32-33.security.test.ts` (SEC-07) |
+| Evidencia | `docs/pruebas/evidencias/seguridad/supertest-owasp-rojo.txt` |
+
+**Descripción.** La corrección de DEF-49 usaba `Number(valor)`, que acepta hexadecimal y notación exponencial: `PUT /questions/0x8` corregía la 8 y `1e1` la 10.
+
+**Corrección aplicada.** `idDePregunta` exige `/^\d+$/` y `Number.isSafeInteger`.
+
+---
+
+## SEC-17 — Un texto que no es cadena se guardaba como «[object Object]»
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-32, RF-ENC-33 · OWASP A03/A04 |
+| Severidad | Media |
+| Estado | CORREGIDO (2026-11-16) |
+| Origen | SonarQube, regla `typescript:S6551` sobre `String(cambios.texto_pregunta ?? '')` |
+| Prueba | `src/test/security/rf-enc-32-33.security.test.ts` (SEC-17) |
+| Evidencia | `docs/pruebas/evidencias/seguridad/sec-17-rojo.txt` |
+
+**Descripción.** `PUT` con `{"texto_pregunta":{"a":1}}` respondía 200 y guardaba «[object Object]»; una lista quedaba «uno,dos» y un número «42». El `POST` además aceptaba un texto de solo espacios.
+
+**Corrección aplicada.** `textoDePregunta()` exige una cadena con contenido en el `POST` y en el `PUT`.
+
+---
+
+## SEC-04 — Un coordinador puede modificar preguntas de otra carrera (ABIERTO)
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 · OWASP A01 |
+| Severidad | Media |
+| Estado | ABIERTO: requiere decidir la regla de negocio |
+| Prueba | `src/test/security/rf-enc-32-33.security.test.ts` (SEC-04, valida el comportamiento actual) |
+
+**Descripción.** `PUT` y `DELETE /questions/:id` solo comprueban el rol (`admin` o `coordinador`). No comparan `id_carrera` de la pregunta con la carrera del coordinador, ni impiden que un coordinador cambie las preguntas generales (`id_carrera = null`).
+
+**Recomendación.** Antes de escribir, leer la pregunta y permitir al coordinador solo las de su carrera; dejar las generales al administrador.
+
+---
+
+## SEC-12 — La API acepta cualquier tipo_pregunta (ABIERTO)
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-32 · OWASP A04 |
+| Severidad | Baja |
+| Estado | ABIERTO |
+
+**Descripción.** La pantalla ofrece `likert`, `texto` y `opcion_multiple`, pero los scripts de la base usan `rating`, `abierta`, `text`, `escala_grafica` y `escala_frecuencia`, y el formulario del estudiante solo pinta `rating` y `texto`. La API guarda cualquier cadena.
+
+**Recomendación.** Un catálogo único de tipos (restricción `CHECK` en la base y lista blanca en la API) y alinear la pantalla de administración con el formulario del estudiante.
+
+---
+
+## SEC-16 — CORS responde «*» si falta CORS_ORIGIN (ABIERTO)
+
+| Campo | Valor |
+|---|---|
+| OWASP | A05 |
+| Severidad | Baja (la API usa Bearer, no cookies) |
+| Estado | ABIERTO |
+| Evidencia | `docs/pruebas/evidencias/seguridad/supertest-owasp.txt` (SEC-16) y `EntreAulas_Front/docs/pruebas/evidencias/seguridad/curl-cors-cabeceras.txt` |
+
+**Descripción.** `app.ts` usa `origin: '*'` cuando `CORS_ORIGIN` está vacío, junto con `credentials: true`. El `.env` local no define la variable.
+
+**Recomendación.** En producción, fallar cerrado: si `NODE_ENV=production` y no hay `CORS_ORIGIN`, no arrancar o no permitir orígenes. Verificar que Render tenga la variable.
+
+---
+
+## SEC-18 — Los cambios al instrumento de evaluación no quedan auditados (ABIERTO)
+
+| Campo | Valor |
+|---|---|
+| OWASP | A09 |
+| Severidad | Media |
+| Estado | ABIERTO |
+
+**Descripción.** Crear, corregir o retirar preguntas no deja registro de quién lo hizo ni cuándo. El front llama a `GET /api/coordinador/auditoria`, pero el back no tiene esa ruta ni una tabla de eventos.
+
+**Recomendación.** Registrar usuario, acción, pregunta, valor anterior y nuevo en cada escritura de `/api/evaluations/questions` y `/categories`.

@@ -18,11 +18,16 @@ function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
   })
 }
 
-/** DEF-49: el id de la ruta debe ser un entero positivo; si no, ni se consulta la base. */
+/**
+ * DEF-49 y SEC-07: el id de la ruta debe ser un entero positivo escrito solo con dígitos.
+ * `Number()` aceptaba «0x8» (8) y «1e1» (10) y corregía otra pregunta; si no cumple, ni se consulta la base.
+ */
 function idDePregunta(valor: string | undefined): number {
   if (!valor) throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
   const id = Number(valor)
-  if (!Number.isInteger(id) || id < 1) throw badRequest('ID inválido', 'La pregunta no es válida.')
+  if (!/^\d+$/.test(valor) || !Number.isSafeInteger(id) || id < 1) {
+    throw badRequest('ID inválido', 'La pregunta no es válida.')
+  }
   return id
 }
 
@@ -38,6 +43,16 @@ const CAMPOS_EDITABLES = [
 ] as const
 
 /**
+ * DEF-48 y SEC-17: el texto debe ser una cadena con contenido.
+ * Antes `String(valor)` guardaba «[object Object]», «uno,dos» o «42» si llegaba otro tipo.
+ */
+function textoDePregunta(valor: unknown): string {
+  const texto = typeof valor === 'string' ? valor.trim() : ''
+  if (!texto) throw badRequest('Datos inválidos', 'El texto de la pregunta es obligatorio.')
+  return texto
+}
+
+/**
  * DEF-48 y DEF-50: corrige solo los campos editables y rechaza un texto en blanco o un orden inválido.
  * `id`, `activa` y las fechas no se pueden cambiar por esta ruta.
  */
@@ -46,11 +61,7 @@ function cambiosDePregunta(body: Record<string, unknown>): Partial<PreguntaEvalu
   for (const campo of CAMPOS_EDITABLES) {
     if (body?.[campo] !== undefined) cambios[campo] = body[campo]
   }
-  if ('texto_pregunta' in cambios) {
-    const texto = String(cambios.texto_pregunta ?? '').trim()
-    if (!texto) throw badRequest('Datos inválidos', 'El texto de la pregunta es obligatorio.')
-    cambios.texto_pregunta = texto
-  }
+  if ('texto_pregunta' in cambios) cambios.texto_pregunta = textoDePregunta(cambios.texto_pregunta)
   if ('orden' in cambios) {
     const orden = Number(cambios.orden)
     if (!Number.isInteger(orden) || orden < 1) {
@@ -113,7 +124,7 @@ export class EvaluationsController {
 
       const newQuestion = await evaluationsService.createQuestion({
         categoria_id,
-        texto_pregunta,
+        texto_pregunta: textoDePregunta(texto_pregunta),
         descripcion,
         tipo_pregunta,
         opciones,
