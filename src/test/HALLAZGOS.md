@@ -1175,3 +1175,52 @@ en la auto-inscripción y en `listActivosByGrupoIds` / `listActivosParaShare`.
 **Corrección aplicada.** `testTimeout: 15_000` en la configuración principal. No se bajó el coste de bcrypt en pruebas:
 tres pruebas (RQ1 Nodo 15, RQ1·P4, RQ13 Nodo 10) exigen coste 12 como requisito de seguridad.
 
+
+---
+
+## DEF-48 — Corregir una pregunta acepta un texto en blanco
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 |
+| Severidad | Media |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/api/rf-enc-32-33-preguntas.api.test.ts` |
+| Evidencia | `docs/pruebas/evidencias/tdd-def-48-50-rojo.txt` y `tdd-def-48-50-verde.txt` |
+| Archivo | `src/modules/evaluations/evaluations.controller.ts` |
+
+**Descripción.** `PUT /api/evaluations/questions/:id` con `texto_pregunta: "   "` respondía 200 y dejaba la pregunta vacía en la encuesta que ven los estudiantes.
+
+**Corrección aplicada.** `cambiosDePregunta` recorta el texto y responde 400 «El texto de la pregunta es obligatorio.» sin llegar al repositorio.
+
+---
+
+## DEF-49 — Id de pregunta y orden sin validar
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 |
+| Severidad | Baja |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/api/rf-enc-32-33-preguntas.api.test.ts` (ids `abc`, `0`, `-4`, `1.5`; orden `0`) |
+| Archivo | `src/modules/evaluations/evaluations.controller.ts` |
+
+**Descripción.** El id pasaba por `Number.parseInt`: `abc` llegaba a la base como `NaN` y `1.5` se convertía en `1`, de modo que se corregía o se retiraba otra pregunta. El orden aceptaba `0` o negativos.
+
+**Corrección aplicada.** `idDePregunta` exige un entero positivo (400 «La pregunta no es válida.»); sin id se conserva el 400 «ID requerido». El orden debe ser entero mayor que cero.
+
+---
+
+## DEF-50 — Corregir una pregunta permite cambiar campos no editables
+
+| Campo | Valor |
+|---|---|
+| Requisito afectado | RF-ENC-33 |
+| Severidad | Media (asignación masiva) |
+| Estado | CORREGIDO (2026-11-16) |
+| Prueba | `src/test/api/rf-enc-32-33-preguntas.api.test.ts` |
+| Archivo | `src/modules/evaluations/evaluations.controller.ts` |
+
+**Descripción.** El cuerpo del PUT se pasaba completo a Supabase: `id`, `activa` o `created_at` se podían sobrescribir, por ejemplo reactivar una pregunta retirada por la ruta de edición.
+
+**Corrección aplicada.** Lista blanca `CAMPOS_EDITABLES`; el resto del cuerpo se ignora.
