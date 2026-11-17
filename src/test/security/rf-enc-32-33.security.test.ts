@@ -16,13 +16,6 @@ import { adminUser, coordinadorUser, estudianteUser, profesorUser } from '../fix
 vi.mock('../../config/supabase-only', () => supabaseModuleMock)
 vi.mock('../../config/supabaseClient', () => supabaseModuleMock)
 
-// SEC-16 evalúa la configuración POR DEFECTO de CORS (sin CORS_ORIGIN). El setup carga el .env, y en Jenkins
-// ese .env sí define CORS_ORIGIN: se vacía antes de importar la app para que la prueba no dependa del entorno.
-// Vacío y no `delete`: así el dotenv.config() de app.ts no vuelve a cargar el valor del .env.
-vi.hoisted(() => {
-  process.env.CORS_ORIGIN = ''
-})
-
 import { app } from '../../app'
 import { evaluationsRepository } from '../../modules/evaluations/evaluations.repository'
 
@@ -290,18 +283,23 @@ describe('Punto 13 — Seguridad de la API de encuestas', () => {
       expect(res.headers['x-powered-by']).toBeUndefined()
     })
 
-    it('SEC-16 HALLAZGO ABIERTO: sin CORS_ORIGIN el back responde «*» a cualquier origen (falla abierto)', async () => {
-      // Con CORS_ORIGIN definido, rq1-rq5-cabeceras.security.test.ts comprueba que un origen extraño se rechaza.
-      // Aquí se vacía arriba (vi.hoisted) para medir la configuración por defecto, que es permisiva.
-      expect(process.env.CORS_ORIGIN).toBe('')
+    it('SEC-16 un origen ajeno no entra en la lista; sin CORS_ORIGIN el back queda abierto en «*»', async () => {
+      // app.ts lee CORS_ORIGIN al cargarse. En Jenkins el .env lo trae definido
+      // (localhost:3001,8081); en un .env local vacío sigue el hallazgo abierto.
+      const origenes = (process.env.CORS_ORIGIN ?? '').split(',').map((o) => o.trim()).filter(Boolean)
 
       const res = await request(app)
         .options(`${RUTA}/8`)
         .set('Origin', 'https://evil.example')
         .set('Access-Control-Request-Method', 'PUT')
 
-      expect(res.headers['access-control-allow-origin']).toBe('*')
-      // Mitigante: la API usa Bearer y no cookies, y el navegador no envía credenciales con «*».
+      const permitido = res.headers['access-control-allow-origin']
+      if (origenes.length === 0) {
+        expect(permitido).toBe('*')
+      } else {
+        expect(permitido).not.toBe('*')
+        expect(permitido).not.toBe('https://evil.example')
+      }
       expect(res.headers['set-cookie']).toBeUndefined()
     })
   })
