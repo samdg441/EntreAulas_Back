@@ -45,6 +45,7 @@ export default defineConfig({
         'src/modules/evaluations/qr-evaluaciones.routes.ts',
         'src/modules/evaluations/evaluations.service.ts',
         'src/modules/evaluations/evaluations.controller.ts',
+        'src/modules/evaluations/revisor-preguntas.ts',
       ],
       exclude: [
         'src/test/**',
