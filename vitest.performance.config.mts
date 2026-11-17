@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config'
  * Presupuestos de tiempo. Fuera de `npm test` y de Jenkins: los tiempos dependen del equipo
  * y una suite que falla por un pico de CPU ajeno enseña a ignorar los fallos.
  */
+/**
+cambios
+/** */
 export default defineConfig({
   test: {
     environment: 'node',
