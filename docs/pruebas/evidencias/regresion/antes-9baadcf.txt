@@ -1,0 +1,86 @@
+
+ RUN  v2.1.9 C:/Users/Esteban Arias/AppData/Local/Temp/claude/9951f54a1ab541f1/da13202b-4645-425e-bb18-e7107de34d2a/scratchpad/back-base
+
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-01: un usuario autenticado lista las preguntas activas
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-02: sin token, las rutas de preguntas responden 401
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-03: el administrador crea una pregunta activa (201)
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-03: el coordinador crea una pregunta activa (201)
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-04: crear sin los campos obligatorios responde 400 y no escribe
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-05: un estudiante no puede usar POST /api/evaluations/questions (403)
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-05: un estudiante no puede usar PUT /api/evaluations/questions/8 (403)
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-05: un estudiante no puede usar DELETE /api/evaluations/questions/8 (403)
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-06: el administrador corrige una pregunta válida (200) y se guarda en el id pedido
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-07: el administrador retira una pregunta (200)
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-08: si la base falla al retirar responde 500 sin exponer el detalle
+ ✓ src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 1 — comportamiento que no debe cambiar > R-API-09: las encuestas se listan y una sin nombre no se crea
+ × src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 2 — defectos corregidos que deben seguir corregidos > R-DEF-48: corregir con el texto en blanco responde 400 y no guarda
+   → expected 200 to be 400 // Object.is equality
+ × src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 2 — defectos corregidos que deben seguir corregidos > R-DEF-49: un id «1.5» no corrige la pregunta 1
+   → expected 200 to be 400 // Object.is equality
+ × src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 2 — defectos corregidos que deben seguir corregidos > R-DEF-50: la corrección no puede reactivar una pregunta ni cambiar su id
+   → expected { categoria_id: 1, …(6) } to not have property "id"
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 2 — defectos corregidos que deben seguir corregidos > R-DEF-48: corregir con el texto en blanco responde 400 y no guarda
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ src/test/regression/rf-enc-32-33-regresion.test.ts:165:26
+    163|       const res = await request(app).put(`${RUTA}/8`).set('Authorizati…
+    164| 
+    165|       expect(res.status).toBe(400)
+       |                          ^
+    166|       expect(actualizar).not.toHaveBeenCalled()
+    167|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 2 — defectos corregidos que deben seguir corregidos > R-DEF-49: un id «1.5» no corrige la pregunta 1
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ src/test/regression/rf-enc-32-33-regresion.test.ts:175:26
+    173|       const res = await request(app).put(`${RUTA}/1.5`).set('Authoriza…
+    174| 
+    175|       expect(res.status).toBe(400)
+       |                          ^
+    176|       expect(actualizar).not.toHaveBeenCalled()
+    177|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/test/regression/rf-enc-32-33-regresion.test.ts > Regresión — API de encuestas (RF-ENC-32, RF-ENC-33) > Bloque 2 — defectos corregidos que deben seguir corregidos > R-DEF-50: la corrección no puede reactivar una pregunta ni cambiar su id
+AssertionError: expected { categoria_id: 1, …(6) } to not have property "id"
+
+- Expected: 
+undefined
+
++ Received: 
+999
+
+ ❯ src/test/regression/rf-enc-32-33-regresion.test.ts:186:47
+    184| 
+    185|       expect(actualizar).toHaveBeenCalledOnce()
+    186|       expect(actualizar.mock.calls[0][1]).not.toHaveProperty('id')
+       |                                               ^
+    187|       expect(actualizar.mock.calls[0][1]).not.toHaveProperty('activa')
+    188|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 12 passed (15)
+   Start at  14:08:30
+   Duration  3.27s (transform 860ms, setup 80ms, collect 2.16s, tests 173ms, environment 0ms, prepare 295ms)
+

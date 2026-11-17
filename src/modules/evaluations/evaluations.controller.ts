@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import { evaluationsService } from './evaluations.service'
-import { AppError, badRequest, sendError } from '../../shared/errors'
+import { AppError, badRequest, notFound, sendError } from '../../shared/errors'
+import type { PreguntaEvaluacion } from './evaluations.types'
+import { LARGO_MAXIMO, revisorPreguntas } from './revisor-preguntas'
 
 function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
   if (error instanceof AppError) {
@@ -15,6 +17,72 @@ function sendEnvelope(res: Response, error: unknown, fallbackMessage: string) {
     error: 'Error interno del servidor',
     message: fallbackMessage,
   })
+}
+
+/**
+ * DEF-49 y SEC-07: el id de la ruta debe ser un entero positivo escrito solo con dígitos.
+ * `Number()` aceptaba «0x8» (8) y «1e1» (10) y corregía otra pregunta; si no cumple, ni se consulta la base.
+ */
+function idDePregunta(valor: string | undefined): number {
+  if (!valor) throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
+  const id = Number(valor)
+  if (!/^\d+$/.test(valor) || !Number.isSafeInteger(id) || id < 1) {
+    throw badRequest('ID inválido', 'La pregunta no es válida.')
+  }
+  return id
+}
+
+const CAMPOS_EDITABLES = [
+  'categoria_id',
+  'texto_pregunta',
+  'descripcion',
+  'tipo_pregunta',
+  'opciones',
+  'obligatoria',
+  'orden',
+  'id_carrera',
+] as const
+
+/**
+ * DEF-48 y SEC-17: el texto debe ser una cadena con contenido.
+ * Antes `String(valor)` guardaba «[object Object]», «uno,dos» o «42» si llegaba otro tipo.
+ */
+function textoDePregunta(valor: unknown): string {
+  const texto = typeof valor === 'string' ? valor.trim() : ''
+  if (!texto) throw badRequest('Datos inválidos', 'El texto de la pregunta es obligatorio.')
+  return texto
+}
+
+/**
+ * DEF-48 y DEF-50: corrige solo los campos editables y rechaza un texto en blanco o un orden inválido.
+ * `id`, `activa` y las fechas no se pueden cambiar por esta ruta.
+ */
+function cambiosDePregunta(body: Record<string, unknown>): Partial<PreguntaEvaluacion> {
+  const cambios: Record<string, unknown> = {}
+  for (const campo of CAMPOS_EDITABLES) {
+    if (body?.[campo] !== undefined) cambios[campo] = body[campo]
+  }
+  if ('texto_pregunta' in cambios) cambios.texto_pregunta = textoDePregunta(cambios.texto_pregunta)
+  if ('orden' in cambios) {
+    const orden = Number(cambios.orden)
+    if (!Number.isInteger(orden) || orden < 1) {
+      throw badRequest('Datos inválidos', 'El orden debe ser un entero mayor que cero.')
+    }
+    cambios.orden = orden
+  }
+  return cambios as Partial<PreguntaEvaluacion>
+}
+
+/**
+ * DEF-51 y DEF-53: el servicio conserva el error de Supabase en `cause`.
+ * PGRST116 = .single() no encontró la fila → 404; 23503 = la encuesta (categoria_id) no existe → 400.
+ * Cualquier otro error sigue siendo 500 sin detalles.
+ */
+function errorDePregunta(error: unknown): unknown {
+  const codigo = (error as { cause?: { code?: string } })?.cause?.code
+  if (codigo === 'PGRST116') return notFound('Pregunta no encontrada', 'La pregunta no existe.')
+  if (codigo === '23503') return badRequest('Datos inválidos', 'La encuesta no existe.')
+  return error
 }
 
 export class EvaluationsController {
@@ -69,7 +137,7 @@ export class EvaluationsController {
 
       const newQuestion = await evaluationsService.createQuestion({
         categoria_id,
-        texto_pregunta,
+        texto_pregunta: textoDePregunta(texto_pregunta),
         descripcion,
         tipo_pregunta,
         opciones,
@@ -84,39 +152,41 @@ export class EvaluationsController {
         message: 'Pregunta creada exitosamente',
       })
     } catch (error) {
-      return sendEnvelope(res, error, 'No se pudo crear la pregunta de evaluación')
+      return sendEnvelope(res, errorDePregunta(error), 'No se pudo crear la pregunta de evaluación')
+    }
+  }
+
+  /** Punto 14 — Revisión con IA de la redacción de una pregunta (no guarda nada). */
+  static async revisarPregunta(req: Request, res: Response) {
+    try {
+      const texto = textoDePregunta(req.body?.texto_pregunta)
+      if (texto.length > LARGO_MAXIMO) {
+        throw badRequest('Datos inválidos', `El texto de la pregunta no puede pasar de ${LARGO_MAXIMO} caracteres.`)
+      }
+      const revision = await revisorPreguntas.revisar(texto)
+      res.json({ success: true, data: revision })
+    } catch (error) {
+      return sendEnvelope(res, error, 'No se pudo revisar la pregunta')
     }
   }
 
   static async updateQuestion(req: Request, res: Response) {
     try {
-      const { id } = req.params
-      if (!id) {
-        throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
-      }
-
-      const updatedQuestion = await evaluationsService.updateQuestion(
-        Number.parseInt(id),
-        req.body
-      )
+      const id = idDePregunta(req.params.id)
+      const updatedQuestion = await evaluationsService.updateQuestion(id, cambiosDePregunta(req.body))
       res.json({
         success: true,
         data: updatedQuestion,
         message: 'Pregunta actualizada exitosamente',
       })
     } catch (error) {
-      return sendEnvelope(res, error, 'No se pudo actualizar la pregunta de evaluación')
+      return sendEnvelope(res, errorDePregunta(error), 'No se pudo actualizar la pregunta de evaluación')
     }
   }
 
   static async deactivateQuestion(req: Request, res: Response) {
     try {
-      const { id } = req.params
-      if (!id) {
-        throw badRequest('ID requerido', 'Se requiere el ID de la pregunta')
-      }
-
-      const success = await evaluationsService.deactivateQuestion(Number.parseInt(id))
+      const success = await evaluationsService.deactivateQuestion(idDePregunta(req.params.id))
       if (success) {
         res.json({ success: true, message: 'Pregunta desactivada exitosamente' })
       } else {

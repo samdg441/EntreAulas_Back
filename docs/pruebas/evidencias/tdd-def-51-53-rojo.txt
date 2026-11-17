@@ -1,0 +1,98 @@
+
+ RUN  v2.1.9 C:/Users/Esteban Arias/Documents/Proyectos Sistemas/EntreAulas-RealG/EntreAulas_Back
+
+ × src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-51: corregir una pregunta que no existe responde 404, no 500
+   → expected 500 to be 404 // Object.is equality
+ × src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-52: retirar una pregunta que no existe responde 404 y no confirma nada
+   → expected 200 to be 404 // Object.is equality
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-52: retirar una pregunta que sí existe sigue respondiendo 200
+ × src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-53: crear una pregunta en una encuesta que no existe responde 400, no 500
+   → expected 500 to be 400 // Object.is equality
+ × src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-53: mover una pregunta a una encuesta que no existe también responde 400
+   → expected 500 to be 400 // Object.is equality
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > una falla real de la base sigue siendo 500 y sin detalles internos
+ ✓ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > corregir una pregunta que existe sigue respondiendo 200 con la pregunta guardada
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-51: corregir una pregunta que no existe responde 404, no 500
+AssertionError: expected 500 to be 404 // Object.is equality
+
+- Expected
++ Received
+
+- 404
++ 500
+
+ ❯ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts:52:24
+     50|     const res = await request(app).put('/api/evaluations/questions/999…
+     51| 
+     52|     expect(res.status).toBe(404)
+       |                        ^
+     53|     expect(res.body).toMatchObject({ success: false, message: 'La preg…
+     54|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-52: retirar una pregunta que no existe responde 404 y no confirma nada
+AssertionError: expected 200 to be 404 // Object.is equality
+
+- Expected
++ Received
+
+- 404
++ 200
+
+ ❯ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts:62:24
+     60|     const res = await request(app).delete('/api/evaluations/questions/…
+     61| 
+     62|     expect(res.status).toBe(404)
+       |                        ^
+     63|     expect(res.body).toMatchObject({ success: false, message: 'La preg…
+     64|     expect(JSON.stringify(res.body)).not.toContain('exitosamente')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-53: crear una pregunta en una encuesta que no existe responde 400, no 500
+AssertionError: expected 500 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 500
+
+ ❯ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts:86:24
+     84|       .send({ categoria_id: 999, texto_pregunta: 'El docente llega a t…
+     85| 
+     86|     expect(res.status).toBe(400)
+       |                        ^
+     87|     expect(res.body).toMatchObject({ success: false, message: 'La encu…
+     88|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/test/defects/DEF-51-53-errores-de-preguntas.test.ts > DEF-51 a DEF-53 — Errores de las preguntas > DEF-53: mover una pregunta a una encuesta que no existe también responde 400
+AssertionError: expected 500 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 500
+
+ ❯ src/test/defects/DEF-51-53-errores-de-preguntas.test.ts:96:24
+     94|     const res = await request(app).put('/api/evaluations/questions/8')…
+     95| 
+     96|     expect(res.status).toBe(400)
+       |                        ^
+     97|     expect(res.body).toMatchObject({ message: 'La encuesta no existe.'…
+     98|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 3 passed (7)
+   Start at  16:28:15
+   Duration  3.54s (transform 880ms, setup 93ms, collect 2.31s, tests 147ms, environment 0ms, prepare 338ms)
+

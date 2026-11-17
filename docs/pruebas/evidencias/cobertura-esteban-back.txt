@@ -1,0 +1,43 @@
+
+ RUN  v2.1.9 C:/Users/Esteban Arias/Documents/Proyectos Sistemas/EntreAulas-RealG/EntreAulas_Back
+      Coverage enabled with v8
+
+stderr | src/test/unit/evaluaciones/rf-enc-32-33-controlador.test.ts > RF-ENC — Contrato HTTP de las preguntas > explica el fallo al consultar preguntas o al faltar la categoría
+Error: db
+    at C:\Users\Esteban Arias\Documents\Proyectos Sistemas\EntreAulas-RealG\EntreAulas_Back\src\test\unit\evaluaciones\rf-enc-32-33-controlador.test.ts:219:75
+    at file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at runSuite (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1271:3)
+Error: db
+    at C:\Users\Esteban Arias\Documents\Proyectos Sistemas\EntreAulas-RealG\EntreAulas_Back\src\test\unit\evaluaciones\rf-enc-32-33-controlador.test.ts:221:77
+    at file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at runSuite (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file:///C:/Users/Esteban%20Arias/Documents/Proyectos%20Sistemas/EntreAulas-RealG/EntreAulas_Back/node_modules/@vitest/runner/dist/index.js:1271:3)
+
+ ✓ src/test/unit/evaluaciones/rf-enc-32-33-controlador.test.ts (10 tests) 23ms
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts (21 tests) 181ms
+
+ Test Files  2 passed (2)
+      Tests  31 passed (31)
+   Start at  12:33:06
+   Duration  3.18s (transform 773ms, setup 184ms, collect 2.01s, tests 203ms, environment 1ms, prepare 517ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    94.54 |     100 |     100 |                   
+ ....controller.ts |     100 |    94.54 |     100 |     100 | 11,50,120         
+-------------------|---------|----------|---------|---------|-------------------

@@ -1,0 +1,9 @@
+# SonarQube 26.9 — EntreAulas_Back — 2026-11-16 14:56
+## Quality Gate
+{"projectStatus":{"status":"OK","conditions":[{"status":"OK","metricKey":"new_coverage","comparator":"LT","errorThreshold":"90","actualValue":"98.6"},{"status":"OK","metricKey":"new_duplicated_lines_density","comparator":"GT","errorThreshold":"2","actualValue":"0.0"},{"status":"OK","metricKey":"new_software_quality_maintainability_remediation_effort","comparator":"GT","errorThreshold":"90","actualValue":"0"},{"status":"OK","metricKey":"new_violations","comparator":"GT","errorThreshold":"0","actualValue":"0"}],"ignoredConditions":false,"period":{"mode":"PREVIOUS_VERSION","date":"2026-11-11T21:57:52+0000"},"caycStatus":"over-compliant"}}
+## Métricas
+{"component":{"key":"EntreAulas_Back","name":"EntreAulas_Back","qualifier":"TRK","measures":[{"metric":"coverage","value":"94.5","bestValue":false},{"metric":"bugs","value":"0","bestValue":true},{"metric":"reliability_rating","value":"1.0","bestValue":true},{"metric":"code_smells","value":"0","bestValue":true},{"metric":"duplicated_lines_density","value":"0.0","bestValue":true},{"metric":"security_rating","value":"1.0","bestValue":true},{"metric":"ncloc","value":"4831"},{"metric":"vulnerabilities","value":"0","bestValue":true},{"metric":"security_hotspots","value":"0","bestValue":true},{"metric":"security_review_rating","value":"1.0","bestValue":true},{"metric":"sqale_rating","value":"1.0","bestValue":true}]}}
+## Hotspots de seguridad
+{"errors":[{"msg":"Insufficient privileges"}]}
+## Vulnerabilidades abiertas
+{"total":0,"p":1,"ps":100,"paging":{"pageIndex":1,"pageSize":100,"total":0},"effortTotal":0,"issues":[],"components":[],"facets":[]}

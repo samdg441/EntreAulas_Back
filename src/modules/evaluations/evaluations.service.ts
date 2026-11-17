@@ -4,6 +4,7 @@ import {
 } from './evaluations.repository'
 import type { CreateQuestionInput, PreguntaEvaluacion } from './evaluations.types'
 import { logger } from '../../shared/logger'
+import { AppError, notFound } from '../../shared/errors'
 
 export class EvaluationsService {
   constructor(private readonly repo: EvaluationsRepository = evaluationsRepository) {}
@@ -40,7 +41,8 @@ export class EvaluationsService {
         activa: true,
       })
     } catch (error) {
-      throw new Error('Error al crear pregunta de evaluación')
+      // DEF-53: se conserva el error de Supabase (su `code`) para que el controlador responda 400 y no 500.
+      throw Object.assign(new Error('Error al crear pregunta de evaluación'), { cause: error })
     }
   }
 
@@ -48,14 +50,19 @@ export class EvaluationsService {
     try {
       return await this.repo.updateQuestion(preguntaId, updateData)
     } catch (error) {
-      throw new Error('Error al actualizar pregunta de evaluación')
+      // DEF-51 y DEF-53: se conserva el error de Supabase (su `code`) para responder 404 o 400.
+      throw Object.assign(new Error('Error al actualizar pregunta de evaluación'), { cause: error })
     }
   }
 
   async deactivateQuestion(preguntaId: number): Promise<boolean> {
     try {
-      return await this.repo.deactivateQuestion(preguntaId)
+      const desactivada = await this.repo.deactivateQuestion(preguntaId)
+      // DEF-52: antes se confirmaba «desactivada» aunque el id no existiera.
+      if (!desactivada) throw notFound('Pregunta no encontrada', 'La pregunta no existe.')
+      return true
     } catch (error) {
+      if (error instanceof AppError) throw error
       logger.error('Error desactivando pregunta:', error)
       return false
     }

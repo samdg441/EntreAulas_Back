@@ -1,0 +1,146 @@
+
+ RUN  v2.1.9 C:/Users/Esteban Arias/Documents/Proyectos Sistemas/EntreAulas-RealG/EntreAulas_Back
+
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > sin token responde 401 NO_TOKEN
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > un estudiante no puede crear preguntas (403)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > un profesor no puede crear preguntas (403)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > el administrador crea la pregunta activa (201)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > el coordinador crea la pregunta activa (201)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > sin texto ni orden responde 400 y no escribe en la base
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > si la base falla responde 500 sin exponer el detalle
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > el administrador corrige el texto (200)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > un estudiante no puede corregir preguntas (403)
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-48: un texto en blanco responde 400 y no se guarda
+   → expected 200 to be 400 // Object.is equality
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «abc» responde 400 y no llega a la base
+   → expected 200 to be 400 // Object.is equality
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «0» responde 400 y no llega a la base
+   → expected 200 to be 400 // Object.is equality
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «-4» responde 400 y no llega a la base
+   → expected 200 to be 400 // Object.is equality
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «1.5» responde 400 y no llega a la base
+   → expected 200 to be 400 // Object.is equality
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-50: solo se guardan los campos editables (no id, activa ni fecha)
+   → expected [ 'activa', 'categoria_id', …(6) ] to deeply equal [ 'categoria_id', 'obligatoria', …(3) ]
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el orden debe ser entero mayor que cero si viene en el cuerpo
+   → expected 200 to be 400 // Object.is equality
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > el administrador desactiva la pregunta (200)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > si la base falla responde 500 con un mensaje entendible
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > un profesor no puede retirar preguntas (403)
+ × src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > DEF-49: un id no numérico responde 400
+   → expected 200 to be 400 // Object.is equality
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — GET /api/evaluations/questions > un estudiante autenticado ve las preguntas activas
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-48: un texto en blanco responde 400 y no se guarda
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ src/test/api/rf-enc-32-33-preguntas.api.test.ts:152:26
+    150|         .send({ ...NUEVA, texto_pregunta: '   ' })
+    151| 
+    152|       expect(res.status).toBe(400)
+       |                          ^
+    153|       expect(res.body).toMatchObject({ success: false, message: 'El te…
+    154|       expect(actualizar).not.toHaveBeenCalled()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «abc» responde 400 y no llega a la base
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «0» responde 400 y no llega a la base
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «-4» responde 400 y no llega a la base
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «1.5» responde 400 y no llega a la base
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ src/test/api/rf-enc-32-33-preguntas.api.test.ts:166:26
+    164|         .send(NUEVA)
+    165| 
+    166|       expect(res.status).toBe(400)
+       |                          ^
+    167|       expect(res.body).toMatchObject({ success: false, message: 'La pr…
+    168|       expect(actualizar).not.toHaveBeenCalled()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-50: solo se guardan los campos editables (no id, activa ni fecha)
+AssertionError: expected [ 'activa', 'categoria_id', …(6) ] to deeply equal [ 'categoria_id', 'obligatoria', …(3) ]
+
+- Expected
++ Received
+
+  Array [
++   "activa",
+    "categoria_id",
++   "created_at",
++   "id",
+    "obligatoria",
+    "orden",
+    "texto_pregunta",
+    "tipo_pregunta",
+  ]
+
+ ❯ src/test/api/rf-enc-32-33-preguntas.api.test.ts:182:43
+    180|       expect(res.status).toBe(200)
+    181|       const [, cambios] = actualizar.mock.calls[0]
+    182|       expect(Object.keys(cambios).sort()).toEqual(
+       |                                           ^
+    183|         ['categoria_id', 'obligatoria', 'orden', 'texto_pregunta', 'ti…
+    184|       )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el orden debe ser entero mayor que cero si viene en el cuerpo
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ src/test/api/rf-enc-32-33-preguntas.api.test.ts:196:26
+    194|         .send({ ...NUEVA, orden: 0 })
+    195| 
+    196|       expect(res.status).toBe(400)
+       |                          ^
+    197|       expect(res.body).toMatchObject({ message: 'El orden debe ser un …
+    198|       expect(actualizar).not.toHaveBeenCalled()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > DEF-49: un id no numérico responde 400
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ src/test/api/rf-enc-32-33-preguntas.api.test.ts:242:26
+    240|       const res = await request(app).delete('/api/evaluations/question…
+    241| 
+    242|       expect(res.status).toBe(400)
+       |                          ^
+    243|       expect(desactivar).not.toHaveBeenCalled()
+    244|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 13 passed (21)
+   Start at  12:29:41
+   Duration  2.83s (transform 760ms, setup 76ms, collect 1.89s, tests 178ms, environment 0ms, prepare 226ms)
+

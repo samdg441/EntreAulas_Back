@@ -1,0 +1,30 @@
+
+ RUN  v2.1.9 C:/Users/Esteban Arias/Documents/Proyectos Sistemas/EntreAulas-RealG/EntreAulas_Back
+
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > sin token responde 401 NO_TOKEN
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > un estudiante no puede crear preguntas (403)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > un profesor no puede crear preguntas (403)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > el administrador crea la pregunta activa (201)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > el coordinador crea la pregunta activa (201)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > sin texto ni orden responde 400 y no escribe en la base
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — POST /api/evaluations/questions > si la base falla responde 500 sin exponer el detalle
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > el administrador corrige el texto (200)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > un estudiante no puede corregir preguntas (403)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-48: un texto en blanco responde 400 y no se guarda
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «abc» responde 400 y no llega a la base
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «0» responde 400 y no llega a la base
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «-4» responde 400 y no llega a la base
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el id «1.5» responde 400 y no llega a la base
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-50: solo se guardan los campos editables (no id, activa ni fecha)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — PUT /api/evaluations/questions/:id (corregir) > DEF-49: el orden debe ser entero mayor que cero si viene en el cuerpo
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > el administrador desactiva la pregunta (200)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > si la base falla responde 500 con un mensaje entendible
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > un profesor no puede retirar preguntas (403)
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-33 — DELETE /api/evaluations/questions/:id (retirar) > DEF-49: un id no numérico responde 400
+ ✓ src/test/api/rf-enc-32-33-preguntas.api.test.ts > RF-ENC-32 y RF-ENC-33 — API de preguntas de la encuesta > RF-ENC-32 — GET /api/evaluations/questions > un estudiante autenticado ve las preguntas activas
+
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  12:30:06
+   Duration  2.77s (transform 693ms, setup 70ms, collect 1.81s, tests 170ms, environment 0ms, prepare 241ms)
+

@@ -104,14 +104,16 @@ export class EvaluationsRepository {
     return data
   }
 
+  /** DEF-52: devuelve false si el id no existe (el update no tocó ninguna fila). */
   async deactivateQuestion(preguntaId: number): Promise<boolean> {
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('preguntas_evaluacion')
       .update({ activa: false })
       .eq('id', preguntaId)
+      .select('id')
 
     if (error) throw error
-    return true
+    return Array.isArray(data) && data.length > 0
   }
 
   async getQuestionsByCategoryAndCareer(
